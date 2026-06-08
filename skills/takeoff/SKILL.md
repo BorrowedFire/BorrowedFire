@@ -32,6 +32,6 @@ Close out the current work end to end: commit exact changes, push, merge when ch
 ## Deploy Detection
 
 - Supabase: apply migrations, deploy changed Edge Functions, run required sync/backfill, query invariants.
-- Netlify/Vercel/Cloudflare: use repo-native production command or workflow and verify live URL.
+- Vercel/Cloudflare: use repo-native production command or workflow and verify live URL.
 - GitHub Actions: trigger/monitor documented release workflow.
 - iOS/Android store releases: use `/orbit`; `/takeoff` only handles normal code closeout before the store train.
