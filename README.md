@@ -1,5 +1,9 @@
 # Borrowed Fire
 
+## Projects
+
+- [Inventory Manager](https://github.com/BorrowedFire/Inventory-Manager): Apple-style macOS inventory workspace for local hardware tracking, deployments, stockrooms, budgets, backups, and Sparkle updates.
+
 ## Skills
 
 Reusable Codex skills shared from this profile.
