@@ -1,0 +1,4 @@
+interface:
+  display_name: "Signal"
+  short_description: "Route customer-facing messages through the right Corey Haines marketing workflow."
+  default_prompt: "Use signal to tune this customer-facing message for the right surface and audience."
