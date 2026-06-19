@@ -1,0 +1,7 @@
+interface:
+  display_name: "Autoland"
+  short_description: "Drive one PR through review to a clean, proven merge"
+  default_prompt: "Use $autoland to take the current branch through adversarial + Codex review, auto-fix, live proof, and merge-when-clean — surfacing only a decision-ready ask if it cannot finish."
+
+policy:
+  allow_implicit_invocation: true
