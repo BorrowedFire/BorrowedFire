@@ -1,0 +1,7 @@
+interface:
+  display_name: "Repo Quality Audit"
+  short_description: "Discover features, build a QA matrix, execute checks, log/fix defects, and report confidence"
+  default_prompt: "Use $repo-quality-audit to run a bounded repo-native QA audit: discover the scoped feature surface, create qa/ artifacts, execute checks, log defects, fix safe issues, regress, and report confidence plus remaining risk."
+
+policy:
+  allow_implicit_invocation: true

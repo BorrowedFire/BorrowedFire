@@ -13,5 +13,6 @@ Reusable Codex skills shared from this profile.
 - [Maintainer](skills/maintainer/SKILL.md): control-plane orchestrator that classifies the repo queue, delegates autonomous items to Autoland workers, and surfaces decision-ready briefs.
 - [Orbit](skills/orbit/SKILL.md): store-release closeout for App Store and Play Store release trains.
 - [Signal](skills/signal/SKILL.md): front door for Corey Haines Marketing Skills when tuning customer-facing messages.
+- [Repo Quality Audit](skills/repo-quality-audit/SKILL.md): bounded repo-native QA loop for feature discovery, test matrices, defect logging, safe fixes, regression, and confidence reports.
 
 Each skill includes its `SKILL.md` instructions and OpenAI agent metadata in `agents/openai.yaml`. Some skills include `references/` for progressively loaded routing details.
