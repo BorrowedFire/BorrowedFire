@@ -1,0 +1,3 @@
+journal/*.md merge=union
+inbox/*.md merge=union
+projects/*.md merge=union

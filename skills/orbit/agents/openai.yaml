@@ -1,7 +1,0 @@
-interface:
-  display_name: "Orbit"
-  short_description: "Ship App Store and Play releases"
-  default_prompt: "Use $orbit to prepare, tag, submit, and verify a mobile store release."
-
-policy:
-  allow_implicit_invocation: true

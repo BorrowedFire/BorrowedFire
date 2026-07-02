@@ -1,0 +1,7 @@
+interface:
+  display_name: "Store Release"
+  short_description: "Ship App Store and Play releases"
+  default_prompt: "Use $store-release to prepare, tag, and verify a mobile store release, gating actual submission on owner confirmation."
+
+policy:
+  allow_implicit_invocation: true

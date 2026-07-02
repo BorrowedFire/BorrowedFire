@@ -1,0 +1,7 @@
+interface:
+  display_name: "Digest"
+  short_description: "Consolidate the brain: promote inbox, dedupe, repair links, distill lessons"
+  default_prompt: "Use $digest to run a locked consolidation pass on the brain and report what was promoted, merged, repaired, and learned."
+
+policy:
+  allow_implicit_invocation: true

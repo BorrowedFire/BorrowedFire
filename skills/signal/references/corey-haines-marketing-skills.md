@@ -1,6 +1,6 @@
 # Corey Haines Marketing Skills Catalog
 
-Treat "Corey Haines Marketing Skills" or "Marketing Skills" as the local marketing skill trove installed under `~/.codex/skills`. Open the selected skills' `SKILL.md` files before using them.
+Treat "Corey Haines Marketing Skills" or "Marketing Skills" as the locally installed marketing skill trove (locate it per `trove-locations.md`). Open the selected skills' `SKILL.md` files before using them. This catalog is a snapshot — when it disagrees with what is on disk, trust the disk.
 
 ## Default Chain For Copy
 

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Triage"
+  short_description: "Shape raw reports and ideas into bounded, reproducible, decision-ready issues"
+  default_prompt: "Use $triage to turn this raw report into a shaped issue: repro, expected vs actual, blast radius, acceptance criteria, classification."
+
+policy:
+  allow_implicit_invocation: true

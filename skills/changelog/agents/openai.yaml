@@ -1,0 +1,7 @@
+interface:
+  display_name: "Changelog"
+  short_description: "Assemble factual release notes and changelogs from merged history"
+  default_prompt: "Use $changelog to assemble release notes for this range from merged PRs: store notes, GitHub Release body, and CHANGELOG entry as needed."
+
+policy:
+  allow_implicit_invocation: true
