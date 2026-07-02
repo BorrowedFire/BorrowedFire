@@ -84,6 +84,7 @@ doctrine/          the managed context block install.sh distributes
 bfbrain-template/  starting tree for your private brain repo
 install.sh         manifest-owned cross-harness installer
 tools/skill-lint.sh   lint (also install.sh's preflight; runs in CI)
+tests/             installer sandbox matrix + brain-protocol live proof (run in CI)
 ```
 
 Skills are plain markdown — readable by any agent that can read files, portable to any harness
