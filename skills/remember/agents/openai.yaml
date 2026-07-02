@@ -1,0 +1,7 @@
+interface:
+  display_name: "Remember"
+  short_description: "Capture decisions, people, lessons, and ideas into the shared brain"
+  default_prompt: "Use $remember to capture this into the brain as a typed markdown page, linked, committed, and pushed."
+
+policy:
+  allow_implicit_invocation: true
