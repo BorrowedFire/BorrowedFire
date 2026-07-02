@@ -15,7 +15,7 @@ export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER
 # --- init: bare remote + template + two machine clones ---
 git init -q --bare "$SB/remote.git"
 git -C "$SB/remote.git" symbolic-ref HEAD refs/heads/main
-cp -R "$SRC/bfbrain-template" "$SB/seed"
+cp -R "$SRC/prometheus-template" "$SB/seed"
 git -C "$SB/seed" init -q -b main
 git -C "$SB/seed" add -A && git -C "$SB/seed" commit -qm "brain: init from template"
 git -C "$SB/seed" remote add origin "$SB/remote.git" && git -C "$SB/seed" push -q origin main
