@@ -134,12 +134,16 @@ conflict the union rules didn't absorb: `git rebase --abort`, save your uncommit
 the degradation ladder below, and report the conflict — never leave a brain clone mid-rebase and
 never guess a hand-merge of someone else's content.
 
-**Union-merge caveat (binding on digest):** union merge takes both sides of a conflicting hunk, so
-an in-place *edit or deletion* inside a union-merged path can be silently resurrected by another
-writer's in-flight append. Therefore digest never edits `journal/`, `inbox/`, or `projects/` files
-in place. Inbox promotion is **whole-file move** (`git mv` to the destination page or an
-`archive/` stub), and only for inbox files **older than 1 day** — the writer-suffix naming makes a
-moved file's path unique, and the age horizon keeps it clear of in-flight appends.
+**Union-merge caveat (binding on ALL writers):** union merge takes both sides of a conflicting
+hunk, so any in-place *edit* inside a union-merged path can collide with another writer's
+in-flight append — two concurrent edits of the same frontmatter line (e.g. both bumping
+`updated:`) can concatenate into duplicated, corrupt YAML. Therefore on `journal/`, `inbox/`, and
+`projects/` paths every writer is **strictly append-only, frontmatter included**: append your
+line, touch nothing else. `digest` reconciles `updated:` and other frontmatter under its lock.
+Digest additionally never edits these files in place at all: inbox promotion is **whole-file
+move** (`git mv` to the destination page or an `archive/` stub), and only for inbox files **older
+than 1 day** — the writer-suffix naming makes a moved file's path unique, and the age horizon
+keeps it clear of in-flight appends.
 
 ## Degradation ladder (brain unreachable)
 

@@ -10,7 +10,9 @@ root or outbox.
 **Brain sync.** `git pull --rebase` before writing; commit per capture
 (`brain: capture <path> [<harness>@<host>]`); push immediately; rejected → rebase + retry ×3, then
 leave committed and report "push pending". Never force-push or rewrite brain history. Only
-`digest` restructures pages; everyone else appends, with a writer tag on every log bullet.
+`digest` restructures pages; everyone else appends, with a writer tag on every log bullet. On
+union-merged paths (`journal/`, `inbox/`, `projects/`) appends are strict: touch no other line,
+not even `updated:` frontmatter — digest reconciles it.
 
 **Capture triggers** (offer a one-line `remember` capture; never block work): decision + reason →
 `decisions/` · gotcha/postmortem → `lessons/` · new person/org → `people/` `companies/` · meeting

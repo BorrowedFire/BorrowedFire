@@ -159,9 +159,23 @@ install_skill() { # install_skill <skilldir> <manifest> <name>
 }
 
 remove_entry() { # remove_entry <skilldir> <manifest> <name> <why>
-  local tgt="$1/$3"
-  if [ -L "$tgt" ] || [ -d "$tgt" ]; then
-    act "remove   $3 ($4)" rm -rf "$tgt"
+  # Only delete what still looks like ours; a shape change since install means
+  # the user replaced it - de-own the manifest entry but leave the files alone.
+  local tgt="$1/$3" mode
+  mode="$(manifest_mode "$2" "$3")"
+  if [ -L "$tgt" ]; then
+    case "$(readlink "$tgt")" in
+      "$SRC"/skills/*)
+        act "remove   $3 ($4)" rm -f "$tgt" ;;
+      *)
+        say "  LEAVE    $3 - symlink no longer points at Borrowed Fire; de-owning only" ;;
+    esac
+  elif [ -d "$tgt" ]; then
+    if [ "$mode" = "copy" ]; then
+      act "remove   $3 ($4)" rm -rf "$tgt"
+    else
+      say "  LEAVE    $3 - manifest says link but a real directory is present; de-owning only"
+    fi
   fi
   [ "$DRY" -eq 1 ] || manifest_del "$2" "$3"
 }

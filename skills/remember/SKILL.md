@@ -26,6 +26,10 @@ registry frontmatter, sync protocol, and degradation ladder. Do not invent conve
 - **Check before creating an entity page.** One entity, one page: search existing slugs first. If
   a page exists, append a dated `## Log` bullet (with writer tag) and bump `updated:`; never
   rewrite prior content — only `digest` restructures.
+- **Union-merged paths are append-only, frontmatter included.** On `journal/`, `inbox/`, and
+  `projects/` pages, append your line and touch *nothing else* — do not bump `updated:` or edit
+  any frontmatter (two concurrent frontmatter edits on a `merge=union` path can concatenate into
+  corrupt YAML). `digest` reconciles `updated:` under its lock.
 - **Link while you write.** Mention a known person/company/project → wikilink it. Stated relations
   ("Jane works at Acme") go under `## Relations` with a typed edge.
 - **Keep the user's words** in the log entry; add your own summary only in addition.
