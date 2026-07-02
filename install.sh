@@ -51,19 +51,19 @@ if [ "$UNINSTALL" -eq 0 ]; then
 fi
 
 # --- harness detection: root dir existing == harness present ---
-# rows: "<label>|<skills-dir>|<context-file>"
-HARNESSES=""
-[ -d "$HOME/.claude" ] && HARNESSES="$HARNESSES claude|$HOME/.claude/skills|$HOME/.claude/CLAUDE.md"
-[ -d "$HOME/.codex" ]  && HARNESSES="$HARNESSES codex|$HOME/.codex/skills|$HOME/.codex/AGENTS.md"
-[ -d "$HOME/.qwen" ]   && HARNESSES="$HARNESSES qwen|$HOME/.qwen/skills|$HOME/.qwen/QWEN.md"
+# array of rows "<label>|<skills-dir>|<context-file>" (array: paths may contain spaces)
+HARNESSES=()
+[ -d "$HOME/.claude" ] && HARNESSES+=("claude|$HOME/.claude/skills|$HOME/.claude/CLAUDE.md")
+[ -d "$HOME/.codex" ]  && HARNESSES+=("codex|$HOME/.codex/skills|$HOME/.codex/AGENTS.md")
+[ -d "$HOME/.qwen" ]   && HARNESSES+=("qwen|$HOME/.qwen/skills|$HOME/.qwen/QWEN.md")
 if [ -n "$OPENCLAW_WS" ]; then
   if [ -d "$OPENCLAW_WS" ]; then
-    HARNESSES="$HARNESSES openclaw|$OPENCLAW_WS/skills|$OPENCLAW_WS/AGENTS.md"
+    HARNESSES+=("openclaw|$OPENCLAW_WS/skills|$OPENCLAW_WS/AGENTS.md")
   else
     echo "warning: --openclaw-workspace '$OPENCLAW_WS' does not exist; skipping" >&2
   fi
 fi
-if [ -z "$HARNESSES" ]; then
+if [ "${#HARNESSES[@]}" -eq 0 ]; then
   echo "no harnesses detected (looked for ~/.claude, ~/.codex, ~/.qwen; pass --openclaw-workspace for OpenClaw)" >&2
   exit 1
 fi
@@ -90,25 +90,26 @@ install_skill() { # install_skill <skilldir> <manifest> <name>
   local src="$SRC/skills/$name" tgt="$sd/$name"
   owned="$(manifest_mode "$mf" "$name")"
 
-  if [ -L "$tgt" ]; then
-    if [ "$(readlink "$tgt")" = "$src" ]; then
-      say "  ok       $name (linked)"
-    else
-      act "repoint  $name" ln -sfn "$src" "$tgt"
-      [ "$DRY" -eq 1 ] || manifest_set "$mf" "$name" link
-    fi
+  if [ -L "$tgt" ] && [ "$(readlink "$tgt")" = "$src" ]; then
+    say "  ok       $name (linked)"
     return
   fi
 
-  if [ -e "$tgt" ]; then
-    if [ "$owned" = "copy" ]; then
+  if [ -L "$tgt" ] || [ -e "$tgt" ]; then
+    if [ "$owned" = "link" ] && [ -L "$tgt" ]; then
+      # ours, pointing elsewhere (e.g. the repo moved): repoint
+      act "repoint  $name" ln -sfn "$src" "$tgt"
+      return
+    fi
+    if [ "$owned" = "copy" ] && [ ! -L "$tgt" ]; then
       say "  update   $name (copy)"
       if [ "$DRY" -eq 0 ]; then
         rm -rf "$tgt" && cp -R "$src" "$tgt" || echo "warning: update of $name failed" >&2
       fi
       return
     fi
-    # exists but not manifest-owned: collision
+    # not manifest-owned (or the on-disk shape no longer matches the manifest):
+    # a user's own skill dir or symlink - never touch it without --adopt
     if [ "$ADOPT" -eq 1 ]; then
       local bak="$sd/.borrowedfire-backup"
       act "adopt    $name (backed up to .borrowedfire-backup/)" mkdir -p "$bak"
@@ -185,7 +186,7 @@ remove_doctrine() { # remove_doctrine <context-file>
 }
 
 # --- main loop ---
-for row in $HARNESSES; do
+for row in "${HARNESSES[@]}"; do
   label="${row%%|*}"; rest="${row#*|}"
   sd="${rest%%|*}"; cf="${rest#*|}"
   mf="$sd/$MANIFEST_NAME"
