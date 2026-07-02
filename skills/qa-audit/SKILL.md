@@ -1,40 +1,41 @@
 ---
-name: repo-quality-audit
-description: Build and run a bounded, repo-native QA audit loop for a feature, app surface, release candidate, or small repo. Use when the user says "repo quality audit", "QA audit", "test matrix", "audit this release candidate", "find defects", "feature inventory", or wants a reusable agent loop that discovers features, builds durable QA artifacts, executes tests/manual checks, logs defects, fixes safe issues, and reports confidence without pretending the whole codebase is proven.
+name: qa-audit
+description: Build and run a bounded, repo-native QA audit loop for a feature, app surface, release candidate, or small repo. Use when the user says "/qa-audit", "qa audit", "repo quality audit", "QA audit", "test matrix", "audit this release candidate", "find defects", "feature inventory", or wants a reusable agent loop that discovers features, builds durable QA artifacts, executes tests/manual checks, logs defects, fixes safe issues, and reports confidence without pretending the whole codebase is proven. NOT for landing one existing PR (`land`), store releases (`store-release`), continuous backlog orchestration (`maintainer`), or copy tuning (`signal`).
 ---
 
-# Repo Quality Audit
+# QA Audit
 
-Run a focused QA operating loop for a repo: discover what exists, make the test surface explicit, execute the best available checks, record defects, fix what is safe and in scope, regress, and report confidence plus remaining risk.
+Run a focused QA operating loop for a repo: discover what exists, make the test surface explicit,
+execute the best available checks, record defects, fix what is safe and in scope, regress, and
+report confidence plus remaining risk.
 
-This skill is intentionally bounded. It is not a promise to test an entire codebase forever, and it should not become spreadsheet theater. The output is durable repo evidence in `qa/`, backed by real commands, app paths, screenshots, logs, test results, or review notes.
+This skill is intentionally bounded. It is not a promise to test an entire codebase forever, and
+it should not become spreadsheet theater. The output is durable repo evidence in `qa/`, backed by
+real commands, app paths, screenshots, logs, test results, or review notes.
 
 ## When to Use
 
 Use this for:
 
-- A release candidate, milestone, feature, route set, screen flow, API group, job family, or small repo.
+- A release candidate, milestone, feature, route set, screen flow, API group, job family, or
+  small repo.
 - "What features do we have, what did we test, what defects remain?"
 - Turning a broad QA prompt into a repeatable process with stopping rules.
-- Preparing a repo for owner review, App Store/Play Store handoff, customer demo, or launch readiness.
-
-Do not use this for:
-
-- Landing one existing PR end to end. Use `autoland`.
-- Store submission or mobile binary release trains. Use `orbit`.
-- Continuous backlog orchestration. Use `maintainer`.
-- Pure copy/message tuning. Use `signal`.
+- Preparing a repo for owner review, store handoff (`store-release`), customer demo, or launch
+  readiness.
 
 ## Inputs
 
-Default scope is the current repo and the smallest surface implied by the user. If the scope is ambiguous, pick a conservative scope and state it before execution. Ask only when a wrong scope would create meaningful risk.
+Default scope is the current repo and the smallest surface implied by the user. If the scope is
+ambiguous, pick a conservative scope and state it before execution. Ask only when a wrong scope
+would create meaningful risk.
 
 Useful invocation shapes:
 
-- `repo-quality-audit auth flow`
-- `repo-quality-audit iOS release candidate`
-- `repo-quality-audit API endpoints under /billing`
-- `repo-quality-audit full small repo --no-fix`
+- `qa-audit auth flow`
+- `qa-audit iOS release candidate`
+- `qa-audit API endpoints under /billing`
+- `qa-audit full small repo --no-fix`
 
 Optional flags:
 
@@ -55,28 +56,50 @@ Create or update these files in the repo unless the user asks for a different lo
 - `qa/defects.md` - defects with severity, repro, evidence, status, fix commit if any, and regression result.
 - `qa/coverage-summary.md` - confidence, what was proven, what was not proven, residual risks, and next decisions.
 
-Keep these artifacts concise enough to be maintained. Link to exact commands, screenshots, PRs, logs, or files rather than dumping raw output.
+**Artifact policy:** artifacts are committed on the audit branch (they are the evidence trail).
+Whether they merge to the default branch is the owner's standing convention per repo — if
+unstated, keep them on the audit branch/PR and ask once in the report.
 
 ## Operating Loop
 
-1. **Preflight.** Read repo instructions, current branch, dirty state, package/build/test scripts, CI config, app surfaces, and recent changes. Do not edit yet.
-2. **Scope.** Define the audit boundary in one sentence: repo, surface, target users, environments, and explicit non-goals.
-3. **Discover features from code.** Build `feature-inventory.md` from routes, screens, components, API handlers, jobs, config, migrations, tests, and docs. Mark inferred items as inferred.
-4. **Build the matrix.** Create `test-matrix.md` with happy paths, edge cases, auth/permission checks, error states, data integrity, accessibility/usability where relevant, and regression checks for recently changed areas.
-5. **Execute checks.** Run repo-native automated tests first, then targeted manual or tool-driven checks for the scoped surface. Prefer real app/browser/simulator/API execution over static guesses.
-6. **Log defects.** Every defect needs severity, affected feature, repro steps, expected/actual behavior, evidence, and status. If evidence is weak, mark it "needs repro" instead of pretending.
-7. **Fix safe issues.** If fixing is allowed, only fix narrow, high-confidence issues inside scope. Avoid redesigns, product calls, migrations, auth/payment changes, secrets, destructive operations, or release steps unless separately authorized.
-8. **Regress.** Re-run the exact failing check plus adjacent checks after each fix. Update defect status with the proof.
-9. **Summarize.** Update `coverage-summary.md` with confidence, completed evidence, untested surfaces, open defects by severity, and decision-ready next steps.
+1. **Preflight.** Read repo instructions, current branch, dirty state, package/build/test scripts,
+   CI config, app surfaces, and recent changes. `recall` the repo's `lessons/` and registry page
+   if a brain is available. Do not edit yet.
+2. **Scope.** Define the audit boundary in one sentence: repo, surface, target users,
+   environments, and explicit non-goals.
+3. **Discover features from code.** Build `feature-inventory.md` from routes, screens, components,
+   API handlers, jobs, config, migrations, tests, and docs. Mark inferred items as inferred.
+4. **Build the matrix.** Create `test-matrix.md` with happy paths, edge cases, auth/permission
+   checks, error states, data integrity, accessibility/usability where relevant, and regression
+   checks for recently changed areas.
+5. **Execute checks.** Run repo-native automated tests first, then targeted manual or tool-driven
+   checks for the scoped surface. Prefer real app/browser/simulator/API execution over static
+   guesses.
+6. **Log defects.** Every defect needs severity, affected feature, repro steps, expected/actual
+   behavior, evidence, and status. If evidence is weak, mark it "needs repro" instead of
+   pretending.
+7. **Fix safe issues.** If fixing is allowed, only fix narrow, high-confidence issues inside
+   scope. All fixes go on **one audit branch**; the branch lands through `land` (its gates, its
+   denylist) — qa-audit never merges its own fixes. Avoid redesigns, product calls, or anything on
+   the denylist unless separately authorized.
+8. **Regress.** Re-run the exact failing check plus adjacent checks after each fix. Update defect
+   status with the proof.
+9. **Summarize.** Update `coverage-summary.md` with confidence, completed evidence, untested
+   surfaces, open defects by severity, and decision-ready next steps. Capture recurring defect
+   patterns via `remember` to `lessons/`.
 
 ## Feature Inventory Heuristics
 
 Use repo-native discovery before guesses:
 
-- Web: routes, pages/app directories, API route handlers, middleware, forms, auth guards, env/config, analytics, payments, background jobs.
-- iOS/macOS: app targets, views, view models, navigation, entitlements, persistence, widgets, deep links, notification paths, store config.
-- Android: activities/fragments/Compose navigation, services/workers, manifests, permissions, persistence, Play config.
-- Backend: controllers/handlers, schemas, migrations, queues, scheduled jobs, RLS/policies, webhooks, observability.
+- Web: routes, pages/app directories, API route handlers, middleware, forms, auth guards,
+  env/config, analytics, payments, background jobs.
+- iOS/macOS: app targets, views, view models, navigation, entitlements, persistence, widgets,
+  deep links, notification paths, store config.
+- Android: activities/fragments/Compose navigation, services/workers, manifests, permissions,
+  persistence, Play config.
+- Backend: controllers/handlers, schemas, migrations, queues, scheduled jobs, RLS/policies,
+  webhooks, observability.
 - CLI/tools: commands, flags, config files, IO boundaries, failure modes, install/update paths.
 
 ## Severity
@@ -90,11 +113,13 @@ Use repo-native discovery before guesses:
 
 Allowed without another ask when `--fix-safe` is active:
 
-- Test fixes, obvious null/error handling, broken links/routes, validation gaps, copy typos, small UI state bugs, narrow regressions with clear evidence.
+- Test fixes, obvious null/error handling, broken links/routes, validation gaps, copy typos,
+  small UI state bugs, narrow regressions with clear evidence.
 
 Stop and ask with a decision-ready brief before:
 
-- Product behavior choices, auth/permissions, payments/IAP, database migrations/RLS/prod data writes, secrets/signing/env changes, destructive operations, release/build submission, broad refactors, or fixes that grow past the audit scope.
+- Product behavior choices, anything on `land`'s denylist (`references/denylist.md`), broad
+  refactors, or fixes that grow past the audit scope.
 
 ## Stopping Rules
 
@@ -113,7 +138,7 @@ Never claim "complete" for untested surfaces. Say "scoped audit complete" and na
 Final report should be short and evidence-first:
 
 ```
-Repo Quality Audit: <scope>
+QA Audit: <scope>
 Artifacts: qa/feature-inventory.md, qa/test-matrix.md, qa/defects.md, qa/coverage-summary.md
 
 Proven:
@@ -133,4 +158,5 @@ Confidence:
 
 ## Related
 
-`autoland` for landing one PR after fixes are ready. `maintainer` for queue orchestration. `orbit` for mobile store releases.
+`land` for landing the audit branch. `maintainer` for queue orchestration. `store-release` for
+mobile store releases. `remember` for lesson write-back.

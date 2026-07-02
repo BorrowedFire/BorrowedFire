@@ -1,7 +1,7 @@
 interface:
-  display_name: "Takeoff"
-  short_description: "Ship, deploy, and verify"
-  default_prompt: "Use $takeoff to commit, merge, deploy, and verify the current work."
+  display_name: "Ship"
+  short_description: "Commit, merge, deploy, and verify"
+  default_prompt: "Use $ship to commit, merge, deploy, and verify the current work."
 
 policy:
   allow_implicit_invocation: true
