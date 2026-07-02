@@ -53,8 +53,9 @@ fi
 # --- harness detection: root dir existing == harness present ---
 # array of rows "<label>|<skills-dir>|<context-file>" (array: paths may contain spaces)
 HARNESSES=()
+CODEX_ROOT="${CODEX_HOME:-$HOME/.codex}"   # Codex relocates its root via CODEX_HOME
 [ -d "$HOME/.claude" ] && HARNESSES+=("claude|$HOME/.claude/skills|$HOME/.claude/CLAUDE.md")
-[ -d "$HOME/.codex" ]  && HARNESSES+=("codex|$HOME/.codex/skills|$HOME/.codex/AGENTS.md")
+[ -d "$CODEX_ROOT" ]   && HARNESSES+=("codex|$CODEX_ROOT/skills|$CODEX_ROOT/AGENTS.md")
 [ -d "$HOME/.qwen" ]   && HARNESSES+=("qwen|$HOME/.qwen/skills|$HOME/.qwen/QWEN.md")
 if [ -n "$OPENCLAW_WS" ]; then
   if [ -d "$OPENCLAW_WS" ]; then
@@ -107,6 +108,9 @@ install_skill() { # install_skill <skilldir> <manifest> <name>
       fi
     else
       say "  ok       $name (linked)"
+      # a correct link may predate the manifest (manual install / stale manifest):
+      # record it so uninstall and pruning manage it
+      [ "$DRY" -eq 1 ] || [ "$owned" = "link" ] || manifest_set "$mf" "$name" link
     fi
     return
   fi

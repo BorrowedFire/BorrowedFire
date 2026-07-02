@@ -12,6 +12,7 @@ check() { # check <desc> <cmd...>
   if "$@" >/dev/null 2>&1; then ok "$desc"; else fail "$desc"; fi
 }
 
+unset CODEX_HOME   # hermetic: the runner's Codex root must not leak in
 mkdir -p "$HOME/.claude" "$HOME/.codex" "$HOME/.qwen" "$SB/openclaw-ws"
 
 # --- 1. fresh install across all four harnesses ---
@@ -151,6 +152,20 @@ ln -s "$SB/user-own-skill" "$HOME/.qwen/skills/signal"
 OUT="$("$SRC/install.sh" --uninstall 2>&1)"
 check "moved: dangling link removed"   test ! -L "$HOME/.qwen/skills/triage"
 check "moved: working foreign kept"    test "$(readlink "$HOME/.qwen/skills/signal")" = "$SB/user-own-skill"
+
+# --- 9f. CODEX_HOME honored (Codex P2 round 6) ---
+mkdir -p "$SB/codex-custom"
+CODEX_HOME="$SB/codex-custom" "$SRC/install.sh" >/dev/null 2>&1
+check "CODEX_HOME: skills installed"   test -L "$SB/codex-custom/skills/land"
+check "CODEX_HOME: doctrine written"   grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$SB/codex-custom/AGENTS.md"
+
+# --- 9g. pre-existing correct symlink gets recorded (Codex P2 round 6) ---
+rm -rf "$HOME/.claude/skills"; mkdir -p "$HOME/.claude/skills"
+ln -s "$SRC/skills/recall" "$HOME/.claude/skills/recall"   # manual pre-installer link, no manifest
+"$SRC/install.sh" >/dev/null 2>&1
+check "adopted-link: in manifest"      grep -q '^recall link$' "$HOME/.claude/skills/.borrowedfire-manifest"
+"$SRC/install.sh" --uninstall >/dev/null 2>&1
+check "adopted-link: uninstallable"    test ! -L "$HOME/.claude/skills/recall"
 
 # --- 10. negative lint test: broken skill fails lint + blocks install ---
 CLONE="$SB/clone"
