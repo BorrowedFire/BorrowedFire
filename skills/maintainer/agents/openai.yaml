@@ -1,7 +1,7 @@
 interface:
   display_name: "Maintainer"
-  short_description: "Orchestrate the repo queue: classify, delegate to autoland, surface decision-ready briefs"
-  default_prompt: "Use $maintainer to scan the queue, fire autoland workers on autonomous items, drive needs-owner items to decision-ready briefs, and report a single ledger."
+  short_description: "Fleet control plane: read the registry, classify queues, delegate to land workers, surface decision-ready briefs"
+  default_prompt: "Use $maintainer to scan the registry and repo queues, claim and delegate autonomous items to land workers, drive needs-owner items to decision-ready briefs, and report a single ledger."
 
 policy:
   allow_implicit_invocation: true

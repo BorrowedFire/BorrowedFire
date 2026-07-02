@@ -1,0 +1,7 @@
+interface:
+  display_name: "Rollback"
+  short_description: "Undo a bad merge or deploy, verify recovery live, capture the lesson"
+  default_prompt: "Use $rollback to revert the bad change, re-deploy the last good state, verify recovery with live evidence, and write the postmortem lesson."
+
+policy:
+  allow_implicit_invocation: true

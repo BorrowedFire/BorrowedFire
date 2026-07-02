@@ -1,0 +1,7 @@
+interface:
+  display_name: "Deps"
+  short_description: "Batch dependency and security updates by risk and land them through review"
+  default_prompt: "Use $deps to inventory dependency updates, batch them by risk with changelogs read on majors, and land each batch through the land skill."
+
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Recall"
+  short_description: "Search the brain and answer with citations and honest gaps"
+  default_prompt: "Use $recall to search the brain for this and answer with page citations plus what the brain doesn't know."
+
+policy:
+  allow_implicit_invocation: true
