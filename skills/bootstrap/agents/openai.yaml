@@ -1,0 +1,7 @@
+interface:
+  display_name: "Bootstrap"
+  short_description: "Wire a new repo, app, or idea into the system: context file, CI, registry page"
+  default_prompt: "Use $bootstrap to survey this repo, wire up the agent context file, CI, and conventions, and register it in the brain's project registry."
+
+policy:
+  allow_implicit_invocation: true
