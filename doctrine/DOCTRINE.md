@@ -1,8 +1,9 @@
 <!-- BEGIN BORROWEDFIRE DOCTRINE -->
-## Borrowed Fire doctrine (v1 — managed by install.sh, do not hand-edit)
+## Borrowed Fire doctrine (v2 — managed by install.sh, do not hand-edit)
 
-**Brain (memory).** Resolve: `$BFBRAIN_DIR` → path in `~/.config/borrowedfire/brain` →
-`~/bfbrain`. Git-authoritative markdown; schema = the `remember` skill's
+**Brain (memory: "Prometheus").** Resolve: `$PROMETHEUS_DIR` → path in
+`~/.config/borrowedfire/brain` → `~/prometheus`. Git-authoritative markdown; schema = the
+`remember` skill's
 `references/brain-schema.md`. If unreachable, write captures to `./.brain-outbox/` in the working
 repo — local-only, never committed/pushed (use `.git/info/exclude`); in ephemeral sandboxes emit a
 fenced `BRAIN CAPTURE` block instead (`digest` ingests both). Never drop a capture; never scatter

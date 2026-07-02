@@ -13,18 +13,21 @@ The brain repo is **private**. The skills that operate on it are public; the mem
 
 Resolution order (first hit wins):
 
-1. `$BFBRAIN_DIR` environment variable.
+1. `$PROMETHEUS_DIR` environment variable.
 2. The path in `~/.config/borrowedfire/brain` (a one-line pointer file written by `install.sh`).
-3. `~/bfbrain` if it exists and is a git repo.
-4. None found → offer once to initialize (clone the private brain repo, or bootstrap from
-   `bfbrain-template/`). Never scatter memory files outside a brain root or an outbox
+3. `~/prometheus` if it exists and is a git repo.
+4. Legacy pre-rename locations, kept for the transition: `$BFBRAIN_DIR`, then `~/bfbrain` (if a
+   git repo). When one resolves, use it and suggest migrating (re-run `install.sh`, which writes
+   the pointer).
+5. None found → offer once to initialize (clone the private brain repo, or bootstrap from
+   `prometheus-template/`). Never scatter memory files outside a brain root or an outbox
    (see Degradation ladder). A repo-local brain is an explicit owner opt-in for a single private
    repo, never a default; cross-repo memory always goes to the brain.
 
 ## Directory tree (page type = path prefix)
 
 ```
-bfbrain/
+prometheus/
   INDEX.md          # generated map of contents — digest owns it (see Sync)
   config/           # instance config: fleet.md (tier endpoints, caps), owner prefs
   inbox/            # raw captures, unprocessed    inbox/YYYY-MM-DD-<slug>-<writer>.md

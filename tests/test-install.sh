@@ -68,9 +68,20 @@ check "copy mode: manifest says copy"  grep -q '^ship copy$' "$HOME/.qwen/skills
 check "copy: references included"      test -f "$HOME/.qwen/skills/remember/references/brain-schema.md"
 
 # --- 7. brain pointer ---
+mkdir -p "$HOME/prometheus/.git"
+"$SRC/install.sh" >/dev/null 2>&1
+check "brain pointer auto-written"     grep -q "$HOME/prometheus" "$HOME/.config/borrowedfire/brain"
+rm -f "$HOME/.config/borrowedfire/brain"; rm -rf "$HOME/prometheus"
 mkdir -p "$HOME/bfbrain/.git"
 "$SRC/install.sh" >/dev/null 2>&1
-check "brain pointer auto-written"     grep -q "$HOME/bfbrain" "$HOME/.config/borrowedfire/brain"
+check "legacy bfbrain still detected"  grep -q "$HOME/bfbrain" "$HOME/.config/borrowedfire/brain"
+rm -rf "$HOME/bfbrain"; rm -f "$HOME/.config/borrowedfire/brain"
+mkdir -p "$SB/custom-brain/.git"
+BFBRAIN_DIR="$SB/custom-brain" "$SRC/install.sh" >/dev/null 2>&1
+check "legacy env var migrated"        grep -q "$SB/custom-brain" "$HOME/.config/borrowedfire/brain"
+rm -f "$HOME/.config/borrowedfire/brain"
+mkdir -p "$HOME/prometheus/.git"
+"$SRC/install.sh" >/dev/null 2>&1
 
 # --- 8. uninstall: removes owned, leaves unowned, strips doctrine ---
 mkdir -p "$HOME/.claude/skills/my-own-skill"; echo mine > "$HOME/.claude/skills/my-own-skill/SKILL.md"
