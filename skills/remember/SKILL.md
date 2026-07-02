@@ -18,8 +18,9 @@ registry frontmatter, sync protocol, and degradation ladder. Do not invent conve
 - **Never lose the signal.** If typing/filing is uncertain, write
   `inbox/YYYY-MM-DD-<slug>-<writer>.md` verbatim and move on — `digest` promotes inbox items
   later. A misfiled capture is recoverable; a skipped capture is gone. If the brain is unreachable,
-  use the schema's degradation ladder (working-repo `.brain-outbox/`, else a fenced
-  `BRAIN CAPTURE` block) — never silently drop.
+  use the schema's degradation ladder (local-only, never-committed `.brain-outbox/` in the working
+  repo; in ephemeral environments a fenced `BRAIN CAPTURE` block instead) — never silently drop,
+  and never commit private memory to a product repo.
 - **Follow the sync protocol exactly** (schema §Sync): pull-rebase before writing, commit per
   capture with the writer tag, push immediately, bounded retries, "push pending" report if the
   push cannot land. Never force-push the brain.

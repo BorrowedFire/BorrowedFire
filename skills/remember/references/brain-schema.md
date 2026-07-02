@@ -147,14 +147,19 @@ keeps it clear of in-flight appends.
 
 ## Degradation ladder (brain unreachable)
 
-Never drop a capture. If the brain root is missing/unreachable from the current environment
-(sandboxed session, offline machine):
+Never drop a capture — but never leak one either. Outbox files are **private memory**: they are
+never committed to a product repo, never pushed anywhere but the brain. If the brain root is
+missing/unreachable from the current environment (sandboxed session, offline machine):
 
-1. Write the capture to `./.brain-outbox/YYYY-MM-DD-<slug>-<writer>.md` in the current working
-   repo, page-formatted, with a `destination:` frontmatter hint. Commit it if the repo accepts
-   commits; otherwise leave it in the tree.
-2. If there is no writable working repo either, emit the capture as a fenced `BRAIN CAPTURE` block
-   in the final report so the owner (or a later agent) can file it.
+1. On a **durable machine**: write the capture to `./.brain-outbox/YYYY-MM-DD-<slug>-<writer>.md`
+   in the current working repo, page-formatted, with a `destination:` frontmatter hint — as a
+   **local-only file**. Add `.brain-outbox/` to the repo's `.git/info/exclude` (takes effect
+   locally without committing anything) if it isn't already gitignored. Do not commit or push
+   outbox files, even if the repo would accept them.
+2. In an **ephemeral environment** (a cloud sandbox whose files vanish with the session) or with
+   no writable working repo: emit the capture as a fenced `BRAIN CAPTURE` block in the final
+   report so the owner (or a later agent) can file it — a local file that will be destroyed is
+   not a capture.
 
 `digest` ingests outboxes (and deletes them) whenever it encounters them.
 

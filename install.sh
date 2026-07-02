@@ -85,6 +85,10 @@ manifest_del() { # manifest_del <manifest> <name>
   awk -v n="$name" '$1 != n' "$mf" > "$tmp" && mv "$tmp" "$mf"
 }
 
+copy_skill() { # copy_skill <src> <tgt>: copy + drop the ownership marker inside
+  rm -rf "$2" && cp -R "$1" "$2" && touch "$2/.borrowedfire-copy"
+}
+
 install_skill() { # install_skill <skilldir> <manifest> <name>
   local sd="$1" mf="$2" name="$3" owned
   local src="$SRC/skills/$name" tgt="$sd/$name"
@@ -95,7 +99,7 @@ install_skill() { # install_skill <skilldir> <manifest> <name>
       # switching an existing linked install to copy mode
       say "  convert  $name (link -> copy)"
       if [ "$DRY" -eq 0 ]; then
-        if rm "$tgt" && cp -R "$src" "$tgt"; then
+        if copy_skill "$src" "$tgt"; then
           manifest_set "$mf" "$name" copy
         else
           echo "warning: convert of $name failed" >&2
@@ -113,10 +117,10 @@ install_skill() { # install_skill <skilldir> <manifest> <name>
       act "repoint  $name" ln -sfn "$src" "$tgt"
       return
     fi
-    if [ "$owned" = "copy" ] && [ ! -L "$tgt" ]; then
+    if [ "$owned" = "copy" ] && [ ! -L "$tgt" ] && [ -e "$tgt/.borrowedfire-copy" ]; then
       say "  update   $name (copy)"
       if [ "$DRY" -eq 0 ]; then
-        rm -rf "$tgt" && cp -R "$src" "$tgt" || echo "warning: update of $name failed" >&2
+        copy_skill "$src" "$tgt" || echo "warning: update of $name failed" >&2
       fi
       return
     fi
@@ -135,7 +139,7 @@ install_skill() { # install_skill <skilldir> <manifest> <name>
   if [ "$COPY" -eq 1 ]; then
     say "  copy     $name"
     if [ "$DRY" -eq 0 ]; then
-      if cp -R "$src" "$tgt"; then
+      if copy_skill "$src" "$tgt"; then
         manifest_set "$mf" "$name" copy
       else
         echo "warning: copy of $name failed; not recorded" >&2
@@ -149,7 +153,7 @@ install_skill() { # install_skill <skilldir> <manifest> <name>
       manifest_set "$mf" "$name" link
     else
       say "  copy     $name (symlink unsupported here)"
-      if cp -R "$src" "$tgt"; then
+      if copy_skill "$src" "$tgt"; then
         manifest_set "$mf" "$name" copy
       else
         echo "warning: copy of $name failed; not recorded" >&2
@@ -171,10 +175,10 @@ remove_entry() { # remove_entry <skilldir> <manifest> <name> <why>
         say "  LEAVE    $3 - symlink no longer points at Borrowed Fire; de-owning only" ;;
     esac
   elif [ -d "$tgt" ]; then
-    if [ "$mode" = "copy" ]; then
+    if [ "$mode" = "copy" ] && [ -e "$tgt/.borrowedfire-copy" ]; then
       act "remove   $3 ($4)" rm -rf "$tgt"
     else
-      say "  LEAVE    $3 - manifest says link but a real directory is present; de-owning only"
+      say "  LEAVE    $3 - directory is not (or no longer) our copy; de-owning only"
     fi
   fi
   [ "$DRY" -eq 1 ] || manifest_del "$2" "$3"

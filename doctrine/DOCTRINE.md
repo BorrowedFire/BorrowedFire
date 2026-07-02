@@ -4,8 +4,9 @@
 **Brain (memory).** Resolve: `$BFBRAIN_DIR` → path in `~/.config/borrowedfire/brain` →
 `~/bfbrain`. Git-authoritative markdown; schema = the `remember` skill's
 `references/brain-schema.md`. If unreachable, write captures to `./.brain-outbox/` in the working
-repo (`digest` ingests later). Never drop a capture; never scatter memory files outside a brain
-root or outbox.
+repo — local-only, never committed/pushed (use `.git/info/exclude`); in ephemeral sandboxes emit a
+fenced `BRAIN CAPTURE` block instead (`digest` ingests both). Never drop a capture; never scatter
+memory files outside a brain root or outbox; never commit private memory to a product repo.
 
 **Brain sync.** `git pull --rebase` before writing; commit per capture
 (`brain: capture <path> [<harness>@<host>]`); push immediately; rejected → rebase + retry ×3, then
