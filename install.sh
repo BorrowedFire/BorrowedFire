@@ -91,7 +91,19 @@ install_skill() { # install_skill <skilldir> <manifest> <name>
   owned="$(manifest_mode "$mf" "$name")"
 
   if [ -L "$tgt" ] && [ "$(readlink "$tgt")" = "$src" ]; then
-    say "  ok       $name (linked)"
+    if [ "$COPY" -eq 1 ]; then
+      # switching an existing linked install to copy mode
+      say "  convert  $name (link -> copy)"
+      if [ "$DRY" -eq 0 ]; then
+        if rm "$tgt" && cp -R "$src" "$tgt"; then
+          manifest_set "$mf" "$name" copy
+        else
+          echo "warning: convert of $name failed" >&2
+        fi
+      fi
+    else
+      say "  ok       $name (linked)"
+    fi
     return
   fi
 
