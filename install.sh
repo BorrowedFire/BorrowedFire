@@ -172,7 +172,14 @@ remove_entry() { # remove_entry <skilldir> <manifest> <name> <why>
       "$SRC"/skills/*)
         act "remove   $3 ($4)" rm -f "$tgt" ;;
       *)
-        say "  LEAVE    $3 - symlink no longer points at Borrowed Fire; de-owning only" ;;
+        # owned link pointing elsewhere: a moved/re-cloned checkout leaves these
+        # dangling - clean those up; a still-working foreign link may be the
+        # user's own replacement, so leave it and just de-own
+        if [ "$mode" = "link" ] && [ ! -e "$tgt" ]; then
+          act "remove   $3 ($4; dangling link from a moved checkout)" rm -f "$tgt"
+        else
+          say "  LEAVE    $3 - working symlink not pointing at this checkout; de-owning only"
+        fi ;;
     esac
   elif [ -d "$tgt" ]; then
     if [ "$mode" = "copy" ] && [ -e "$tgt/.borrowedfire-copy" ]; then
