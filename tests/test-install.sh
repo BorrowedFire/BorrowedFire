@@ -76,6 +76,10 @@ mkdir -p "$HOME/bfbrain/.git"
 "$SRC/install.sh" >/dev/null 2>&1
 check "legacy bfbrain still detected"  grep -q "$HOME/bfbrain" "$HOME/.config/borrowedfire/brain"
 rm -rf "$HOME/bfbrain"; rm -f "$HOME/.config/borrowedfire/brain"
+mkdir -p "$SB/custom-brain/.git"
+BFBRAIN_DIR="$SB/custom-brain" "$SRC/install.sh" >/dev/null 2>&1
+check "legacy env var migrated"        grep -q "$SB/custom-brain" "$HOME/.config/borrowedfire/brain"
+rm -f "$HOME/.config/borrowedfire/brain"
 mkdir -p "$HOME/prometheus/.git"
 "$SRC/install.sh" >/dev/null 2>&1
 

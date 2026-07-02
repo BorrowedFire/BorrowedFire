@@ -291,6 +291,11 @@ if [ "$UNINSTALL" -eq 0 ]; then
   elif [ ! -f "$ptr" ] && [ -d "$HOME/prometheus/.git" ]; then
     act "brain pointer -> $HOME/prometheus" mkdir -p "$(dirname "$ptr")"
     [ "$DRY" -eq 1 ] || printf '%s\n' "$HOME/prometheus" > "$ptr"
+  elif [ ! -f "$ptr" ] && [ -n "${BFBRAIN_DIR:-}" ] && [ -d "${BFBRAIN_DIR}/.git" ]; then
+    # migrate the legacy env var into the pointer so the rename can't orphan a custom path
+    act "brain pointer -> $BFBRAIN_DIR (migrated from legacy \$BFBRAIN_DIR)" mkdir -p "$(dirname "$ptr")"
+    [ "$DRY" -eq 1 ] || printf '%s\n' "$BFBRAIN_DIR" > "$ptr"
+    echo "note: migrated legacy \$BFBRAIN_DIR into the pointer file; you can unset it and optionally rename the brain dir to ~/prometheus" >&2
   elif [ ! -f "$ptr" ] && [ -d "$HOME/bfbrain/.git" ]; then
     # legacy pre-rename brain: point at it, but suggest the rename
     act "brain pointer -> $HOME/bfbrain (legacy name)" mkdir -p "$(dirname "$ptr")"
