@@ -1,27 +1,28 @@
-# bfbrain — private brain repo template
+# Prometheus — private brain repo template
 
-This is the template for a **private** Borrowed Fire brain: a git-authoritative markdown memory
-shared by every agent harness and machine in your fleet. The schema that all skills follow lives
-in the `remember` skill (`skills/remember/references/brain-schema.md` in the Borrowed Fire repo) —
-this template just gives you a conforming starting tree.
+This is the template for **Prometheus**, your private brain: a git-authoritative markdown memory
+shared by every agent harness and machine in your fleet. (Prometheus is the one who borrowed the
+fire — the brain deliberately does not share the Borrowed Fire brand name.) The schema that all
+skills follow lives in the `remember` skill (`skills/remember/references/brain-schema.md` in the
+Borrowed Fire repo) — this template just gives you a conforming starting tree.
 
 ## Create your brain (one time)
 
 ```sh
 # 1. Create a PRIVATE repo (GitHub CLI shown; any private remote works)
-gh repo create <you>/bfbrain --private
+gh repo create <you>/prometheus --private
 
 # 2. Instantiate from this template
-cp -R bfbrain-template ~/bfbrain
-cd ~/bfbrain
+cp -R prometheus-template ~/prometheus
+cd ~/prometheus
 git init -b main
 git add -A && git commit -m "brain: init from template"
-git remote add origin git@github.com:<you>/bfbrain.git
+git remote add origin git@github.com:<you>/prometheus.git
 git push -u origin main
 ```
 
-Then on **every fleet machine**: `git clone git@github.com:<you>/bfbrain.git ~/bfbrain` and run
-the Borrowed Fire `install.sh` there (it writes the pointer file the skills use to find the
+Then on **every fleet machine**: `git clone git@github.com:<you>/prometheus.git ~/prometheus` and
+run the Borrowed Fire `install.sh` there (it writes the pointer file the skills use to find the
 brain).
 
 ## What's in the tree
