@@ -24,8 +24,9 @@ cd BorrowedFire
 
 The installer symlinks the skills into each harness, maintains a manifest so re-runs, renames, and
 uninstalls are safe, and writes the shared doctrine block into each harness's context file. Then
-create your private brain from [`bfbrain-template/`](bfbrain-template/README.md) and re-run
-`./install.sh --brain ~/bfbrain`.
+create your private brain — named **Prometheus**, the one who borrowed the fire — from
+[`prometheus-template/`](prometheus-template/README.md) and re-run
+`./install.sh --brain ~/prometheus`.
 
 Legacy note: if you installed older skill names by hand (takeoff, autoland, orbit,
 repo-quality-audit), run `./install.sh --adopt` once to retire them safely (they're backed up, not
@@ -81,7 +82,7 @@ context file. The high-risk denylist (always owner-gated) is defined once in
 ```
 skills/            14 SKILL.md skills (+ agents/openai.yaml metadata, references/)
 doctrine/          the managed context block install.sh distributes
-bfbrain-template/  starting tree for your private brain repo
+prometheus-template/  starting tree for your private brain repo
 install.sh         manifest-owned cross-harness installer
 tools/skill-lint.sh   lint (also install.sh's preflight; runs in CI)
 tests/             installer sandbox matrix + brain-protocol live proof (run in CI)

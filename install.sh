@@ -286,11 +286,11 @@ if [ "$UNINSTALL" -eq 0 ]; then
       act "brain pointer -> $BRAIN" mkdir -p "$(dirname "$ptr")"
       [ "$DRY" -eq 1 ] || printf '%s\n' "$BRAIN" > "$ptr"
     else
-      echo "warning: --brain '$BRAIN' does not exist; pointer not written. Clone your brain repo there first (see bfbrain-template/README.md)." >&2
+      echo "warning: --brain '$BRAIN' does not exist; pointer not written. Clone your brain repo there first (see prometheus-template/README.md)." >&2
     fi
-  elif [ ! -f "$ptr" ] && [ -d "$HOME/bfbrain/.git" ]; then
-    act "brain pointer -> $HOME/bfbrain" mkdir -p "$(dirname "$ptr")"
-    [ "$DRY" -eq 1 ] || printf '%s\n' "$HOME/bfbrain" > "$ptr"
+  elif [ ! -f "$ptr" ] && [ -d "$HOME/prometheus/.git" ]; then
+    act "brain pointer -> $HOME/prometheus" mkdir -p "$(dirname "$ptr")"
+    [ "$DRY" -eq 1 ] || printf '%s\n' "$HOME/prometheus" > "$ptr"
   fi
 fi
 
