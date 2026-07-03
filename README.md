@@ -1,9 +1,10 @@
 # Borrowed Fire
 
 A personal agent **memory + development orchestration system**: one set of markdown skills that
-works identically across Claude Code, Codex, Qwen Code, and OpenClaw, backed by a private,
-git-authoritative markdown brain (in the lineage of [gbrain](https://github.com/garrytan/gbrain))
-shared by every machine and harness you run.
+works identically across Claude Code, Codex, Qwen Code, and OpenClaw, backed by **Prometheus** — a
+private, git-authoritative markdown brain (in the lineage of
+[gbrain](https://github.com/garrytan/gbrain)) shared by every machine and harness you run.
+Borrowed Fire is the system; Prometheus, the one who borrowed the fire, is its memory.
 
 - **Memory** compounds: every agent captures decisions, people, meetings, and hard-won lessons
   into the brain; every agent reads them back before it works.
@@ -34,7 +35,7 @@ deleted).
 
 ## The skills
 
-### Memory (the brain)
+### Memory (Prometheus, the brain)
 
 | Skill | What it does |
 |---|---|
