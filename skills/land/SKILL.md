@@ -58,7 +58,11 @@ the denylist.
 **0 · Preflight.** Confirm `gh` auth + repo; `recall` the brain's `lessons/` and the repo's
 `projects/` registry page (autonomy level, `review_bot`, `denylist_extra`) if a brain is
 available; identify the diff's **blast radius** — needed for the denylist check, the live-proof
-choice, and the summary.
+choice, and the summary. **Freeze a scope baseline**: original request, changed-file list, and
+non-test LOC count — the circuit-breakers below measure against this snapshot, not against
+whatever the diff has grown into. **Release-branch mode**: on a release/beta/hotfix/signing
+branch, only release blockers, install/upgrade breakage, data loss/crashes, and concrete security
+exposure get fixed in-loop; every other finding is filed as a main-branch follow-up.
 
 **1 · Un-stale the branch (critical).** `git fetch origin`; if behind the base branch, **merge it
 in** first. A stale branch makes the reviewer flag files that exist on the base but not the branch
@@ -71,7 +75,9 @@ decision-ready rather than guessing an integration.
 body = problem / root cause / fix / **how it was proven** / scope. Use full clickable URLs, never
 bare `#123`.
 
-**3 · Adversarial review (gate #1).** Run a local adversarial pass (see Tool adapters) and
+**3 · Adversarial review (gate #1).** First, **secrets pre-scan** the diff (keys, tokens,
+credentials, `.env`-ish content) before it goes to any reviewer — a leaked secret in a PR or a
+review bundle is already published. Then run a local adversarial pass (see Tool adapters) and
 apply/verify its real findings now. This is the *second independent reviewer* — a single green
 check is **necessary but not sufficient**.
 
@@ -103,9 +109,14 @@ a fact.*
   review — "file missing" alongside "I checked that file".)
 - **Judgment / design / decision-record / product →** escalate decision-ready (below). Don't guess.
 
-**8 · Circuit-breakers — stop and escalate when:** `--max-rounds` reached · the **same finding
-recurs after a genuine fix** · a fix would **grow the diff past scope** · the reviewer is silent
-~60 min · any denylist trigger.
+**8 · Circuit-breakers — stop and escalate when:** `--max-rounds` reached · **two consecutive
+review cycles fail to converge** (each round still surfaces new findings in the same design
+area — classify every remaining finding as blocker / follow-up / out-of-scope, file the
+follow-ups with the analysis preserved, and escalate rather than continuing speculative fixes)
+· the **same finding recurs after a genuine fix** · cumulative fixes push the diff past **2× the
+frozen scope baseline** (files or non-test LOC from step 0) without an explicit owner scope
+expansion · the reviewer is silent ~60 min · any denylist trigger. These are hard stops, not
+suggestions — an owner who wants another round will say so; do not pre-spend it for them.
 
 **9 · Live Proof Gate (gate #3) — pre-merge, not optional.** Prove the *exact final candidate*
 works through its real changed path. **Never infer a waiver from "review clean" or "tests pass."**
