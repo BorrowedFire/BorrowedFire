@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.machinery
 import importlib.util
+import os
 import pathlib
 import subprocess
 import sys
@@ -366,20 +367,56 @@ class ApplySafetyTests(unittest.TestCase):
                 MODULE.apply_patch(repo, commit, patch)
 
     def test_generated_key_assignment_is_owner_gated(self):
+        for assignment in (
+            'API_KEY = "xyz789"',
+            'REFRESH_TOKEN="abcdef123456"',
+            'BEARER_TOKEN="abcdef123456"',
+            'CREDENTIAL="abcdef123456"',
+            'TOKEN="abcdef123456"',
+        ):
+            with self.subTest(assignment=assignment), tempfile.TemporaryDirectory() as directory:
+                repo, commit = self.make_repo(directory)
+                (repo / "value.txt").write_text(f"{assignment}\n", encoding="utf-8")
+                patch = repo.parent / "key.patch"
+                with patch.open("w", encoding="utf-8") as handle:
+                    subprocess.run(
+                        ["git", "-C", str(repo), "diff", "--binary", commit],
+                        check=True,
+                        text=True,
+                        stdout=handle,
+                    )
+                subprocess.run(["git", "-C", str(repo), "restore", "value.txt"], check=True)
+                with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
+                    MODULE.apply_patch(repo, commit, patch)
+
+    def test_copied_install_uses_packaged_policy_not_neighboring_skills(self):
         with tempfile.TemporaryDirectory() as directory:
-            repo, commit = self.make_repo(directory)
-            (repo / "value.txt").write_text('API_KEY = "xyz789"\n', encoding="utf-8")
-            patch = repo.parent / "key.patch"
-            with patch.open("w", encoding="utf-8") as handle:
-                subprocess.run(
-                    ["git", "-C", str(repo), "diff", "--binary", commit],
-                    check=True,
-                    text=True,
-                    stdout=handle,
-                )
-            subprocess.run(["git", "-C", str(repo), "restore", "value.txt"], check=True)
-            with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
-                MODULE.apply_patch(repo, commit, patch)
+            home = pathlib.Path(directory)
+            executable = home / ".local/bin/bf-route"
+            executable.parent.mkdir(parents=True)
+            executable.write_text("copied router\n", encoding="utf-8")
+            neighboring = home / ".local/skills/land/references/denylist.md"
+            neighboring.parent.mkdir(parents=True)
+            neighboring.write_text(
+                "<!-- bf-route-path: neighboring-path -->\n"
+                "<!-- bf-route-content: neighboring-content -->\n",
+                encoding="utf-8",
+            )
+            packaged = home / ".local/share/borrowedfire/tool-data/bf-route/denylist.md"
+            packaged.parent.mkdir(parents=True)
+            packaged.write_text(
+                "<!-- bf-route-path: packaged-path -->\n"
+                "<!-- bf-route-content: packaged-content -->\n",
+                encoding="utf-8",
+            )
+            with (
+                mock.patch.dict(os.environ, {"HOME": str(home)}),
+                mock.patch.object(MODULE, "__file__", str(executable)),
+            ):
+                paths, content = MODULE.authoritative_patch_patterns(home)
+            self.assertIn("packaged-path", paths)
+            self.assertIn("packaged-content", content)
+            self.assertNotIn("neighboring-path", paths)
 
     def test_generated_destructive_data_operations_are_owner_gated(self):
         for content in (
@@ -840,7 +877,40 @@ class ApplySafetyTests(unittest.TestCase):
                 mock.patch.object(MODULE, "git", return_value=completed),
                 self.assertRaisesRegex(RuntimeError, "without an authenticated final"),
             ):
-                MODULE.paid_attempt(pathlib.Path(directory), "a" * 40, "Review this", "advice")
+                MODULE.paid_attempt(
+                    pathlib.Path(directory), "a" * 40, "Review this", "advice", 900
+                )
+
+    def test_paid_attempt_timeout_is_bounded_and_cleans_up(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = pathlib.Path(directory) / "state"
+            state.mkdir()
+            completed = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+
+            def run(command, **kwargs):
+                if command[:2] == ["codex", "exec"]:
+                    self.assertEqual(kwargs["timeout"], 45)
+                    raise subprocess.TimeoutExpired(command, 45, output="partial\n")
+                return completed
+
+            with (
+                mock.patch.object(MODULE.shutil, "which", return_value="/usr/bin/codex"),
+                mock.patch.object(MODULE, "state_root", return_value=state),
+                mock.patch.object(MODULE, "run_checked", return_value=completed),
+                mock.patch.object(MODULE.subprocess, "run", side_effect=run) as subprocess_run,
+            ):
+                status, patch, final, _ = MODULE.paid_attempt(
+                    pathlib.Path(directory), "a" * 40, "Review this", "advice", 45
+                )
+            self.assertEqual(status, MODULE.EXIT_TEMPFAIL)
+            self.assertIsNone(patch)
+            self.assertIsNone(final)
+            self.assertTrue(
+                any(
+                    call.args[0][:5] == ["git", "-C", str(pathlib.Path(directory)), "worktree", "remove"]
+                    for call in subprocess_run.call_args_list
+                )
+            )
 
     def test_explicit_local_tier_cannot_bypass_owner_gate(self):
         decision = MODULE.forced_decision("volume", "Change the auth migration", [])

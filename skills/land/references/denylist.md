@@ -43,7 +43,7 @@ runtime from the matching Prometheus project page.
 <!-- bf-route-content: ^\+(?!\+\+)[^\n]*(?:["'](?:build|release|archive|publish)["']\s*:|\b(?:build|release|archive|publish)\s*:) -->
 <!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?build|(?:\./)?gradlew?\b[^\n]*(?:assemble|bundle)[A-Za-z0-9_-]*Release|xcodebuild\b[^\n]*\barchive|docker\s+build|swift\s+build\b[^\n]*\b(?:-c|--configuration)\s+release|cargo\s+build\b[^\n]*--release|dotnet\s+publish|flutter\s+build\s+(?:ipa|appbundle|apk)|eas\s+build)\b -->
 <!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:git\s+push|gh\s+release\s+create|fastlane\b|vercel\s+(?:deploy|--prod)|netlify\s+deploy|wrangler\s+deploy|supabase\s+functions\s+deploy)\b -->
-<!-- bf-route-content: ^\+(?!\+\+)[^\n]*(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key|password|passwd|secret)[A-Za-z0-9_.-]*\s*["']?\s*(?::=|=|:)\s*["']?[A-Za-z0-9/+_.=-]{6,} -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*(?:api[_-]?key|(?:(?:access|auth|refresh|bearer|id)[_-]?)?token|client[_-]?secret|private[_-]?key|credentials?|password|passwd|secret)[A-Za-z0-9_.-]*\s*["']?\s*(?::=|=|:)\s*["']?[A-Za-z0-9/+_.=-]{6,} -->
 <!-- bf-route-content: ^\+(?!\+\+)[^\n]*BEGIN [A-Z0-9 ]*PRIVATE KEY -->
 <!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?|DROP\s+(?:TABLE|DATABASE|SCHEMA))\b -->
 <!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:ALTER|CREATE(?:\s+OR\s+REPLACE)?|DROP)\s+(?:TABLE|SCHEMA|POLICY|ROLE|FUNCTION|TRIGGER|TYPE|INDEX|VIEW|MATERIALIZED\s+VIEW|EXTENSION)\b -->
