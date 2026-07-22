@@ -40,6 +40,11 @@ class ClassificationTests(unittest.TestCase):
         self.assertEqual(decision.tier, "judgment")
         self.assertTrue(decision.owner_gated)
 
+    def test_migration_word_is_owner_gated(self):
+        decision = MODULE.classify("Update the database migration")
+        self.assertEqual(decision.tier, "judgment")
+        self.assertTrue(decision.owner_gated)
+
     def test_migration_file_is_owner_gated(self):
         decision = MODULE.classify("Fix the typo", ["supabase/migrations/20260722.sql"])
         self.assertEqual(decision.tier, "judgment")
@@ -153,6 +158,17 @@ class FleetParsingTests(unittest.TestCase):
 
 
 class ApplySafetyTests(unittest.TestCase):
+    def setUp(self):
+        self.brain = tempfile.TemporaryDirectory()
+        self.brain_environment = mock.patch.dict(
+            "os.environ", {"PROMETHEUS_DIR": self.brain.name}
+        )
+        self.brain_environment.start()
+
+    def tearDown(self):
+        self.brain_environment.stop()
+        self.brain.cleanup()
+
     def make_repo(self, directory):
         repo = pathlib.Path(directory)
         subprocess.run(["git", "init", "-q", str(repo)], check=True)
@@ -315,6 +331,62 @@ class ApplySafetyTests(unittest.TestCase):
             )
             with mock.patch.dict("os.environ", {"PROMETHEUS_DIR": str(root / "brain")}):
                 self.assertEqual(MODULE.project_denylist_extras(repo), ["analytics/**", "audit log"])
+
+    def test_project_policy_matches_non_github_remote_and_different_clone_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            repo = root / "widget-copy"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(
+                ["git", "-C", str(repo), "remote", "add", "origin", "https://gitlab.com/acme/widget.git"],
+                check=True,
+            )
+            projects = root / "brain" / "projects"
+            projects.mkdir(parents=True)
+            (projects / "widget.md").write_text(
+                "repo: acme/widget\ndenylist_extra: [analytics/**]\n",
+                encoding="utf-8",
+            )
+            with mock.patch.dict("os.environ", {"PROMETHEUS_DIR": str(root / "brain")}):
+                self.assertEqual(MODULE.project_denylist_extras(repo), ["analytics/**"])
+
+    def test_project_policy_resolution_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            repo = root / "Widget"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(
+                ["git", "-C", str(repo), "remote", "add", "origin", "https://gitlab.com/acme/widget.git"],
+                check=True,
+            )
+            projects = root / "brain" / "projects"
+            projects.mkdir(parents=True)
+            (projects / "other.md").write_text("repo: acme/other\n", encoding="utf-8")
+            with mock.patch.dict("os.environ", {"PROMETHEUS_DIR": str(root / "brain")}):
+                with self.assertRaisesRegex(RuntimeError, "cannot uniquely resolve project policy"):
+                    MODULE.project_denylist_extras(repo)
+
+    def test_task_embedded_sensitive_path_is_gated_before_dispatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            repo = root / "Widget"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(
+                ["git", "-C", str(repo), "remote", "add", "origin", "git@github.com:BorrowedFire/Widget.git"],
+                check=True,
+            )
+            projects = root / "brain" / "projects"
+            projects.mkdir(parents=True)
+            (projects / "widget.md").write_text("repo: BorrowedFire/Widget\n", encoding="utf-8")
+            with mock.patch.dict("os.environ", {"PROMETHEUS_DIR": str(root / "brain")}):
+                decision = MODULE.forced_decision(
+                    "volume", "Update supabase/migrations/20260722.sql", [], repo
+                )
+                self.assertEqual(decision.tier, "judgment")
+                self.assertTrue(decision.owner_gated)
 
     def test_authoritative_and_project_paths_are_gated_before_dispatch(self):
         with tempfile.TemporaryDirectory() as directory:
