@@ -302,9 +302,11 @@ def project_denylist_extras(repo: pathlib.Path) -> list[str]:
         if registered.rsplit("/", 1)[-1].casefold() == repo.name.casefold():
             basename_candidates.append((page, text))
     candidates = exact_candidates if wanted else basename_candidates
-    if len(candidates) != 1:
+    if len(candidates) > 1:
         identity = wanted or repo.name
         raise RuntimeError(f"cannot uniquely resolve project policy for {identity}")
+    if not candidates:
+        return []
     text = candidates[0][1]
     inline = re.search(r"^denylist_extra:\s*\[([^]]*)\]\s*$", text, re.MULTILINE)
     if inline:
