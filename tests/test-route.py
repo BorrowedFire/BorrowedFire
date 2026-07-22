@@ -50,6 +50,24 @@ class ClassificationTests(unittest.TestCase):
         self.assertEqual(decision.tier, "judgment")
         self.assertTrue(decision.owner_gated)
 
+    def test_camel_case_sensitive_files_are_owner_gated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = pathlib.Path(directory)
+            for path in ("src/AuthManager.swift", "src/PaymentService.swift"):
+                with self.subTest(path=path):
+                    decision = MODULE.classify("Fix the typo", [path], repo)
+                    self.assertEqual(decision.tier, "judgment")
+                    self.assertTrue(decision.owner_gated)
+
+    def test_build_cut_paths_are_owner_gated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = pathlib.Path(directory)
+            for path in ("scripts/build.py", ".github/workflows/build.yml"):
+                with self.subTest(path=path):
+                    decision = MODULE.classify("Update the step", [path], repo)
+                    self.assertEqual(decision.tier, "judgment")
+                    self.assertTrue(decision.owner_gated)
+
     def test_review_session_is_judgment_but_not_owner_gated(self):
         decision = MODULE.classify("Start a full review session")
         self.assertEqual(decision.tier, "judgment")
@@ -79,6 +97,32 @@ class FleetParsingTests(unittest.TestCase):
             tiers = MODULE.load_tiers(fleet)
         self.assertEqual(tiers["local-quality"].model, "quality-model")
         self.assertEqual(tiers["local-volume"].endpoint, "http://host:8001/v1")
+
+    def test_legacy_local_large_aliases_to_quality(self):
+        content = """
+| Tier | Endpoint / harness | Use for |
+|---|---|---|
+| local-large | `http://host:8000/v1` (`large-model`, 131072 context) | hard work |
+| local-volume | `http://host:8001/v1` (`volume-model`, 131072 context) | routine work |
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            fleet = pathlib.Path(directory) / "fleet.md"
+            fleet.write_text(content, encoding="utf-8")
+            tiers = MODULE.load_tiers(fleet)
+        self.assertEqual(tiers["local-quality"].model, "large-model")
+        self.assertEqual(tiers["local-quality"].endpoint, "http://host:8000/v1")
+
+    def test_relative_brain_pointer_is_resolved_from_pointer_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = pathlib.Path(directory)
+            pointer_dir = home / ".config" / "borrowedfire"
+            pointer_dir.mkdir(parents=True)
+            expected = pointer_dir / "relative-brain"
+            expected.mkdir()
+            (pointer_dir / "brain").write_text("relative-brain\n", encoding="utf-8")
+            with mock.patch.dict(MODULE.os.environ, {"HOME": str(home)}, clear=False):
+                with mock.patch.object(MODULE.pathlib.Path, "home", return_value=home):
+                    self.assertEqual(MODULE.brain_dir(), expected.resolve())
 
     def test_rejects_shell_metacharacters_in_private_tiers(self):
         content = """

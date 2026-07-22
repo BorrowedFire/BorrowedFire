@@ -80,6 +80,12 @@ mkdir -p "$HOME/prometheus/.git"
 "$SRC/install.sh" >/dev/null 2>&1
 check "brain pointer auto-written"     grep -q "$HOME/prometheus" "$HOME/.config/borrowedfire/brain"
 
+rm -f "$HOME/.config/borrowedfire/brain"
+mkdir -p "$SB/relative-brain/.git"
+(cd "$SB" && "$SRC/install.sh" --brain relative-brain >/dev/null 2>&1)
+RELATIVE_BRAIN=$(cd "$SB/relative-brain" && pwd -P)
+check "relative brain pointer normalized" grep -qx "$RELATIVE_BRAIN" "$HOME/.config/borrowedfire/brain"
+
 # --- 8. uninstall: removes owned, leaves unowned, strips doctrine ---
 mkdir -p "$HOME/.claude/skills/my-own-skill"; echo mine > "$HOME/.claude/skills/my-own-skill/SKILL.md"
 "$SRC/install.sh" --uninstall >/dev/null 2>&1

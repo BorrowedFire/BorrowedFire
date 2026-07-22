@@ -26,16 +26,20 @@ runtime from the matching Prometheus project page.
 <!-- bf-route-path: (?:^|/)migrations?(?:/|$) -->
 <!-- bf-route-path: (?:^|/)(?:schema|rls)(?:[._/-]|$) -->
 <!-- bf-route-path: (?:^|/)(?:auth|authentication|authorization|sessions?|permissions?)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)(?:auth(?:entication|orization)?|sessions?|permissions?)(?:manager|service|store|client|provider|handler|controller|viewmodel|repository|coordinator)(?:[._/-]|$) -->
 <!-- bf-route-path: (?:^|/)(?:payments?|billing|iap)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)(?:payments?|billing|iap)(?:manager|service|store|client|provider|handler|controller|viewmodel|repository|coordinator)(?:[._/-]|$) -->
 <!-- bf-route-path: (?:^|/)(?:secrets?|keys?|signing|credentials?)(?:[._/-]|$) -->
 <!-- bf-route-path: (?:^|/)\.env(?:[._-]|$) -->
 <!-- bf-route-path: (?:^|/)(?:config|configuration|environments?)(?:/|$) -->
 <!-- bf-route-path: (?:^|/)[^/]+\.(?:xcconfig|entitlements)$ -->
 <!-- bf-route-path: (?:^|/)scripts?/(?:backfill|seed|migrate|production)(?:[._/-]|$) -->
 <!-- bf-route-path: (?:^|/)(?:deploy(?:ment)?|releases?)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)(?:scripts?|\.github/workflows)/[^/]*(?:build|archive|publish|release)[^/]*(?:/|$) -->
 <!-- bf-route-content: \b(?:production data|destructive|backfill|seed production)\b -->
 <!-- bf-route-content: \b(?:auth(?:entication|orization)?|payments?|billing|iap|secrets?|signing)\b -->
 <!-- bf-route-content: \b(?:deploy(?:ment)?|cut (?:a )?release)\b -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:archive|publish|release[- ]build|build (?:and )?(?:upload|ship|release))\b -->
 <!-- bf-route-content: ^\+(?!\+\+)[^\n]*(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key|password|passwd|secret)[A-Za-z0-9_.-]*\s*["']?\s*(?::=|=|:)\s*["']?[A-Za-z0-9/+_.=-]{6,} -->
 <!-- bf-route-content: ^\+(?!\+\+)[^\n]*BEGIN [A-Z0-9 ]*PRIVATE KEY -->
 <!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?|DROP\s+(?:TABLE|DATABASE|SCHEMA))\b -->

@@ -336,8 +336,9 @@ if [ "$UNINSTALL" -eq 0 ]; then
   ptr="$HOME/.config/borrowedfire/brain"
   if [ -n "$BRAIN" ]; then
     if [ -d "$BRAIN" ]; then
-      act "brain pointer -> $BRAIN" mkdir -p "$(dirname "$ptr")"
-      [ "$DRY" -eq 1 ] || printf '%s\n' "$BRAIN" > "$ptr"
+      brain_path=$(cd "$BRAIN" && pwd -P)
+      act "brain pointer -> $brain_path" mkdir -p "$(dirname "$ptr")"
+      [ "$DRY" -eq 1 ] || printf '%s\n' "$brain_path" > "$ptr"
     else
       echo "warning: --brain '$BRAIN' does not exist; pointer not written. Clone your brain repo there first (see prometheus-template/README.md)." >&2
     fi

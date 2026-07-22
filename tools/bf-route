@@ -100,7 +100,10 @@ def brain_dir() -> pathlib.Path:
     if pointer.is_file():
         value = pointer.read_text(encoding="utf-8").strip()
         if value:
-            return pathlib.Path(value).expanduser().resolve()
+            configured = pathlib.Path(value).expanduser()
+            if not configured.is_absolute():
+                configured = pointer.parent / configured
+            return configured.resolve()
     return pathlib.Path("~/prometheus").expanduser().resolve()
 
 
@@ -113,7 +116,7 @@ def load_tiers(path: pathlib.Path | None = None) -> dict[str, Tier]:
 
     tiers: dict[str, Tier] = {}
     pattern = re.compile(
-        r"^\|\s*(local-(?:volume|quality))\s*\|\s*`(https?://[^`]+)`\s*"
+        r"^\|\s*(local-(?:volume|quality|large))\s*\|\s*`(https?://[^`]+)`\s*"
         r"\(`([^`]+)`,\s*[^)]*\)\s*\|",
         re.MULTILINE,
     )
@@ -130,6 +133,13 @@ def load_tiers(path: pathlib.Path | None = None) -> dict[str, Tier]:
         if not re.fullmatch(r"[A-Za-z0-9._/-]+", model):
             raise RuntimeError(f"fleet tier {name} has an unsafe model name")
         tiers[name] = Tier(name=name, endpoint=endpoint.rstrip("/"), model=model)
+    if "local-quality" not in tiers and "local-large" in tiers:
+        legacy = tiers["local-large"]
+        tiers["local-quality"] = Tier(
+            name="local-quality",
+            endpoint=legacy.endpoint,
+            model=legacy.model,
+        )
     missing = {"local-volume", "local-quality"} - tiers.keys()
     if missing:
         raise RuntimeError(f"fleet configuration is missing tiers: {', '.join(sorted(missing))}")
