@@ -29,7 +29,7 @@ your private brain.
 ## Paid-usage policy
 
 - Paid task whitelist: review, plan, escalate. Everything else defaults to local.
-- Escalation cap: <N> retries before an owner brief instead of another paid call.
+- Escalation cap: 1
 - Monthly cap note: <where your usage ledger lives, if you track one>.
 
 ## Machines

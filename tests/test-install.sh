@@ -28,6 +28,24 @@ check "claude: doctrine block present" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$H
 check "openclaw: doctrine in AGENTS.md" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$SB/openclaw-ws/AGENTS.md"
 check "manifest has 14 entries"        test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 14
 
+# controller tool falls back to a managed copy when the filesystem rejects symlinks
+FALLBACK_HOME="$SB/no-symlink-home"
+FAKEBIN="$SB/no-symlink-bin"
+REAL_LN=$(command -v ln)
+mkdir -p "$FALLBACK_HOME/.codex" "$FAKEBIN"
+{
+  echo '#!/bin/sh'
+  echo 'case "$1" in -s|-sfn) exit 1 ;; esac'
+  printf 'exec %q "$@"\n' "$REAL_LN"
+} > "$FAKEBIN/ln"
+chmod 0755 "$FAKEBIN/ln"
+PATH="$FAKEBIN:$PATH" HOME="$FALLBACK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+check "controller fallback: copied"    bash -c "test -f '$FALLBACK_HOME/.local/bin/bf-route' && ! test -L '$FALLBACK_HOME/.local/bin/bf-route'"
+check "controller fallback: executable" test -x "$FALLBACK_HOME/.local/bin/bf-route"
+check "controller fallback: manifested" grep -q '^bf-route copy$' "$FALLBACK_HOME/.local/share/borrowedfire/tools.manifest"
+HOME="$FALLBACK_HOME" "$SRC/install.sh" --uninstall >/dev/null 2>&1
+check "controller fallback: removable" test ! -e "$FALLBACK_HOME/.local/bin/bf-route"
+
 # --- 2. idempotence: re-run, doctrine block appears exactly once ---
 "$SRC/install.sh" --openclaw-workspace "$SB/openclaw-ws" >/dev/null 2>&1
 check "doctrine idempotent (1 block)"  test "$(grep -c 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md")" -eq 1

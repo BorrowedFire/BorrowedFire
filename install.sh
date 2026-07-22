@@ -62,23 +62,66 @@ manifest_del() { # manifest_del <manifest> <name>
 install_tool() { # install_tool <source-name> <target-name>
   local src="$SRC/tools/$1" target="$HOME/.local/bin/$2"
   local mf="$HOME/.local/share/borrowedfire/tools.manifest" owned
+  local copy_state="$HOME/.local/share/borrowedfire/tool-copies/$2"
   owned="$(manifest_mode "$mf" "$2")"
   if [ -L "$target" ] && [ "$(readlink "$target")" = "$src" ]; then
     say "  ok       $2 (tool linked)"
     if [ "$DRY" -eq 0 ] && [ "$owned" != link ]; then
       mkdir -p "$(dirname "$mf")"
       manifest_set "$mf" "$2" link
+      rm -f "$copy_state"
     fi
   elif [ "$owned" = link ] && [ -L "$target" ]; then
-    act "repoint  $2 (controller tool)" ln -sfn "$src" "$target"
+    if [ "$DRY" -eq 1 ]; then
+      say "  repoint  $2 (controller tool)"
+    elif ln -sfn "$src" "$target" 2>/dev/null; then
+      say "  repoint  $2 (controller tool)"
+    else
+      rm -f "$target"
+      mkdir -p "$(dirname "$copy_state")"
+      if cp "$src" "$target" && chmod 0755 "$target" && cp "$src" "$copy_state"; then
+        say "  copy     $2 (symlink unsupported here)"
+        manifest_set "$mf" "$2" copy
+      else
+        echo "controller tool install failed: $2" >&2
+        return 1
+      fi
+    fi
+  elif [ "$owned" = copy ] && [ -f "$target" ] && [ -f "$copy_state" ]; then
+    if cmp -s "$target" "$copy_state"; then
+      if [ "$DRY" -eq 1 ]; then
+        say "  update   $2 (tool copy)"
+      elif cp "$src" "$target" && chmod 0755 "$target" && cp "$src" "$copy_state"; then
+        say "  update   $2 (tool copy)"
+      else
+        echo "controller tool update failed: $2" >&2
+        return 1
+      fi
+    else
+      say "  LEAVE    $2 - copied controller tool was modified; de-owning only"
+      [ "$DRY" -eq 1 ] || { rm -f "$copy_state"; manifest_del "$mf" "$2"; }
+    fi
   elif [ -e "$target" ] || [ -L "$target" ]; then
     say "  SKIP     $2 - existing controller tool is not owned by Borrowed Fire"
   else
-    act "tool     $2" mkdir -p "$HOME/.local/bin"
-    act "link     $2 (controller tool)" ln -s "$src" "$target"
-    if [ "$DRY" -eq 0 ]; then
-      mkdir -p "$(dirname "$mf")"
-      manifest_set "$mf" "$2" link
+    if [ "$DRY" -eq 1 ]; then
+      say "  link     $2 (controller tool)"
+    else
+      mkdir -p "$HOME/.local/bin" "$(dirname "$mf")"
+      if ln -s "$src" "$target" 2>/dev/null; then
+        say "  link     $2 (controller tool)"
+        manifest_set "$mf" "$2" link
+        rm -f "$copy_state"
+      else
+        mkdir -p "$(dirname "$copy_state")"
+        if cp "$src" "$target" && chmod 0755 "$target" && cp "$src" "$copy_state"; then
+          say "  copy     $2 (symlink unsupported here)"
+          manifest_set "$mf" "$2" copy
+        else
+          echo "controller tool install failed: $2" >&2
+          return 1
+        fi
+      fi
     fi
   fi
 }
@@ -86,6 +129,7 @@ install_tool() { # install_tool <source-name> <target-name>
 remove_tool() { # remove_tool <source-name> <target-name>
   local src="$SRC/tools/$1" target="$HOME/.local/bin/$2"
   local mf="$HOME/.local/share/borrowedfire/tools.manifest" owned link_target
+  local copy_state="$HOME/.local/share/borrowedfire/tool-copies/$2"
   owned="$(manifest_mode "$mf" "$2")"
   if [ "$owned" = link ] && [ -L "$target" ]; then
     link_target="$(readlink "$target")"
@@ -96,8 +140,14 @@ remove_tool() { # remove_tool <source-name> <target-name>
     fi
   elif [ "$owned" = link ] && { [ -e "$target" ] || [ -L "$target" ]; }; then
     say "  LEAVE    $2 - controller tool is no longer an owned symlink; de-owning only"
+  elif [ "$owned" = copy ] && [ -f "$target" ] && [ -f "$copy_state" ]; then
+    if cmp -s "$target" "$copy_state"; then
+      act "remove   $2 (controller tool copy)" rm -f "$target"
+    else
+      say "  LEAVE    $2 - copied controller tool was modified; de-owning only"
+    fi
   fi
-  [ "$DRY" -eq 1 ] || manifest_del "$mf" "$2"
+  [ "$DRY" -eq 1 ] || { rm -f "$copy_state"; manifest_del "$mf" "$2"; }
 }
 
 # --- preflight: never distribute a broken skill set ---
@@ -326,7 +376,7 @@ done
 # Controller-side routing tool. The GB10 remote helper is deployed explicitly
 # to worker hosts because ordinary harness machines must not pretend to be one.
 if [ "$UNINSTALL" -eq 0 ]; then
-  install_tool bf-route bf-route
+  install_tool bf-route bf-route || exit 1
 else
   remove_tool bf-route bf-route
 fi

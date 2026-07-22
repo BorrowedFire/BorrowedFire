@@ -113,8 +113,9 @@ bf-route run --repo . --task "Perform the final independent review" --mode advic
 
 Local jobs return patch and final-message artifacts under
 `~/.local/state/borrowedfire-route/`. `--apply` refuses a dirty or moved checkout. Paid escalation
-is disabled unless `--allow-paid` is present, and the worker never receives GitHub credentials or
-the Docker socket.
+requires `--allow-paid`, a matching private paid-task whitelist entry (owner-gated work is handled
+as an explicit escalation), and room under the private escalation cap. The worker never receives
+GitHub credentials or the Docker socket.
 
 An authorized worker is bootstrapped explicitly rather than by the ordinary harness installer:
 
