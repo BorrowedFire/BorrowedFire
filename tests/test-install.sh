@@ -43,8 +43,17 @@ PATH="$FAKEBIN:$PATH" HOME="$FALLBACK_HOME" "$SRC/install.sh" >/dev/null 2>&1
 check "controller fallback: copied"    bash -c "test -f '$FALLBACK_HOME/.local/bin/bf-route' && ! test -L '$FALLBACK_HOME/.local/bin/bf-route'"
 check "controller fallback: executable" test -x "$FALLBACK_HOME/.local/bin/bf-route"
 check "controller fallback: manifested" grep -q '^bf-route copy$' "$FALLBACK_HOME/.local/share/borrowedfire/tools.manifest"
+check "controller fallback: policy copied" test -f "$FALLBACK_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
+FALLBACK_REPO="$SB/fallback-repo"
+git init -q "$FALLBACK_REPO"
+echo test > "$FALLBACK_REPO/README.md"
+git -C "$FALLBACK_REPO" add README.md
+git -C "$FALLBACK_REPO" -c user.name=test -c user.email=test@example.invalid commit -qm baseline
+check "controller fallback: router executes" env HOME="$FALLBACK_HOME" \
+  "$FALLBACK_HOME/.local/bin/bf-route" decide --repo "$FALLBACK_REPO" --task "Update docs"
 HOME="$FALLBACK_HOME" "$SRC/install.sh" --uninstall >/dev/null 2>&1
 check "controller fallback: removable" test ! -e "$FALLBACK_HOME/.local/bin/bf-route"
+check "controller fallback: policy removable" test ! -e "$FALLBACK_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
 
 # --- 2. idempotence: re-run, doctrine block appears exactly once ---
 "$SRC/install.sh" --openclaw-workspace "$SB/openclaw-ws" >/dev/null 2>&1
