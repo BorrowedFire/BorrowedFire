@@ -23,6 +23,7 @@ your private brain.
 ## Router settings
 
 - Controller SSH host: `<ssh-alias>`
+- Local task timeout seconds: `<seconds>`
 
 ## Paid-usage policy
 
