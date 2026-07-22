@@ -49,6 +49,9 @@ patch="$artifact_dir/changes.patch"
 final="$artifact_dir/final.txt"
 result=FAIL
 task_file=
+model_container=
+agent_network=
+model_network_connected=0
 
 mkdir -p "$run_dir" "$untrusted_dir"
 exec 9>"$lock_file"
@@ -66,6 +69,9 @@ cleanup() {
   [[ -s "$patch" ]] && echo "BF_RESULT_${result_nonce}_PATCH=$patch"
   [[ -f "$final" ]] && echo "BF_RESULT_${result_nonce}_FINAL=$final"
   docker rm -f "$container" >/dev/null 2>&1 || true
+  if [[ $model_network_connected -eq 1 ]]; then
+    docker network disconnect "$agent_network" "$model_container" >/dev/null 2>&1 || true
+  fi
   if [[ -n "$task_file" ]]; then
     rm -f "$task_file" || true
   fi
@@ -162,6 +168,7 @@ if docker inspect "$model_container" --format '{{json .NetworkSettings.Networks}
   docker network disconnect "$agent_network" "$model_container"
 fi
 docker network connect --alias "model-$port" "$agent_network" "$model_container"
+model_network_connected=1
 internal_endpoint="http://model-$port:$container_port/v1"
 
 git -C "$workspace" init -q
