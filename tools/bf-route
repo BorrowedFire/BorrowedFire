@@ -486,15 +486,22 @@ def project_denylist_extras(repo: pathlib.Path) -> list[str]:
 
 
 def authoritative_patch_patterns(repo: pathlib.Path) -> tuple[list[str], list[str]]:
+    executable = pathlib.Path(__file__).expanduser().resolve()
+    checkout_root = executable.parents[1]
     source_policy = (
-        pathlib.Path(__file__).resolve().parents[1]
-        / "skills" / "land" / "references" / "denylist.md"
+        checkout_root / "skills" / "land" / "references" / "denylist.md"
     )
     installed_policy = (
         pathlib.Path("~/.local/share/borrowedfire/tool-data/bf-route/denylist.md")
         .expanduser()
     )
-    policy = source_policy if source_policy.is_file() else installed_policy
+    managed_copy = pathlib.Path("~/.local/bin/bf-route").expanduser().absolute()
+    if executable == managed_copy:
+        policy = installed_policy
+    elif (checkout_root / ".git").exists() and source_policy.is_file():
+        policy = source_policy
+    else:
+        policy = installed_policy
     try:
         text = policy.read_text(encoding="utf-8")
     except OSError as error:
@@ -808,7 +815,13 @@ def paid_runtime_preflight() -> None:
         raise RuntimeError("Codex CLI is not installed on this controller")
 
 
-def paid_attempt(repo: pathlib.Path, commit: str, task: str, mode: str) -> tuple[int, pathlib.Path | None, pathlib.Path | None, str]:
+def paid_attempt(
+    repo: pathlib.Path,
+    commit: str,
+    task: str,
+    mode: str,
+    timeout_seconds: int,
+) -> tuple[int, pathlib.Path | None, pathlib.Path | None, str]:
     paid_runtime_preflight()
     timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_id = f"{timestamp}-{os.getpid()}-codex"
@@ -824,17 +837,27 @@ def paid_attempt(repo: pathlib.Path, commit: str, task: str, mode: str) -> tuple
     try:
         run_checked(["git", "-C", str(repo), "worktree", "add", "--detach", str(worktree), commit])
         sandbox = "workspace-write" if mode == "code" else "read-only"
-        process = subprocess.run(
-            [
-                "codex", "exec", "--ephemeral", "--sandbox", sandbox,
-                "--disable", "multi_agent", "-C", str(worktree),
-                "-o", str(final), task,
-            ],
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
+        try:
+            process = subprocess.run(
+                [
+                    "codex", "exec", "--ephemeral", "--sandbox", sandbox,
+                    "--disable", "multi_agent", "-C", str(worktree),
+                    "-o", str(final), task,
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as error:
+            output = error.stdout or ""
+            if isinstance(output, bytes):
+                output = output.decode(errors="replace")
+            (output_dir / "controller.log").write_text(output, encoding="utf-8")
+            sys.stdout.write(output)
+            print(f"ATTEMPT_ERROR=codex:paid Codex exceeded its {timeout_seconds}-second task timeout")
+            return EXIT_TEMPFAIL, None, None, run_id
         (output_dir / "controller.log").write_text(process.stdout, encoding="utf-8")
         sys.stdout.write(process.stdout)
         if mode == "code":
@@ -907,6 +930,7 @@ def command_run(args: argparse.Namespace) -> int:
             status = EXIT_PAID_REQUIRED
         else:
             paid_runtime_preflight()
+            timeout_seconds = load_task_timeout()
             allowed, policy_reason = paid_call_allowed(
                 repo, commit, args.task, task_hash, decision, reserve=True
             )
@@ -914,7 +938,7 @@ def command_run(args: argparse.Namespace) -> int:
             if allowed:
                 attempts.append("codex")
                 status, final_patch, final_message, run_id = paid_attempt(
-                    repo, commit, args.task, args.mode
+                    repo, commit, args.task, args.mode, timeout_seconds
                 )
             else:
                 print("PAID_POLICY_BLOCKED=yes")
@@ -955,7 +979,7 @@ def command_run(args: argparse.Namespace) -> int:
             if allowed:
                 attempts.append("codex")
                 status, final_patch, final_message, run_id = paid_attempt(
-                    repo, commit, args.task, args.mode
+                    repo, commit, args.task, args.mode, timeout_seconds
                 )
             else:
                 print("PAID_POLICY_BLOCKED=yes")
