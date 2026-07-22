@@ -137,6 +137,21 @@ def load_worker_host(path: pathlib.Path | None = None) -> str:
     return match.group(1)
 
 
+def load_task_timeout(path: pathlib.Path | None = None) -> int:
+    fleet = path or brain_dir() / "config" / "fleet.md"
+    try:
+        text = fleet.read_text(encoding="utf-8")
+    except OSError as error:
+        raise RuntimeError(f"cannot read fleet configuration: {fleet}: {error}") from error
+    match = re.search(r"^- Local task timeout seconds:\s*`([^`]+)`\s*$", text, re.MULTILINE)
+    if not match or not match.group(1).isdigit():
+        raise RuntimeError("fleet configuration is missing a numeric Local task timeout seconds")
+    timeout = int(match.group(1))
+    if not 30 <= timeout <= 7200:
+        raise RuntimeError("Local task timeout seconds must be between 30 and 7200")
+    return timeout
+
+
 def validate_worker_host(value: str) -> str:
     if not re.fullmatch(r"[A-Za-z0-9._@-]+", value):
         raise RuntimeError("worker SSH host contains unsafe characters")
@@ -322,6 +337,7 @@ def local_attempt(
     task: str,
     tier: Tier,
     mode: str,
+    timeout_seconds: int,
 ) -> tuple[int, pathlib.Path | None, pathlib.Path | None, str]:
     timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_id = f"{timestamp}-{os.getpid()}-{tier.name}"
@@ -347,14 +363,30 @@ def local_attempt(
         mode,
         encoded,
         result_nonce,
+        str(timeout_seconds),
     ]
-    process = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
-    subprocess.run(
-        ["ssh", "-o", "BatchMode=yes", worker, "rm", "-rf", remote_workspace],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
+    try:
+        process = subprocess.run(
+            command,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+            timeout=timeout_seconds + 90,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(f"local worker exceeded its {timeout_seconds}-second task timeout") from error
+    finally:
+        try:
+            subprocess.run(
+                ["ssh", "-o", "BatchMode=yes", worker, "rm", "-rf", remote_workspace],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired:
+            pass
     controller_log.write_text(process.stdout, encoding="utf-8")
     sys.stdout.write(process.stdout)
 
@@ -375,7 +407,23 @@ def local_attempt(
     if final_remote and final:
         copy_remote_artifact(worker, worker_home, slug, final_remote, "final.txt", final)
 
+    validate_attempt_artifacts(mode, process.returncode, patch, final)
+
     return process.returncode, patch, final, run_id
+
+
+def validate_attempt_artifacts(
+    mode: str,
+    status: int,
+    patch: pathlib.Path | None,
+    final: pathlib.Path | None,
+) -> None:
+    if status != 0:
+        return
+    if not final or not final.is_file() or final.stat().st_size == 0:
+        raise RuntimeError("worker reported success without an authenticated final artifact")
+    if mode == "code" and (not patch or not patch.is_file() or patch.stat().st_size == 0):
+        raise RuntimeError("worker reported code success without an authenticated patch artifact")
 
 
 def checkout_is_clean_at(repo: pathlib.Path, commit: str) -> bool:
@@ -518,6 +566,7 @@ def command_run(args: argparse.Namespace) -> int:
     else:
         tiers = load_tiers()
         worker = validate_worker_host(args.worker) if args.worker else load_worker_host()
+        timeout_seconds = load_task_timeout()
         route_order = [decision.tier]
         if decision.tier == "local-volume":
             route_order.append("local-quality")
@@ -525,7 +574,7 @@ def command_run(args: argparse.Namespace) -> int:
             attempts.append(tier_name)
             try:
                 status, final_patch, final_message, run_id = local_attempt(
-                    worker, repo, commit, args.task, tiers[tier_name], args.mode
+                    worker, repo, commit, args.task, tiers[tier_name], args.mode, timeout_seconds
                 )
             except (RuntimeError, subprocess.CalledProcessError, OSError) as error:
                 status = EXIT_TEMPFAIL

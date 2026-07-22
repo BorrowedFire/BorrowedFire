@@ -88,6 +88,13 @@ class FleetParsingTests(unittest.TestCase):
             fleet.write_text(content, encoding="utf-8")
             self.assertEqual(MODULE.load_worker_host(fleet), "worker-alias")
 
+    def test_reads_bounded_task_timeout(self):
+        content = "- Local task timeout seconds: `900`\n"
+        with tempfile.TemporaryDirectory() as directory:
+            fleet = pathlib.Path(directory) / "fleet.md"
+            fleet.write_text(content, encoding="utf-8")
+            self.assertEqual(MODULE.load_task_timeout(fleet), 900)
+
     def test_worker_seals_untrusted_artifacts_without_following_links(self):
         helper = (ROOT / "tools" / "bf-local-agent-remote").read_text(encoding="utf-8")
         self.assertIn('untrusted_dir="$run_dir/untrusted"', helper)
@@ -101,6 +108,7 @@ class FleetParsingTests(unittest.TestCase):
         helper = (ROOT / "tools" / "bf-local-agent-remote").read_text(encoding="utf-8")
         self.assertIn(".NetworkSettings.Ports", helper)
         self.assertIn('internal_endpoint="http://model-$port:$container_port/v1"', helper)
+        self.assertIn('timeout --signal=TERM --kill-after=30s "${task_timeout}s"', helper)
 
 
 class ApplySafetyTests(unittest.TestCase):
@@ -222,6 +230,7 @@ class ApplySafetyTests(unittest.TestCase):
             }
             with (
                 mock.patch.object(MODULE, "load_tiers", return_value=tiers),
+                mock.patch.object(MODULE, "load_task_timeout", return_value=900),
                 mock.patch.object(MODULE, "local_attempt", side_effect=RuntimeError("worker offline")),
                 mock.patch.object(MODULE, "paid_attempt", return_value=(0, None, None, "paid-run")) as paid,
                 mock.patch.object(MODULE, "append_ledger"),
@@ -240,6 +249,16 @@ class ApplySafetyTests(unittest.TestCase):
                     "final.txt",
                     pathlib.Path(directory) / "final.txt",
                 )
+
+    def test_success_requires_authenticated_artifacts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            final = pathlib.Path(directory) / "final.txt"
+            final.write_text("done\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "without an authenticated patch"):
+                MODULE.validate_attempt_artifacts("code", 0, None, final)
+            with self.assertRaisesRegex(RuntimeError, "without an authenticated final"):
+                MODULE.validate_attempt_artifacts("advice", 0, None, None)
+            MODULE.validate_attempt_artifacts("advice", 0, None, final)
 
     def test_explicit_local_tier_cannot_bypass_owner_gate(self):
         decision = MODULE.forced_decision("volume", "Change the auth migration", [])

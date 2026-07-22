@@ -10,6 +10,7 @@ tier=${6:?missing tier}
 mode=${7:?missing mode}
 task_b64=${8:?missing encoded task}
 result_nonce=${9:?missing result nonce}
+task_timeout=${10:?missing task timeout}
 
 case "$workspace" in
   "$HOME/.cache/borrowedfire-route/"*) ;;
@@ -22,6 +23,10 @@ esac
 [[ "$tier" == local-volume || "$tier" == local-quality ]] || { echo "Invalid local tier" >&2; exit 64; }
 [[ "$mode" == code || "$mode" == advice ]] || { echo "Invalid mode" >&2; exit 64; }
 [[ "$result_nonce" =~ ^[0-9a-f]{32}$ ]] || { echo "Invalid result nonce" >&2; exit 64; }
+[[ "$task_timeout" =~ ^[0-9]+$ && "$task_timeout" -ge 30 && "$task_timeout" -le 7200 ]] || {
+  echo "Invalid task timeout" >&2
+  exit 64
+}
 
 state_root="$HOME/.local/state/borrowedfire-route"
 state_dir="$state_root/$repo_slug"
@@ -154,7 +159,7 @@ echo "MODEL=$model"
 echo "CLAUDE_ELIGIBLE=no"
 echo "STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-docker run --rm \
+timeout --signal=TERM --kill-after=30s "${task_timeout}s" docker run --rm \
   --name "$container" \
   --network "$agent_network" \
   --user "$(id -u):$(id -g)" \
