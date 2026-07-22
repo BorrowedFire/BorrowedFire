@@ -16,9 +16,13 @@ your private brain.
 
 | Tier | Endpoint / harness | Use for |
 |---|---|---|
-| local-volume | <OpenAI-compatible endpoint, e.g. http://<host>:<port>/v1> | bulk edits, first drafts, summarize/triage/format |
-| local-large | <endpoint for your larger local model, if any> | large-context local work |
+| local-quality | `http://<host>:<port>/v1` (`<quality-model>`, <context> context) | quality-first repository coding and difficult local implementation |
+| local-volume | `http://<host>:<port>/v1` (`<volume-model>`, <context> context) | bulk edits, first drafts, summarize/triage/format |
 | judgment | <paid harness: Claude / Codex> | PR review, planning, escalation, owner briefs |
+
+## Router settings
+
+- Controller SSH host: `<ssh-alias>`
 
 ## Paid-usage policy
 

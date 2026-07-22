@@ -25,14 +25,21 @@ done
 root=$(cd "$(dirname "$0")/.." && pwd)
 source_dir=".local/src/borrowedfire/codex-local-0.145.0"
 
-ssh -o BatchMode=yes "$host" "mkdir -p ~/$source_dir ~/.local/bin"
+ssh -o BatchMode=yes "$host" bash -s -- "$source_dir" <<'REMOTE'
+set -Eeuo pipefail
+source_dir=${1:?missing source directory}
+mkdir -p "$HOME/$source_dir" "$HOME/.local/bin"
+REMOTE
 scp \
   "$root/docker/codex-local/Dockerfile" \
   "$root/docker/codex-local/agent-entrypoint" \
   "$host:~/$source_dir/"
-scp "$root/tools/bfgb10-agent-remote" "$host:~/.local/bin/bfgb10-agent-remote"
+scp "$root/tools/bf-local-agent-remote" "$host:~/.local/bin/bf-local-agent-remote"
 
-ssh -o BatchMode=yes "$host" \
-  "chmod 0755 ~/.local/bin/bfgb10-agent-remote ~/$source_dir/agent-entrypoint && \
-   docker build --tag borrowedfire/codex-local:0.145.0 ~/$source_dir && \
-   docker image inspect borrowedfire/codex-local:0.145.0 --format '{{.Id}} {{.Architecture}}'"
+ssh -o BatchMode=yes "$host" bash -s -- "$source_dir" <<'REMOTE'
+set -Eeuo pipefail
+source_dir=${1:?missing source directory}
+chmod 0755 "$HOME/.local/bin/bf-local-agent-remote" "$HOME/$source_dir/agent-entrypoint"
+docker build --tag borrowedfire/codex-local:0.145.0 "$HOME/$source_dir"
+docker image inspect borrowedfire/codex-local:0.145.0 --format '{{.Id}} {{.Architecture}}'
+REMOTE

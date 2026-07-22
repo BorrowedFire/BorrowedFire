@@ -44,23 +44,43 @@ act() { # act <description> <command...>: honor --dry-run
 
 install_tool() { # install_tool <source-name> <target-name>
   local src="$SRC/tools/$1" target="$HOME/.local/bin/$2"
+  local mf="$HOME/.local/share/borrowedfire/tools.manifest" owned
+  owned="$(manifest_mode "$mf" "$2")"
   if [ -L "$target" ] && [ "$(readlink "$target")" = "$src" ]; then
     say "  ok       $2 (tool linked)"
+    if [ "$DRY" -eq 0 ] && [ "$owned" != link ]; then
+      mkdir -p "$(dirname "$mf")"
+      manifest_set "$mf" "$2" link
+    fi
+  elif [ "$owned" = link ] && [ -L "$target" ]; then
+    act "repoint  $2 (controller tool)" ln -sfn "$src" "$target"
   elif [ -e "$target" ] || [ -L "$target" ]; then
     say "  SKIP     $2 - existing controller tool is not owned by Borrowed Fire"
   else
     act "tool     $2" mkdir -p "$HOME/.local/bin"
     act "link     $2 (controller tool)" ln -s "$src" "$target"
+    if [ "$DRY" -eq 0 ]; then
+      mkdir -p "$(dirname "$mf")"
+      manifest_set "$mf" "$2" link
+    fi
   fi
 }
 
 remove_tool() { # remove_tool <source-name> <target-name>
   local src="$SRC/tools/$1" target="$HOME/.local/bin/$2"
-  if [ -L "$target" ] && [ "$(readlink "$target")" = "$src" ]; then
-    act "remove   $2 (controller tool)" rm -f "$target"
-  elif [ -e "$target" ] || [ -L "$target" ]; then
-    say "  LEAVE    $2 - controller tool is not owned by Borrowed Fire"
+  local mf="$HOME/.local/share/borrowedfire/tools.manifest" owned link_target
+  owned="$(manifest_mode "$mf" "$2")"
+  if [ "$owned" = link ] && [ -L "$target" ]; then
+    link_target="$(readlink "$target")"
+    if [ "$link_target" = "$src" ] || [ ! -e "$target" ]; then
+      act "remove   $2 (controller tool)" rm -f "$target"
+    else
+      say "  LEAVE    $2 - working controller symlink was replaced; de-owning only"
+    fi
+  elif [ "$owned" = link ] && { [ -e "$target" ] || [ -L "$target" ]; }; then
+    say "  LEAVE    $2 - controller tool is no longer an owned symlink; de-owning only"
   fi
+  [ "$DRY" -eq 1 ] || manifest_del "$mf" "$2"
 }
 
 # --- preflight: never distribute a broken skill set ---
