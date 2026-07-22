@@ -7,7 +7,9 @@ import pathlib
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
+from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -93,6 +95,12 @@ class FleetParsingTests(unittest.TestCase):
         self.assertIn("os.O_NOFOLLOW", helper)
         self.assertIn("stat.S_ISREG", helper)
         self.assertIn("source_stat.st_nlink != 1", helper)
+        self.assertIn("BF_RESULT_${result_nonce}_PATCH", helper)
+
+    def test_worker_resolves_the_container_side_model_port(self):
+        helper = (ROOT / "tools" / "bf-local-agent-remote").read_text(encoding="utf-8")
+        self.assertIn(".NetworkSettings.Ports", helper)
+        self.assertIn('internal_endpoint="http://model-$port:$container_port/v1"', helper)
 
 
 class ApplySafetyTests(unittest.TestCase):
@@ -165,6 +173,73 @@ class ApplySafetyTests(unittest.TestCase):
             subprocess.run(["git", "-C", str(repo), "restore", "value.txt"], check=True)
             with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
                 MODULE.apply_patch(repo, commit, patch)
+
+    def test_authoritative_denylist_covers_backfills_and_production_config(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo, _ = self.make_repo(directory)
+            paths, _ = MODULE.authoritative_patch_patterns(repo)
+        for path in ("scripts/backfill.py", "config/production.yaml"):
+            with self.subTest(path=path):
+                self.assertTrue(MODULE.matches_any(path, paths))
+
+    def test_project_denylist_extra_is_loaded_from_matching_registry_page(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            repo = root / "Widget"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(
+                ["git", "-C", str(repo), "remote", "add", "origin", "git@github.com:BorrowedFire/Widget.git"],
+                check=True,
+            )
+            projects = root / "brain" / "projects"
+            projects.mkdir(parents=True)
+            (projects / "widget.md").write_text(
+                "repo: BorrowedFire/Widget\ndenylist_extra: [analytics/**, audit log]\n",
+                encoding="utf-8",
+            )
+            with mock.patch.dict("os.environ", {"PROMETHEUS_DIR": str(root / "brain")}):
+                self.assertEqual(MODULE.project_denylist_extras(repo), ["analytics/**", "audit log"])
+
+    def test_transport_exception_reaches_paid_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo, _ = self.make_repo(directory)
+            args = types.SimpleNamespace(
+                repo=str(repo),
+                ref="HEAD",
+                task="Fix the typo",
+                file=[],
+                tier="auto",
+                dry_run=False,
+                allow_paid=True,
+                worker="worker",
+                mode="code",
+                apply=False,
+            )
+            tiers = {
+                "local-volume": MODULE.Tier("local-volume", "http://host:1/v1", "volume"),
+                "local-quality": MODULE.Tier("local-quality", "http://host:2/v1", "quality"),
+            }
+            with (
+                mock.patch.object(MODULE, "load_tiers", return_value=tiers),
+                mock.patch.object(MODULE, "local_attempt", side_effect=RuntimeError("worker offline")),
+                mock.patch.object(MODULE, "paid_attempt", return_value=(0, None, None, "paid-run")) as paid,
+                mock.patch.object(MODULE, "append_ledger"),
+            ):
+                self.assertEqual(MODULE.command_run(args), 0)
+                paid.assert_called_once()
+
+    def test_remote_artifact_must_match_current_artifact_shape(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, "unsafe artifact path"):
+                MODULE.copy_remote_artifact(
+                    "worker",
+                    "/home/worker",
+                    "Widget",
+                    "/home/worker/.local/state/borrowedfire-route/Widget/other/final.txt",
+                    "final.txt",
+                    pathlib.Path(directory) / "final.txt",
+                )
 
     def test_explicit_local_tier_cannot_bypass_owner_gate(self):
         decision = MODULE.forced_decision("volume", "Change the auth migration", [])

@@ -16,3 +16,22 @@ auto-merge permission.
 
 Per-repo additions come from the brain's project registry (`projects/<repo>.md` frontmatter,
 `denylist_extra:`) — read it before classifying a diff.
+
+## Router enforcement rules
+
+These machine-readable rules are consumed by `bf-route` before it applies a generated patch. Keep
+them aligned with the authoritative categories above; project `denylist_extra` entries are added at
+runtime from the matching Prometheus project page.
+
+<!-- bf-route-path: (?:^|/)migrations?(?:/|$) -->
+<!-- bf-route-path: (?:^|/)(?:schema|rls)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)(?:auth|authentication|authorization|sessions?|permissions?)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)(?:payments?|billing|iap)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)(?:secrets?|keys?|signing|credentials?)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)\.env(?:[._-]|$) -->
+<!-- bf-route-path: (?:^|/)(?:config|configuration)/(?:prod|production|release)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)scripts?/(?:backfill|seed|migrate|production)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)(?:deploy(?:ment)?|releases?)(?:[._/-]|$) -->
+<!-- bf-route-content: \b(?:production data|destructive|backfill|seed production)\b -->
+<!-- bf-route-content: \b(?:auth(?:entication|orization)?|payments?|billing|iap|secrets?|signing)\b -->
+<!-- bf-route-content: \b(?:deploy(?:ment)?|cut (?:a )?release)\b -->
