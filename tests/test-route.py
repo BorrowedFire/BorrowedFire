@@ -70,7 +70,7 @@ class ClassificationTests(unittest.TestCase):
     def test_build_cut_paths_are_owner_gated(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = pathlib.Path(directory)
-            for path in ("scripts/build.py", ".github/workflows/build.yml"):
+            for path in ("scripts/build.py", ".github/workflows/build.yml", "build.sh"):
                 with self.subTest(path=path):
                     decision = MODULE.classify("Update the step", [path], repo)
                     self.assertEqual(decision.tier, "judgment")
@@ -208,6 +208,28 @@ class FleetParsingTests(unittest.TestCase):
             fleet = pathlib.Path(directory) / "fleet.md"
             fleet.write_text(content, encoding="utf-8")
             self.assertEqual(MODULE.load_task_timeout(fleet), 900)
+
+    def test_reads_paid_whitelist_and_numeric_cap(self):
+        content = """
+- Paid task whitelist: review, plan, escalate. Everything else defaults to local.
+- Escalation cap: 2
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            fleet = pathlib.Path(directory) / "fleet.md"
+            fleet.write_text(content, encoding="utf-8")
+            policy = MODULE.load_paid_policy(fleet)
+        self.assertEqual(policy.whitelist, ("review", "plan", "escalate"))
+        self.assertEqual(policy.escalation_cap, 2)
+
+    def test_pending_paid_cap_fails_safe_to_one(self):
+        content = """
+- Paid task whitelist: review, plan, escalate
+- Escalation cap: pending owner setting; default to brief rather than repeated paid retries.
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            fleet = pathlib.Path(directory) / "fleet.md"
+            fleet.write_text(content, encoding="utf-8")
+            self.assertEqual(MODULE.load_paid_policy(fleet).escalation_cap, 1)
 
     def test_reads_bounded_transport_timeout(self):
         content = "- Local transport timeout seconds: `120`\n"
@@ -381,6 +403,27 @@ class ApplySafetyTests(unittest.TestCase):
                 repo, commit = self.make_repo(directory)
                 (repo / "value.txt").write_text(statement + "\n", encoding="utf-8")
                 patch = repo.parent / "ddl.patch"
+                patch.write_text(
+                    subprocess.check_output(["git", "-C", str(repo), "diff", commit], text=True),
+                    encoding="utf-8",
+                )
+                subprocess.run(["git", "-C", str(repo), "restore", "value.txt"], check=True)
+                with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
+                    MODULE.apply_patch(repo, commit, patch)
+
+    def test_generated_release_build_commands_are_owner_gated(self):
+        commands = (
+            "npm run build",
+            "./gradlew bundleRelease",
+            '"build": "vite build"',
+            "release: docker build .",
+            "git push origin main",
+        )
+        for command in commands:
+            with self.subTest(command=command), tempfile.TemporaryDirectory() as directory:
+                repo, commit = self.make_repo(directory)
+                (repo / "value.txt").write_text(command + "\n", encoding="utf-8")
+                patch = repo.parent / "build.patch"
                 patch.write_text(
                     subprocess.check_output(["git", "-C", str(repo), "diff", commit], text=True),
                     encoding="utf-8",
@@ -626,11 +669,50 @@ class ApplySafetyTests(unittest.TestCase):
                 mock.patch.object(MODULE, "load_task_timeout", return_value=900),
                 mock.patch.object(MODULE, "load_transport_timeout", return_value=120),
                 mock.patch.object(MODULE, "local_attempt", side_effect=RuntimeError("worker offline")),
+                mock.patch.object(
+                    MODULE, "paid_call_allowed", return_value=(True, "test permits paid")
+                ),
                 mock.patch.object(MODULE, "paid_attempt", return_value=(0, None, None, "paid-run")) as paid,
                 mock.patch.object(MODULE, "append_ledger"),
             ):
                 self.assertEqual(MODULE.command_run(args), 0)
                 paid.assert_called_once()
+
+    def test_paid_policy_blocks_disallowed_tasks_and_repeated_attempts(self):
+        repo = pathlib.Path("/tmp/Widget")
+        commit = "a" * 40
+        task_hash = "b" * 64
+        routine = MODULE.RouteDecision("local-volume", "bounded work default")
+        with (
+            mock.patch.object(
+                MODULE,
+                "load_paid_policy",
+                return_value=MODULE.PaidPolicy(("review", "plan", "escalate"), 1),
+            ),
+            mock.patch.object(MODULE, "paid_attempt_count", return_value=0),
+        ):
+            allowed, reason = MODULE.paid_call_allowed(
+                repo, commit, "Fix the typo", task_hash, routine
+            )
+            self.assertFalse(allowed)
+            self.assertIn("not on", reason)
+            allowed, _ = MODULE.paid_call_allowed(
+                repo, commit, "Escalate the parser failure", task_hash, routine
+            )
+            self.assertTrue(allowed)
+        with (
+            mock.patch.object(
+                MODULE,
+                "load_paid_policy",
+                return_value=MODULE.PaidPolicy(("review",), 1),
+            ),
+            mock.patch.object(MODULE, "paid_attempt_count", return_value=1),
+        ):
+            allowed, reason = MODULE.paid_call_allowed(
+                repo, commit, "Review the parser", task_hash, routine
+            )
+            self.assertFalse(allowed)
+            self.assertIn("cap reached", reason)
 
     def test_archive_cleanup_timeout_is_a_transport_failure(self):
         archive = mock.Mock()

@@ -13,6 +13,7 @@ import base64
 import dataclasses
 import datetime as dt
 import fnmatch
+import fcntl
 import hashlib
 import json
 import os
@@ -90,6 +91,12 @@ class Tier:
     name: str
     endpoint: str
     model: str
+
+
+@dataclasses.dataclass(frozen=True)
+class PaidPolicy:
+    whitelist: tuple[str, ...]
+    escalation_cap: int
 
 
 def brain_dir() -> pathlib.Path:
@@ -207,6 +214,36 @@ def load_transport_timeout(path: pathlib.Path | None = None) -> int:
     return timeout
 
 
+def load_paid_policy(path: pathlib.Path | None = None) -> PaidPolicy:
+    fleet = path or brain_dir() / "config" / "fleet.md"
+    try:
+        text = fleet.read_text(encoding="utf-8")
+    except OSError as error:
+        raise RuntimeError(f"cannot read fleet configuration: {fleet}: {error}") from error
+    whitelist_match = re.search(r"^- Paid task whitelist:\s*(.+?)\s*$", text, re.MULTILINE)
+    if not whitelist_match:
+        raise RuntimeError("fleet configuration is missing the Paid task whitelist")
+    whitelist_text = whitelist_match.group(1).split(".", 1)[0]
+    whitelist = tuple(
+        item.strip().casefold() for item in whitelist_text.split(",") if item.strip()
+    )
+    if not whitelist or any(not re.fullmatch(r"[a-z][a-z-]*", item) for item in whitelist):
+        raise RuntimeError("fleet configuration has an unsafe Paid task whitelist")
+    cap_match = re.search(r"^- Escalation cap:\s*(.+?)\s*$", text, re.MULTILINE)
+    if not cap_match:
+        raise RuntimeError("fleet configuration is missing the Escalation cap")
+    cap_text = cap_match.group(1)
+    if cap_text.isdigit():
+        cap = int(cap_text)
+    elif "pending owner setting" in cap_text.casefold():
+        cap = 1
+    else:
+        raise RuntimeError("fleet configuration needs a numeric Escalation cap")
+    if not 0 <= cap <= 20:
+        raise RuntimeError("Escalation cap must be between 0 and 20")
+    return PaidPolicy(whitelist=whitelist, escalation_cap=cap)
+
+
 def validate_worker_host(value: str) -> str:
     if not re.fullmatch(r"[A-Za-z0-9._@-]+", value):
         raise RuntimeError("worker SSH host contains unsafe characters")
@@ -290,7 +327,102 @@ def state_root() -> pathlib.Path:
 def append_ledger(entry: dict[str, object]) -> None:
     ledger = state_root() / "ledger.jsonl"
     with ledger.open("a", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
         handle.write(json.dumps(entry, sort_keys=True) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def paid_attempt_count(repo: pathlib.Path, commit: str, task_hash: str) -> int:
+    ledger = state_root() / "ledger.jsonl"
+    if not ledger.exists():
+        return 0
+    count = 0
+    try:
+        with ledger.open("r", encoding="utf-8") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
+            lines = handle.read().splitlines()
+        for line in lines:
+            entry = json.loads(line)
+            if not isinstance(entry, dict) or not isinstance(entry.get("attempts", []), list):
+                raise ValueError("invalid ledger entry shape")
+            if (
+                entry.get("repository") == str(repo)
+                and entry.get("commit") == commit
+                and entry.get("task_hash") == task_hash
+                and (
+                    entry.get("event") == "paid_attempt_started"
+                    or ("event" not in entry and "codex" in entry.get("attempts", []))
+                )
+            ):
+                count += 1
+    except (OSError, json.JSONDecodeError, AttributeError, TypeError, ValueError) as error:
+        raise RuntimeError(f"cannot safely read the paid-attempt ledger: {error}") from error
+    return count
+
+
+def paid_call_allowed(
+    repo: pathlib.Path,
+    commit: str,
+    task: str,
+    task_hash: str,
+    decision: RouteDecision,
+    reserve: bool = False,
+) -> tuple[bool, str]:
+    policy = load_paid_policy()
+    aliases = {
+        "review": r"\breviews?\b",
+        "plan": r"\bplan(?:s|ning)?\b",
+        "escalate": r"\bescalat(?:e|es|ed|ing|ion)\b",
+    }
+    whitelisted = any(
+        re.search(aliases.get(item, rf"\b{re.escape(item)}\b"), task, re.IGNORECASE)
+        for item in policy.whitelist
+    )
+    if not decision.owner_gated and not whitelisted:
+        return False, "task is not on the private paid-task whitelist"
+    if not reserve:
+        used = paid_attempt_count(repo, commit, task_hash)
+    else:
+        ledger = state_root() / "ledger.jsonl"
+        try:
+            with ledger.open("a+", encoding="utf-8") as handle:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                handle.seek(0)
+                used = 0
+                for line in handle.read().splitlines():
+                    entry = json.loads(line)
+                    if not isinstance(entry, dict) or not isinstance(entry.get("attempts", []), list):
+                        raise ValueError("invalid ledger entry shape")
+                    if (
+                        entry.get("repository") == str(repo)
+                        and entry.get("commit") == commit
+                        and entry.get("task_hash") == task_hash
+                        and (
+                            entry.get("event") == "paid_attempt_started"
+                            or ("event" not in entry and "codex" in entry.get("attempts", []))
+                        )
+                    ):
+                        used += 1
+                if used < policy.escalation_cap:
+                    handle.write(json.dumps({
+                        "event": "paid_attempt_started",
+                        "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+                        "repository": str(repo),
+                        "commit": commit,
+                        "task_hash": task_hash,
+                        "decision": decision.tier,
+                        "owner_gated": decision.owner_gated,
+                        "claude_eligible": False,
+                        "attempts": ["codex"],
+                    }, sort_keys=True) + "\n")
+                    handle.flush()
+                    os.fsync(handle.fileno())
+        except (OSError, json.JSONDecodeError, AttributeError, TypeError, ValueError) as error:
+            raise RuntimeError(f"cannot safely reserve a paid attempt: {error}") from error
+    if used >= policy.escalation_cap:
+        return False, f"paid escalation cap reached ({used}/{policy.escalation_cap})"
+    return True, f"paid policy permits attempt {used + 1}/{policy.escalation_cap}"
 
 
 def repository_slug(repo: pathlib.Path) -> str | None:
@@ -753,8 +885,18 @@ def command_run(args: argparse.Namespace) -> int:
             print("No paid model was invoked. Re-run with --allow-paid to use Codex.")
             status = EXIT_PAID_REQUIRED
         else:
-            attempts.append("codex")
-            status, final_patch, final_message, run_id = paid_attempt(repo, commit, args.task, args.mode)
+            allowed, policy_reason = paid_call_allowed(
+                repo, commit, args.task, task_hash, decision, reserve=True
+            )
+            print(f"PAID_POLICY={policy_reason}")
+            if allowed:
+                attempts.append("codex")
+                status, final_patch, final_message, run_id = paid_attempt(
+                    repo, commit, args.task, args.mode
+                )
+            else:
+                print("PAID_POLICY_BLOCKED=yes")
+                status = EXIT_PAID_REQUIRED
     else:
         tiers = load_tiers()
         worker = validate_worker_host(args.worker) if args.worker else load_worker_host()
@@ -783,8 +925,17 @@ def command_run(args: argparse.Namespace) -> int:
                 break
             print(f"ATTEMPT_FAILED={tier_name}:{status}")
         if status and args.allow_paid:
-            attempts.append("codex")
-            status, final_patch, final_message, run_id = paid_attempt(repo, commit, args.task, args.mode)
+            allowed, policy_reason = paid_call_allowed(
+                repo, commit, args.task, task_hash, decision, reserve=True
+            )
+            print(f"PAID_POLICY={policy_reason}")
+            if allowed:
+                attempts.append("codex")
+                status, final_patch, final_message, run_id = paid_attempt(
+                    repo, commit, args.task, args.mode
+                )
+            else:
+                print("PAID_POLICY_BLOCKED=yes")
         elif status:
             print("PAID_ESCALATION_REQUIRED=yes")
 
@@ -799,6 +950,7 @@ def command_run(args: argparse.Namespace) -> int:
         print(f"FINAL_LOCAL={final_message}")
 
     append_ledger({
+        "event": "run_completed",
         "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
         "repository": str(repo),
         "commit": commit,
