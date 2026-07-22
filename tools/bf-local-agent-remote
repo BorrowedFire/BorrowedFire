@@ -9,6 +9,7 @@ model=${5:?missing model name}
 tier=${6:?missing tier}
 mode=${7:?missing mode}
 task_b64=${8:?missing encoded task}
+result_nonce=${9:?missing result nonce}
 
 case "$workspace" in
   "$HOME/.cache/borrowedfire-route/"*) ;;
@@ -20,6 +21,7 @@ esac
 [[ "$model" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "Invalid model" >&2; exit 64; }
 [[ "$tier" == local-volume || "$tier" == local-quality ]] || { echo "Invalid local tier" >&2; exit 64; }
 [[ "$mode" == code || "$mode" == advice ]] || { echo "Invalid mode" >&2; exit 64; }
+[[ "$result_nonce" =~ ^[0-9a-f]{32}$ ]] || { echo "Invalid result nonce" >&2; exit 64; }
 
 state_root="$HOME/.local/state/borrowedfire-route"
 state_dir="$state_root/$repo_slug"
@@ -50,8 +52,8 @@ cleanup() {
   [[ $exit_code -eq 0 ]] && result=PASS
   echo "RESULT=$result"
   echo "REPORT_REMOTE=$report"
-  [[ -s "$patch" ]] && echo "PATCH_REMOTE=$patch"
-  [[ -f "$final" ]] && echo "FINAL_REMOTE=$final"
+  [[ -s "$patch" ]] && echo "BF_RESULT_${result_nonce}_PATCH=$patch"
+  [[ -f "$final" ]] && echo "BF_RESULT_${result_nonce}_FINAL=$final"
   docker rm -f "$container" >/dev/null 2>&1 || true
   if [[ -n "$task_file" ]]; then
     rm -f "$task_file" || true
@@ -106,6 +108,18 @@ mapfile -t model_containers < <(docker ps --filter "publish=$port" --format '{{.
   exit 69
 }
 model_container=${model_containers[0]}
+container_port=$(docker inspect "$model_container" --format '{{json .NetworkSettings.Ports}}' | python3 -c '
+import json, sys
+host_port = sys.argv[1]
+matches = []
+for container_port, bindings in (json.load(sys.stdin) or {}).items():
+    if any(binding.get("HostPort") == host_port for binding in (bindings or [])):
+        matches.append(container_port.split("/", 1)[0])
+if len(matches) != 1:
+    raise SystemExit(1)
+print(matches[0])
+' "$port") || { echo "Could not resolve the model container port" >&2; exit 69; }
+[[ "$container_port" =~ ^[0-9]+$ ]] || { echo "Invalid model container port" >&2; exit 69; }
 agent_network=borrowedfire-local-agents
 if ! docker network inspect "$agent_network" >/dev/null 2>&1; then
   docker network create \
@@ -123,7 +137,7 @@ if docker inspect "$model_container" --format '{{json .NetworkSettings.Networks}
   docker network disconnect "$agent_network" "$model_container"
 fi
 docker network connect --alias "model-$port" "$agent_network" "$model_container"
-internal_endpoint="http://model-$port:$port/v1"
+internal_endpoint="http://model-$port:$container_port/v1"
 
 git -C "$workspace" init -q
 git -C "$workspace" config user.name "Borrowed Fire Local Agent"

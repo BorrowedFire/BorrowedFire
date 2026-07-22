@@ -12,11 +12,13 @@ import argparse
 import base64
 import dataclasses
 import datetime as dt
+import fnmatch
 import hashlib
 import json
 import os
 import pathlib
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -57,16 +59,6 @@ OWNER_GATED_PATTERNS = (
     r"\bdestructive\b",
     r"\bdeploy(?:ment)?\b",
     r"\brelease\b",
-)
-
-OWNER_GATED_PATH_PATTERNS = (
-    r"(?:^|/)migrations?(?:/|$)",
-    r"(?:^|/)(?:schema|rls)(?:[._/-]|$)",
-    r"(?:^|/)(?:auth|authentication|authorization|sessions?|permissions?)(?:[._/-]|$)",
-    r"(?:^|/)(?:payments?|billing|iap)(?:[._/-]|$)",
-    r"(?:^|/)(?:secrets?|keys?|signing|credentials?)(?:[._/-]|$)",
-    r"(?:^|/)\.env(?:[._-]|$)",
-    r"(?:^|/)(?:deploy(?:ment)?|releases?)(?:[._/-]|$)",
 )
 
 QUALITY_PATTERNS = (
@@ -211,6 +203,67 @@ def append_ledger(entry: dict[str, object]) -> None:
         handle.write(json.dumps(entry, sort_keys=True) + "\n")
 
 
+def repository_slug(repo: pathlib.Path) -> str | None:
+    remote = git(repo, "remote", "get-url", "origin", check=False)
+    if remote.returncode == 0:
+        match = re.search(r"github\.com(?::|/)([^/\s]+/[^/\s]+?)(?:\.git)?$", remote.stdout.strip())
+        if match:
+            return match.group(1)
+    return None
+
+
+def project_denylist_extras(repo: pathlib.Path) -> list[str]:
+    projects = brain_dir() / "projects"
+    if not projects.is_dir():
+        return []
+    wanted = repository_slug(repo)
+    candidates: list[tuple[pathlib.Path, str]] = []
+    for page in projects.glob("*.md"):
+        try:
+            text = page.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        repo_match = re.search(r"^repo:\s*([^\s]+)\s*$", text, re.MULTILINE)
+        if not repo_match:
+            continue
+        registered = repo_match.group(1).strip('"\'')
+        if wanted and registered.casefold() == wanted.casefold():
+            candidates = [(page, text)]
+            break
+        if not wanted and registered.rsplit("/", 1)[-1].casefold() == repo.name.casefold():
+            candidates.append((page, text))
+    if len(candidates) != 1:
+        return []
+    text = candidates[0][1]
+    inline = re.search(r"^denylist_extra:\s*\[([^]]*)\]\s*$", text, re.MULTILINE)
+    if inline:
+        return [item.strip().strip('"\'') for item in inline.group(1).split(",") if item.strip()]
+    block = re.search(r"^denylist_extra:\s*$((?:\n[ \t]+-[^\n]*)+)", text, re.MULTILINE)
+    if not block:
+        return []
+    return [
+        match.group(1).strip().strip('"\'')
+        for match in re.finditer(r"^[ \t]+-\s*(.+?)\s*$", block.group(1), re.MULTILINE)
+    ]
+
+
+def authoritative_patch_patterns(repo: pathlib.Path) -> tuple[list[str], list[str]]:
+    policy = pathlib.Path(__file__).resolve().parents[1] / "skills" / "land" / "references" / "denylist.md"
+    try:
+        text = policy.read_text(encoding="utf-8")
+    except OSError as error:
+        raise RuntimeError(f"cannot load authoritative denylist: {error}") from error
+    paths = re.findall(r"<!-- bf-route-path: (.+?) -->", text)
+    content = re.findall(r"<!-- bf-route-content: (.+?) -->", text)
+    if not paths or not content:
+        raise RuntimeError("authoritative denylist is missing router enforcement rules")
+    for extra in project_denylist_extras(repo):
+        escaped = re.escape(extra)
+        paths.append(fnmatch.translate(extra) if any(character in extra for character in "*?[") else escaped)
+        content.append(escaped)
+    return paths, content
+
+
 def remote_home(worker: str) -> str:
     process = subprocess.run(
         ["ssh", "-o", "BatchMode=yes", worker, "printf '%s' \"$HOME\""],
@@ -246,8 +299,18 @@ def stream_archive(worker: str, repo: pathlib.Path, commit: str, remote_workspac
         raise RuntimeError("failed to transfer the exact repository snapshot to GB10")
 
 
-def copy_remote_artifact(worker: str, worker_home: str, remote: str, destination: pathlib.Path) -> None:
-    if not remote.startswith(f"{worker_home}/.local/state/borrowedfire-route/"):
+def copy_remote_artifact(
+    worker: str,
+    worker_home: str,
+    slug: str,
+    remote: str,
+    artifact_name: str,
+    destination: pathlib.Path,
+) -> None:
+    prefix = f"{worker_home}/.local/state/borrowedfire-route/{slug}/"
+    relative = remote.removeprefix(prefix)
+    parts = pathlib.PurePosixPath(relative).parts
+    if not remote.startswith(prefix) or len(parts) != 3 or parts[1:] != ("artifacts", artifact_name):
         raise RuntimeError(f"worker returned an unsafe artifact path: {remote}")
     run_checked(["scp", f"{worker}:{remote}", str(destination)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -271,6 +334,7 @@ def local_attempt(
     stream_archive(worker, repo, commit, remote_workspace)
 
     encoded = base64.b64encode(task.encode()).decode()
+    result_nonce = secrets.token_hex(16)
     command = [
         "ssh", "-o", "BatchMode=yes", worker,
         "~/.local/bin/bf-local-agent-remote",
@@ -282,6 +346,7 @@ def local_attempt(
         tier.name,
         mode,
         encoded,
+        result_nonce,
     ]
     process = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
     subprocess.run(
@@ -295,18 +360,20 @@ def local_attempt(
 
     patch_remote = None
     final_remote = None
+    patch_marker = f"BF_RESULT_{result_nonce}_PATCH="
+    final_marker = f"BF_RESULT_{result_nonce}_FINAL="
     for line in process.stdout.splitlines():
-        if line.startswith("PATCH_REMOTE="):
+        if line.startswith(patch_marker):
             patch_remote = line.partition("=")[2]
-        elif line.startswith("FINAL_REMOTE="):
+        elif line.startswith(final_marker):
             final_remote = line.partition("=")[2]
 
     patch = output_dir / "changes.patch" if patch_remote else None
     final = output_dir / "final.txt" if final_remote else None
     if patch_remote and patch:
-        copy_remote_artifact(worker, worker_home, patch_remote, patch)
+        copy_remote_artifact(worker, worker_home, slug, patch_remote, "changes.patch", patch)
     if final_remote and final:
-        copy_remote_artifact(worker, worker_home, final_remote, final)
+        copy_remote_artifact(worker, worker_home, slug, final_remote, "final.txt", final)
 
     return process.returncode, patch, final, run_id
 
@@ -340,9 +407,10 @@ def patch_paths(repo: pathlib.Path, patch: pathlib.Path) -> list[str]:
 
 def validate_generated_patch(repo: pathlib.Path, patch: pathlib.Path) -> None:
     paths = patch_paths(repo, patch)
-    risky_paths = [path for path in paths if matches_any(path, OWNER_GATED_PATH_PATTERNS)]
+    path_patterns, content_patterns = authoritative_patch_patterns(repo)
+    risky_paths = [path for path in paths if matches_any(path, path_patterns)]
     patch_text = patch.read_text(encoding="utf-8", errors="replace")
-    if risky_paths or matches_any(patch_text, OWNER_GATED_PATTERNS):
+    if risky_paths or matches_any(patch_text, content_patterns):
         detail = ", ".join(risky_paths) if risky_paths else "sensitive content"
         raise RuntimeError(
             "refusing to apply an owner-gated generated patch "
@@ -455,9 +523,13 @@ def command_run(args: argparse.Namespace) -> int:
             route_order.append("local-quality")
         for tier_name in route_order:
             attempts.append(tier_name)
-            status, final_patch, final_message, run_id = local_attempt(
-                worker, repo, commit, args.task, tiers[tier_name], args.mode
-            )
+            try:
+                status, final_patch, final_message, run_id = local_attempt(
+                    worker, repo, commit, args.task, tiers[tier_name], args.mode
+                )
+            except (RuntimeError, subprocess.CalledProcessError, OSError) as error:
+                status = EXIT_TEMPFAIL
+                print(f"ATTEMPT_ERROR={tier_name}:{error}")
             if status == 0:
                 break
             print(f"ATTEMPT_FAILED={tier_name}:{status}")
