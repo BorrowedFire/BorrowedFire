@@ -273,11 +273,36 @@ class ApplySafetyTests(unittest.TestCase):
         for content in (
             'await supabase.from("users").delete().eq("id", user_id)\n',
             "DELETE FROM users WHERE id = 1;\n",
+            "INSERT INTO users (id) VALUES (1);\n",
+            "UPDATE users SET role = 'admin';\n",
+            'await supabase.from("users").update({"role": "admin"})\n',
         ):
             with self.subTest(content=content), tempfile.TemporaryDirectory() as directory:
                 repo, commit = self.make_repo(directory)
                 (repo / "value.txt").write_text(content, encoding="utf-8")
                 patch = repo.parent / "destructive.patch"
+                with patch.open("w", encoding="utf-8") as handle:
+                    subprocess.run(
+                        ["git", "-C", str(repo), "diff", "--binary", commit],
+                        check=True,
+                        text=True,
+                        stdout=handle,
+                    )
+                subprocess.run(["git", "-C", str(repo), "restore", "value.txt"], check=True)
+                with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
+                    MODULE.apply_patch(repo, commit, patch)
+
+    def test_generated_session_permission_and_schema_logic_is_owner_gated(self):
+        for content in (
+            "session.refresh()\n",
+            "permissions.add(role)\n",
+            "schema.create_table(name)\n",
+            "enable_rls(table)\n",
+        ):
+            with self.subTest(content=content), tempfile.TemporaryDirectory() as directory:
+                repo, commit = self.make_repo(directory)
+                (repo / "value.txt").write_text(content, encoding="utf-8")
+                patch = repo.parent / "policy.patch"
                 with patch.open("w", encoding="utf-8") as handle:
                     subprocess.run(
                         ["git", "-C", str(repo), "diff", "--binary", commit],
@@ -385,7 +410,7 @@ class ApplySafetyTests(unittest.TestCase):
             with mock.patch.dict("os.environ", {"PROMETHEUS_DIR": str(root / "brain")}):
                 self.assertEqual(MODULE.project_denylist_extras(repo), ["analytics/**"])
 
-    def test_project_policy_resolution_fails_closed(self):
+    def test_unregistered_project_uses_authoritative_defaults(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
             repo = root / "Widget"
@@ -398,6 +423,19 @@ class ApplySafetyTests(unittest.TestCase):
             projects = root / "brain" / "projects"
             projects.mkdir(parents=True)
             (projects / "other.md").write_text("repo: acme/other\n", encoding="utf-8")
+            with mock.patch.dict("os.environ", {"PROMETHEUS_DIR": str(root / "brain")}):
+                self.assertEqual(MODULE.project_denylist_extras(repo), [])
+
+    def test_ambiguous_project_policy_resolution_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            repo = root / "Widget"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            projects = root / "brain" / "projects"
+            projects.mkdir(parents=True)
+            (projects / "one.md").write_text("repo: acme/Widget\n", encoding="utf-8")
+            (projects / "two.md").write_text("repo: other/Widget\n", encoding="utf-8")
             with mock.patch.dict("os.environ", {"PROMETHEUS_DIR": str(root / "brain")}):
                 with self.assertRaisesRegex(RuntimeError, "cannot uniquely resolve project policy"):
                     MODULE.project_denylist_extras(repo)
