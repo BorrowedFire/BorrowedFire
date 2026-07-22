@@ -601,8 +601,16 @@ def validate_generated_patch(repo: pathlib.Path, patch: pathlib.Path) -> None:
     path_patterns, content_patterns = authoritative_patch_patterns(repo)
     risky_paths = [path for path in paths if matches_any(path, path_patterns)]
     patch_text = patch.read_text(encoding="utf-8", errors="replace")
-    if risky_paths or matches_any(patch_text, content_patterns):
-        detail = ", ".join(risky_paths) if risky_paths else "sensitive content"
+    has_binary_content = bool(
+        re.search(r"^(?:GIT binary patch|Binary files .+ differ)$", patch_text, re.MULTILINE)
+    )
+    if risky_paths or has_binary_content or matches_any(patch_text, content_patterns):
+        if risky_paths:
+            detail = ", ".join(risky_paths)
+        elif has_binary_content:
+            detail = "binary content"
+        else:
+            detail = "sensitive content"
         raise RuntimeError(
             "refusing to apply an owner-gated generated patch "
             f"({detail}); paid review and explicit owner action are required"

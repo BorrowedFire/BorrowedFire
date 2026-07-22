@@ -314,6 +314,23 @@ class ApplySafetyTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
                     MODULE.apply_patch(repo, commit, patch)
 
+    def test_generated_binary_patch_is_owner_gated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo, commit = self.make_repo(directory)
+            (repo / "safe.dat").write_bytes(b"PRIVATE KEY\0SECRET_TOKEN=abcd123456789\0")
+            subprocess.run(["git", "-C", str(repo), "add", "-N", "."], check=True)
+            patch = repo.parent / "binary.patch"
+            with patch.open("wb") as handle:
+                subprocess.run(
+                    ["git", "-C", str(repo), "diff", "--binary", commit],
+                    check=True,
+                    stdout=handle,
+                )
+            subprocess.run(["git", "-C", str(repo), "reset", "-q", "HEAD"], check=True)
+            subprocess.run(["git", "-C", str(repo), "clean", "-fdq"], check=True)
+            with self.assertRaisesRegex(RuntimeError, "binary content"):
+                MODULE.apply_patch(repo, commit, patch)
+
     def test_rename_from_owner_gated_path_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = pathlib.Path(directory) / "repo"
