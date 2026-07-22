@@ -18,7 +18,12 @@ case "$workspace" in
 esac
 [[ "$repo_slug" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Invalid repository slug" >&2; exit 64; }
 [[ "$commit_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid commit SHA" >&2; exit 64; }
-[[ "$endpoint" =~ ^https?://[A-Za-z0-9._:-]+/v1$ ]] || { echo "Invalid endpoint" >&2; exit 64; }
+[[ "$endpoint" =~ ^https?://[A-Za-z0-9._-]+:([0-9]{1,5})/v1$ ]] || {
+  echo "Invalid endpoint" >&2
+  exit 64
+}
+endpoint_port=${BASH_REMATCH[1]}
+(( endpoint_port >= 1 && endpoint_port <= 65535 )) || { echo "Invalid endpoint port" >&2; exit 64; }
 [[ "$model" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "Invalid model" >&2; exit 64; }
 [[ "$tier" == local-volume || "$tier" == local-quality ]] || { echo "Invalid local tier" >&2; exit 64; }
 [[ "$mode" == code || "$mode" == advice ]] || { echo "Invalid mode" >&2; exit 64; }
@@ -104,9 +109,7 @@ PY
 printf '%s' "$task_b64" | base64 --decode > "$run_dir/task"
 task_file="$run_dir/task"
 
-port=${endpoint##*:}
-port=${port%/v1}
-[[ "$port" =~ ^[0-9]+$ ]] || { echo "Could not derive the model port" >&2; exit 64; }
+port=$endpoint_port
 mapfile -t model_containers < <(docker ps --filter "publish=$port" --format '{{.Names}}')
 [[ ${#model_containers[@]} -eq 1 ]] || {
   echo "Expected exactly one running model container published on port $port" >&2
