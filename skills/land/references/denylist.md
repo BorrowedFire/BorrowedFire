@@ -38,3 +38,6 @@ runtime from the matching Prometheus project page.
 <!-- bf-route-content: \b(?:deploy(?:ment)?|cut (?:a )?release)\b -->
 <!-- bf-route-content: ^\+(?!\+\+)[^\n]*(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key|password|passwd|secret)[A-Za-z0-9_.-]*\s*["']?\s*(?::=|=|:)\s*["']?[A-Za-z0-9/+_.=-]{6,} -->
 <!-- bf-route-content: ^\+(?!\+\+)[^\n]*BEGIN [A-Z0-9 ]*PRIVATE KEY -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?|DROP\s+(?:TABLE|DATABASE|SCHEMA))\b -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*\.(?:delete|destroy)\s*\( -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:rm\s+-[A-Za-z]*r[A-Za-z]*f|git\s+(?:reset\s+--hard|clean\s+-[A-Za-z]*f))\b -->

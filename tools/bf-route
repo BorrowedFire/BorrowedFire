@@ -122,7 +122,7 @@ def load_tiers(path: pathlib.Path | None = None) -> dict[str, Tier]:
         if "<" in endpoint or "<" in model:
             raise RuntimeError(f"fleet tier {name} still contains template placeholders")
         endpoint_match = re.fullmatch(
-            r"https?://[A-Za-z0-9._-]+:([0-9]{1,5})/v1",
+            r"http://[A-Za-z0-9._-]+:([0-9]{1,5})/v1",
             endpoint,
         )
         if not endpoint_match or not 1 <= int(endpoint_match.group(1)) <= 65535:
@@ -395,11 +395,14 @@ def stream_archive(
         archive.stdout.close()
         archive_status = archive.wait()
     if archive_status or extract.returncode:
-        subprocess.run(
-            [*ssh_base(worker), f"rm -rf {shlex.quote(remote_workspace)}"],
-            check=False,
-            timeout=transport_timeout,
-        )
+        try:
+            subprocess.run(
+                [*ssh_base(worker), f"rm -rf {shlex.quote(remote_workspace)}"],
+                check=False,
+                timeout=transport_timeout,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError("timed out while cleaning a failed repository transfer") from error
         raise RuntimeError("failed to transfer the exact repository snapshot to GB10")
 
 

@@ -18,7 +18,7 @@ case "$workspace" in
 esac
 [[ "$repo_slug" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Invalid repository slug" >&2; exit 64; }
 [[ "$commit_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid commit SHA" >&2; exit 64; }
-[[ "$endpoint" =~ ^https?://[A-Za-z0-9._-]+:([0-9]{1,5})/v1$ ]] || {
+[[ "$endpoint" =~ ^http://[A-Za-z0-9._-]+:([0-9]{1,5})/v1$ ]] || {
   echo "Invalid endpoint" >&2
   exit 64
 }
@@ -163,6 +163,7 @@ echo "CLAUDE_ELIGIBLE=no"
 echo "STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 timeout --signal=TERM --kill-after=30s "${task_timeout}s" docker run --rm \
+  --pull=never \
   --name "$container" \
   --network "$agent_network" \
   --user "$(id -u):$(id -g)" \
