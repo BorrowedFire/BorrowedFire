@@ -36,3 +36,5 @@ runtime from the matching Prometheus project page.
 <!-- bf-route-content: \b(?:production data|destructive|backfill|seed production)\b -->
 <!-- bf-route-content: \b(?:auth(?:entication|orization)?|payments?|billing|iap|secrets?|signing)\b -->
 <!-- bf-route-content: \b(?:deploy(?:ment)?|cut (?:a )?release)\b -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key|password|passwd|secret)[A-Za-z0-9_.-]*\s*["']?\s*(?::=|=|:)\s*["']?[A-Za-z0-9/+_.=-]{6,} -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*BEGIN [A-Z0-9 ]*PRIVATE KEY -->
