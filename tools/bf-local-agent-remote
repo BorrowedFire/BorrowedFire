@@ -117,14 +117,14 @@ mapfile -t model_containers < <(docker ps --filter "publish=$port" --format '{{.
 }
 model_container=${model_containers[0]}
 if [[ "$model" == __auto__ ]]; then
-  model=$(python3 - "$port" <<'PY'
+  model=$(python3 - "$endpoint/models" <<'PY'
 import json
 import re
 import sys
 import urllib.request
 
-port = int(sys.argv[1])
-with urllib.request.urlopen(f"http://127.0.0.1:{port}/v1/models", timeout=10) as response:
+url = sys.argv[1]
+with urllib.request.urlopen(url, timeout=10) as response:
     payload = json.load(response)
 models = [item.get("id") for item in payload.get("data", []) if isinstance(item, dict)]
 if len(models) != 1 or not isinstance(models[0], str) or not re.fullmatch(r"[A-Za-z0-9._/-]+", models[0]):
@@ -167,7 +167,7 @@ internal_endpoint="http://model-$port:$container_port/v1"
 git -C "$workspace" init -q
 git -C "$workspace" config user.name "Borrowed Fire Local Agent"
 git -C "$workspace" config user.email "local-agent@invalid"
-git -C "$workspace" add -A
+git -C "$workspace" add -f -A
 git -C "$workspace" commit -qm baseline
 baseline=$(git -C "$workspace" rev-parse HEAD)
 

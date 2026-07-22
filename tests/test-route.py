@@ -240,6 +240,12 @@ class FleetParsingTests(unittest.TestCase):
         self.assertIn('timeout --signal=TERM --kill-after=30s "${task_timeout}s"', helper)
         self.assertIn("--pull=never", helper)
 
+    def test_worker_preserves_ignored_tracked_files_and_uses_configured_discovery_endpoint(self):
+        helper = (ROOT / "tools" / "bf-local-agent-remote").read_text(encoding="utf-8")
+        self.assertIn('git -C "$workspace" add -f -A', helper)
+        self.assertIn('python3 - "$endpoint/models"', helper)
+        self.assertNotIn('http://127.0.0.1:{port}/v1/models', helper)
+
 
 class ApplySafetyTests(unittest.TestCase):
     def setUp(self):
@@ -358,6 +364,27 @@ class ApplySafetyTests(unittest.TestCase):
                         text=True,
                         stdout=handle,
                     )
+                subprocess.run(["git", "-C", str(repo), "restore", "value.txt"], check=True)
+                with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
+                    MODULE.apply_patch(repo, commit, patch)
+
+    def test_generated_schema_and_rls_ddl_are_owner_gated(self):
+        statements = (
+            "ALTER TABLE users ADD COLUMN display_name text;",
+            "CREATE TABLE audit_log (id bigint);",
+            "CREATE POLICY own_rows ON users USING (auth.uid() = id);",
+            "ALTER TABLE users ENABLE ROW LEVEL SECURITY;",
+            "GRANT SELECT ON users TO authenticated;",
+        )
+        for statement in statements:
+            with self.subTest(statement=statement), tempfile.TemporaryDirectory() as directory:
+                repo, commit = self.make_repo(directory)
+                (repo / "value.txt").write_text(statement + "\n", encoding="utf-8")
+                patch = repo.parent / "ddl.patch"
+                patch.write_text(
+                    subprocess.check_output(["git", "-C", str(repo), "diff", commit], text=True),
+                    encoding="utf-8",
+                )
                 subprocess.run(["git", "-C", str(repo), "restore", "value.txt"], check=True)
                 with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
                     MODULE.apply_patch(repo, commit, patch)
