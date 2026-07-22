@@ -98,6 +98,11 @@ routes routine work to `local-volume`, deeper work to `local-quality`, and paid 
 only when explicitly permitted. Claude is not part of this experimental route.
 Replace the local-tier and router-setting placeholders in the private fleet configuration
 before the first run.
+Legacy `local-volume` / `local-large` rows that contain only an endpoint remain supported: the
+router uses conservative timeout defaults and requires that each legacy endpoint expose exactly
+one model from `/v1/models`. To migrate an existing brain, add a `Controller SSH host` row under
+the `## Router settings` heading, using the SSH host or alias for that worker; model names and
+timeout rows do not need to be added.
 
 ```sh
 bf-route decide --task "Update these documentation headings"

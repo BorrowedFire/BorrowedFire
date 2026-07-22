@@ -26,9 +26,8 @@ runtime from the matching Prometheus project page.
 <!-- bf-route-path: (?:^|/)migrations?(?:/|$) -->
 <!-- bf-route-path: (?:^|/)(?:schema|rls)(?:[._/-]|$) -->
 <!-- bf-route-path: (?:^|/)(?:auth|authentication|authorization|sessions?|permissions?)(?:[._/-]|$) -->
-<!-- bf-route-path: (?:^|/)(?:auth(?:entication|orization)?|sessions?|permissions?)(?:manager|service|store|client|provider|handler|controller|viewmodel|repository|coordinator)(?:[._/-]|$) -->
 <!-- bf-route-path: (?:^|/)(?:payments?|billing|iap)(?:[._/-]|$) -->
-<!-- bf-route-path: (?:^|/)(?:payments?|billing|iap)(?:manager|service|store|client|provider|handler|controller|viewmodel|repository|coordinator)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)[^/]*(?-i:(?:[Aa]uth(?:entication|orization)?|[Ss]essions?|[Pp]ermissions?|[Pp]ayments?|[Bb]illing|[Ss]ubscriptions?|IAP|[Mm]igrations?|[Ss]chema|RLS|[Ss]ecrets?|[Cc]redentials?|[Ss]igning|(?:API|[Pp]rivate)Keys?|[Cc]onfig(?:uration)?|[Ee]nvironments?|[Dd]eploy(?:ment)?|[Rr]eleases?))(?=[A-Z0-9._/-]|$)[^/]*(?:/|$) -->
 <!-- bf-route-path: (?:^|/)(?:secrets?|keys?|signing|credentials?)(?:[._/-]|$) -->
 <!-- bf-route-path: (?:^|/)\.env(?:[._-]|$) -->
 <!-- bf-route-path: (?:^|/)(?:config|configuration|environments?)(?:/|$) -->
