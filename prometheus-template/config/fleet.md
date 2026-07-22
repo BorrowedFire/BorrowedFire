@@ -24,6 +24,7 @@ your private brain.
 
 - Controller SSH host: `<ssh-alias>`
 - Local task timeout seconds: `<seconds>`
+- Local transport timeout seconds: `<seconds>`
 
 ## Paid-usage policy
 

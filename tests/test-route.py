@@ -75,6 +75,19 @@ class FleetParsingTests(unittest.TestCase):
         self.assertEqual(tiers["local-quality"].model, "quality-model")
         self.assertEqual(tiers["local-volume"].endpoint, "http://host:8001/v1")
 
+    def test_rejects_shell_metacharacters_in_private_tiers(self):
+        content = """
+| Tier | Endpoint / harness | Use for |
+|---|---|---|
+| local-quality | `http://host:8000/v1;touch /tmp/pwned` (`quality-model`, 131072 context) | hard work |
+| local-volume | `http://host:8001/v1` (`volume-model`, 131072 context) | routine work |
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            fleet = pathlib.Path(directory) / "fleet.md"
+            fleet.write_text(content, encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "unsafe endpoint"):
+                MODULE.load_tiers(fleet)
+
     def test_shipped_template_matches_router_schema(self):
         template = ROOT / "prometheus-template" / "config" / "fleet.md"
         with self.assertRaisesRegex(RuntimeError, "template placeholders"):
@@ -94,6 +107,13 @@ class FleetParsingTests(unittest.TestCase):
             fleet = pathlib.Path(directory) / "fleet.md"
             fleet.write_text(content, encoding="utf-8")
             self.assertEqual(MODULE.load_task_timeout(fleet), 900)
+
+    def test_reads_bounded_transport_timeout(self):
+        content = "- Local transport timeout seconds: `120`\n"
+        with tempfile.TemporaryDirectory() as directory:
+            fleet = pathlib.Path(directory) / "fleet.md"
+            fleet.write_text(content, encoding="utf-8")
+            self.assertEqual(MODULE.load_transport_timeout(fleet), 120)
 
     def test_worker_seals_untrusted_artifacts_without_following_links(self):
         helper = (ROOT / "tools" / "bf-local-agent-remote").read_text(encoding="utf-8")
@@ -182,11 +202,17 @@ class ApplySafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
                 MODULE.apply_patch(repo, commit, patch)
 
-    def test_authoritative_denylist_covers_backfills_and_production_config(self):
+    def test_authoritative_denylist_covers_backfills_and_environment_config(self):
         with tempfile.TemporaryDirectory() as directory:
             repo, _ = self.make_repo(directory)
             paths, _ = MODULE.authoritative_patch_patterns(repo)
-        for path in ("scripts/backfill.py", "config/production.yaml"):
+        for path in (
+            "scripts/backfill.py",
+            "config/development.yaml",
+            "environments/staging.tfvars",
+            "App/Release.xcconfig",
+            "App/App.entitlements",
+        ):
             with self.subTest(path=path):
                 self.assertTrue(MODULE.matches_any(path, paths))
 
@@ -231,6 +257,7 @@ class ApplySafetyTests(unittest.TestCase):
             with (
                 mock.patch.object(MODULE, "load_tiers", return_value=tiers),
                 mock.patch.object(MODULE, "load_task_timeout", return_value=900),
+                mock.patch.object(MODULE, "load_transport_timeout", return_value=120),
                 mock.patch.object(MODULE, "local_attempt", side_effect=RuntimeError("worker offline")),
                 mock.patch.object(MODULE, "paid_attempt", return_value=(0, None, None, "paid-run")) as paid,
                 mock.patch.object(MODULE, "append_ledger"),
@@ -248,6 +275,27 @@ class ApplySafetyTests(unittest.TestCase):
                     "/home/worker/.local/state/borrowedfire-route/Widget/other/final.txt",
                     "final.txt",
                     pathlib.Path(directory) / "final.txt",
+                    120,
+                )
+
+    def test_remote_artifact_copy_timeout_is_a_transport_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with (
+                mock.patch.object(
+                    MODULE,
+                    "run_checked",
+                    side_effect=subprocess.TimeoutExpired(["scp"], 120),
+                ),
+                self.assertRaisesRegex(RuntimeError, "timed out while retrieving final.txt"),
+            ):
+                MODULE.copy_remote_artifact(
+                    "worker",
+                    "/home/worker",
+                    "Widget",
+                    "/home/worker/.local/state/borrowedfire-route/Widget/run/artifacts/final.txt",
+                    "final.txt",
+                    pathlib.Path(directory) / "final.txt",
+                    120,
                 )
 
     def test_success_requires_authenticated_artifacts(self):
@@ -259,6 +307,21 @@ class ApplySafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "without an authenticated final"):
                 MODULE.validate_attempt_artifacts("advice", 0, None, None)
             MODULE.validate_attempt_artifacts("advice", 0, None, final)
+
+    def test_paid_success_is_rejected_without_final_artifact(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = pathlib.Path(directory) / "state"
+            state.mkdir()
+            completed = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+            with (
+                mock.patch.object(MODULE.shutil, "which", return_value="/usr/bin/codex"),
+                mock.patch.object(MODULE, "state_root", return_value=state),
+                mock.patch.object(MODULE, "run_checked", return_value=completed),
+                mock.patch.object(MODULE.subprocess, "run", return_value=completed),
+                mock.patch.object(MODULE, "git", return_value=completed),
+                self.assertRaisesRegex(RuntimeError, "without an authenticated final"),
+            ):
+                MODULE.paid_attempt(pathlib.Path(directory), "a" * 40, "Review this", "advice")
 
     def test_explicit_local_tier_cannot_bypass_owner_gate(self):
         decision = MODULE.forced_decision("volume", "Change the auth migration", [])

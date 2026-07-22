@@ -19,6 +19,7 @@ import os
 import pathlib
 import re
 import secrets
+import shlex
 import shutil
 import subprocess
 import sys
@@ -118,6 +119,10 @@ def load_tiers(path: pathlib.Path | None = None) -> dict[str, Tier]:
         name, endpoint, model = match.groups()
         if "<" in endpoint or "<" in model:
             raise RuntimeError(f"fleet tier {name} still contains template placeholders")
+        if not re.fullmatch(r"https?://[A-Za-z0-9._:-]+/v1", endpoint):
+            raise RuntimeError(f"fleet tier {name} has an unsafe endpoint")
+        if not re.fullmatch(r"[A-Za-z0-9._/-]+", model):
+            raise RuntimeError(f"fleet tier {name} has an unsafe model name")
         tiers[name] = Tier(name=name, endpoint=endpoint.rstrip("/"), model=model)
     missing = {"local-volume", "local-quality"} - tiers.keys()
     if missing:
@@ -149,6 +154,21 @@ def load_task_timeout(path: pathlib.Path | None = None) -> int:
     timeout = int(match.group(1))
     if not 30 <= timeout <= 7200:
         raise RuntimeError("Local task timeout seconds must be between 30 and 7200")
+    return timeout
+
+
+def load_transport_timeout(path: pathlib.Path | None = None) -> int:
+    fleet = path or brain_dir() / "config" / "fleet.md"
+    try:
+        text = fleet.read_text(encoding="utf-8")
+    except OSError as error:
+        raise RuntimeError(f"cannot read fleet configuration: {fleet}: {error}") from error
+    match = re.search(r"^- Local transport timeout seconds:\s*`([^`]+)`\s*$", text, re.MULTILINE)
+    if not match or not match.group(1).isdigit():
+        raise RuntimeError("fleet configuration is missing a numeric Local transport timeout seconds")
+    timeout = int(match.group(1))
+    if not 10 <= timeout <= 600:
+        raise RuntimeError("Local transport timeout seconds must be between 10 and 600")
     return timeout
 
 
@@ -279,38 +299,71 @@ def authoritative_patch_patterns(repo: pathlib.Path) -> tuple[list[str], list[st
     return paths, content
 
 
-def remote_home(worker: str) -> str:
-    process = subprocess.run(
-        ["ssh", "-o", "BatchMode=yes", worker, "printf '%s' \"$HOME\""],
-        check=False,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
+def ssh_base(worker: str) -> list[str]:
+    return [
+        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
+        "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2", worker,
+    ]
+
+
+def remote_home(worker: str, transport_timeout: int) -> str:
+    try:
+        process = subprocess.run(
+            [*ssh_base(worker), "printf '%s' \"$HOME\""],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=transport_timeout,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError("timed out while determining the worker home") from error
     home = process.stdout.strip()
     if process.returncode or not re.fullmatch(r"/[A-Za-z0-9._/-]+", home):
         raise RuntimeError(f"could not determine a safe home directory on worker {worker}")
     return home.rstrip("/")
 
 
-def stream_archive(worker: str, repo: pathlib.Path, commit: str, remote_workspace: str) -> None:
-    mkdir = subprocess.run(
-        ["ssh", "-o", "BatchMode=yes", worker, "mkdir", "-p", remote_workspace],
-        check=False,
-    )
+def stream_archive(
+    worker: str,
+    repo: pathlib.Path,
+    commit: str,
+    remote_workspace: str,
+    transport_timeout: int,
+) -> None:
+    try:
+        mkdir = subprocess.run(
+            [*ssh_base(worker), f"mkdir -p {shlex.quote(remote_workspace)}"],
+            check=False,
+            timeout=transport_timeout,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError("timed out while creating the worker workspace") from error
     if mkdir.returncode:
         raise RuntimeError("could not create the managed GB10 workspace")
     archive = subprocess.Popen(["git", "-C", str(repo), "archive", "--format=tar", commit], stdout=subprocess.PIPE)
     assert archive.stdout is not None
-    extract = subprocess.run(
-        ["ssh", "-o", "BatchMode=yes", worker, "tar", "-xf", "-", "-C", remote_workspace],
-        stdin=archive.stdout,
-        check=False,
-    )
-    archive.stdout.close()
-    archive_status = archive.wait()
+    try:
+        extract = subprocess.run(
+            [*ssh_base(worker), f"tar -xf - -C {shlex.quote(remote_workspace)}"],
+            stdin=archive.stdout,
+            check=False,
+            timeout=transport_timeout,
+        )
+    except subprocess.TimeoutExpired as error:
+        archive.stdout.close()
+        archive.kill()
+        archive.wait()
+        raise RuntimeError("timed out while transferring the repository snapshot") from error
+    else:
+        archive.stdout.close()
+        archive_status = archive.wait()
     if archive_status or extract.returncode:
-        subprocess.run(["ssh", "-o", "BatchMode=yes", worker, "rm", "-rf", remote_workspace], check=False)
+        subprocess.run(
+            [*ssh_base(worker), f"rm -rf {shlex.quote(remote_workspace)}"],
+            check=False,
+            timeout=transport_timeout,
+        )
         raise RuntimeError("failed to transfer the exact repository snapshot to GB10")
 
 
@@ -321,13 +374,26 @@ def copy_remote_artifact(
     remote: str,
     artifact_name: str,
     destination: pathlib.Path,
+    transport_timeout: int,
 ) -> None:
     prefix = f"{worker_home}/.local/state/borrowedfire-route/{slug}/"
     relative = remote.removeprefix(prefix)
     parts = pathlib.PurePosixPath(relative).parts
     if not remote.startswith(prefix) or len(parts) != 3 or parts[1:] != ("artifacts", artifact_name):
         raise RuntimeError(f"worker returned an unsafe artifact path: {remote}")
-    run_checked(["scp", f"{worker}:{remote}", str(destination)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        run_checked(
+            [
+                "scp", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
+                "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2",
+                f"{worker}:{remote}", str(destination),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=transport_timeout,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(f"timed out while retrieving {artifact_name}") from error
 
 
 def local_attempt(
@@ -338,22 +404,21 @@ def local_attempt(
     tier: Tier,
     mode: str,
     timeout_seconds: int,
+    transport_timeout: int,
 ) -> tuple[int, pathlib.Path | None, pathlib.Path | None, str]:
     timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_id = f"{timestamp}-{os.getpid()}-{tier.name}"
     slug = safe_slug(repo)
-    worker_home = remote_home(worker)
+    worker_home = remote_home(worker, transport_timeout)
     remote_workspace = f"{worker_home}/.cache/borrowedfire-route/{slug}/{commit}-{run_id}"
     output_dir = state_root() / slug / run_id
     output_dir.mkdir(parents=True, exist_ok=False)
     controller_log = output_dir / "controller.log"
-    stream_archive(worker, repo, commit, remote_workspace)
+    stream_archive(worker, repo, commit, remote_workspace, transport_timeout)
 
     encoded = base64.b64encode(task.encode()).decode()
     result_nonce = secrets.token_hex(16)
-    command = [
-        "ssh", "-o", "BatchMode=yes", worker,
-        "~/.local/bin/bf-local-agent-remote",
+    remote_arguments = [
         remote_workspace,
         slug,
         commit,
@@ -365,6 +430,10 @@ def local_attempt(
         result_nonce,
         str(timeout_seconds),
     ]
+    remote_command = "~/.local/bin/bf-local-agent-remote " + " ".join(
+        shlex.quote(argument) for argument in remote_arguments
+    )
+    command = [*ssh_base(worker), remote_command]
     try:
         process = subprocess.run(
             command,
@@ -379,11 +448,11 @@ def local_attempt(
     finally:
         try:
             subprocess.run(
-                ["ssh", "-o", "BatchMode=yes", worker, "rm", "-rf", remote_workspace],
+                [*ssh_base(worker), f"rm -rf {shlex.quote(remote_workspace)}"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 check=False,
-                timeout=30,
+                timeout=transport_timeout,
             )
         except subprocess.TimeoutExpired:
             pass
@@ -403,9 +472,11 @@ def local_attempt(
     patch = output_dir / "changes.patch" if patch_remote else None
     final = output_dir / "final.txt" if final_remote else None
     if patch_remote and patch:
-        copy_remote_artifact(worker, worker_home, slug, patch_remote, "changes.patch", patch)
+        copy_remote_artifact(
+            worker, worker_home, slug, patch_remote, "changes.patch", patch, transport_timeout
+        )
     if final_remote and final:
-        copy_remote_artifact(worker, worker_home, slug, final_remote, "final.txt", final)
+        copy_remote_artifact(worker, worker_home, slug, final_remote, "final.txt", final, transport_timeout)
 
     validate_attempt_artifacts(mode, process.returncode, patch, final)
 
@@ -510,6 +581,12 @@ def paid_attempt(repo: pathlib.Path, commit: str, task: str, mode: str) -> tuple
         patch.write_text(diff.stdout, encoding="utf-8")
         if mode == "code" and process.returncode == 0 and not diff.stdout.strip():
             return 10, patch, final if final.exists() else None, run_id
+        validate_attempt_artifacts(
+            mode,
+            process.returncode,
+            patch if patch.exists() else None,
+            final if final.exists() else None,
+        )
         return process.returncode, patch, final if final.exists() else None, run_id
     finally:
         subprocess.run(["git", "-C", str(repo), "worktree", "remove", "--force", str(worktree)], check=False)
@@ -567,6 +644,7 @@ def command_run(args: argparse.Namespace) -> int:
         tiers = load_tiers()
         worker = validate_worker_host(args.worker) if args.worker else load_worker_host()
         timeout_seconds = load_task_timeout()
+        transport_timeout = load_transport_timeout()
         route_order = [decision.tier]
         if decision.tier == "local-volume":
             route_order.append("local-quality")
@@ -574,7 +652,14 @@ def command_run(args: argparse.Namespace) -> int:
             attempts.append(tier_name)
             try:
                 status, final_patch, final_message, run_id = local_attempt(
-                    worker, repo, commit, args.task, tiers[tier_name], args.mode, timeout_seconds
+                    worker,
+                    repo,
+                    commit,
+                    args.task,
+                    tiers[tier_name],
+                    args.mode,
+                    timeout_seconds,
+                    transport_timeout,
                 )
             except (RuntimeError, subprocess.CalledProcessError, OSError) as error:
                 status = EXIT_TEMPFAIL

@@ -29,7 +29,8 @@ runtime from the matching Prometheus project page.
 <!-- bf-route-path: (?:^|/)(?:payments?|billing|iap)(?:[._/-]|$) -->
 <!-- bf-route-path: (?:^|/)(?:secrets?|keys?|signing|credentials?)(?:[._/-]|$) -->
 <!-- bf-route-path: (?:^|/)\.env(?:[._-]|$) -->
-<!-- bf-route-path: (?:^|/)(?:config|configuration)/(?:prod|production|release)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)(?:config|configuration|environments?)(?:/|$) -->
+<!-- bf-route-path: (?:^|/)[^/]+\.(?:xcconfig|entitlements)$ -->
 <!-- bf-route-path: (?:^|/)scripts?/(?:backfill|seed|migrate|production)(?:[._/-]|$) -->
 <!-- bf-route-path: (?:^|/)(?:deploy(?:ment)?|releases?)(?:[._/-]|$) -->
 <!-- bf-route-content: \b(?:production data|destructive|backfill|seed production)\b -->
