@@ -106,6 +106,19 @@ class FleetParsingTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "unsafe endpoint"):
                 MODULE.load_tiers(fleet)
 
+    def test_rejects_https_endpoint_the_worker_cannot_preserve(self):
+        content = """
+| Tier | Endpoint / harness | Use for |
+|---|---|---|
+| local-quality | `https://host:8000/v1` (`quality-model`, 131072 context) | hard work |
+| local-volume | `http://host:8001/v1` (`volume-model`, 131072 context) | routine work |
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            fleet = pathlib.Path(directory) / "fleet.md"
+            fleet.write_text(content, encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "unsafe endpoint"):
+                MODULE.load_tiers(fleet)
+
     def test_shipped_template_matches_router_schema(self):
         template = ROOT / "prometheus-template" / "config" / "fleet.md"
         with self.assertRaisesRegex(RuntimeError, "template placeholders"):
@@ -155,6 +168,7 @@ class FleetParsingTests(unittest.TestCase):
         self.assertIn(".NetworkSettings.Ports", helper)
         self.assertIn('internal_endpoint="http://model-$port:$container_port/v1"', helper)
         self.assertIn('timeout --signal=TERM --kill-after=30s "${task_timeout}s"', helper)
+        self.assertIn("--pull=never", helper)
 
 
 class ApplySafetyTests(unittest.TestCase):
@@ -254,6 +268,26 @@ class ApplySafetyTests(unittest.TestCase):
             subprocess.run(["git", "-C", str(repo), "restore", "value.txt"], check=True)
             with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
                 MODULE.apply_patch(repo, commit, patch)
+
+    def test_generated_destructive_data_operations_are_owner_gated(self):
+        for content in (
+            'await supabase.from("users").delete().eq("id", user_id)\n',
+            "DELETE FROM users WHERE id = 1;\n",
+        ):
+            with self.subTest(content=content), tempfile.TemporaryDirectory() as directory:
+                repo, commit = self.make_repo(directory)
+                (repo / "value.txt").write_text(content, encoding="utf-8")
+                patch = repo.parent / "destructive.patch"
+                with patch.open("w", encoding="utf-8") as handle:
+                    subprocess.run(
+                        ["git", "-C", str(repo), "diff", "--binary", commit],
+                        check=True,
+                        text=True,
+                        stdout=handle,
+                    )
+                subprocess.run(["git", "-C", str(repo), "restore", "value.txt"], check=True)
+                with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
+                    MODULE.apply_patch(repo, commit, patch)
 
     def test_rename_from_owner_gated_path_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -445,6 +479,23 @@ class ApplySafetyTests(unittest.TestCase):
             ):
                 self.assertEqual(MODULE.command_run(args), 0)
                 paid.assert_called_once()
+
+    def test_archive_cleanup_timeout_is_a_transport_failure(self):
+        archive = mock.Mock()
+        archive.stdout = mock.Mock()
+        archive.wait.return_value = 0
+        completed = subprocess.CompletedProcess([], 0)
+        failed = subprocess.CompletedProcess([], 1)
+        with (
+            mock.patch.object(MODULE.subprocess, "Popen", return_value=archive),
+            mock.patch.object(
+                MODULE.subprocess,
+                "run",
+                side_effect=[completed, failed, subprocess.TimeoutExpired(["ssh"], 120)],
+            ),
+            self.assertRaisesRegex(RuntimeError, "timed out while cleaning"),
+        ):
+            MODULE.stream_archive("worker", pathlib.Path("."), "a" * 40, "/remote/work", 120)
 
     def test_remote_artifact_must_match_current_artifact_shape(self):
         with tempfile.TemporaryDirectory() as directory:
