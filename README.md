@@ -96,7 +96,7 @@ endpoints from the private Prometheus `config/fleet.md`, classifies work with de
 rules, and runs local implementation in an isolated exact-commit snapshot. The default experiment
 routes routine work to `local-volume`, deeper work to `local-quality`, and paid judgment to Codex
 only when explicitly permitted. Claude is not part of this experimental route.
-Replace the local-tier and Controller SSH host placeholders in the private fleet configuration
+Replace the local-tier and router-setting placeholders in the private fleet configuration
 before the first run.
 
 ```sh
