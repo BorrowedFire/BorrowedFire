@@ -76,6 +76,20 @@ class ClassificationTests(unittest.TestCase):
                     self.assertEqual(decision.tier, "judgment")
                     self.assertTrue(decision.owner_gated)
 
+    def test_root_sensitive_filename_in_task_is_gated_before_dispatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = pathlib.Path(directory)
+            for task in (
+                "Update build.sh",
+                "Change App.entitlements",
+                "Fix AuthManager.swift",
+                "Update .env",
+            ):
+                with self.subTest(task=task):
+                    decision = MODULE.classify(task, repo=repo)
+                    self.assertEqual(decision.tier, "judgment")
+                    self.assertTrue(decision.owner_gated)
+
     def test_review_session_is_judgment_but_not_owner_gated(self):
         decision = MODULE.classify("Start a full review session")
         self.assertEqual(decision.tier, "judgment")
@@ -672,6 +686,7 @@ class ApplySafetyTests(unittest.TestCase):
                 mock.patch.object(
                     MODULE, "paid_call_allowed", return_value=(True, "test permits paid")
                 ),
+                mock.patch.object(MODULE, "paid_runtime_preflight"),
                 mock.patch.object(MODULE, "paid_attempt", return_value=(0, None, None, "paid-run")) as paid,
                 mock.patch.object(MODULE, "append_ledger"),
             ):
@@ -743,6 +758,44 @@ class ApplySafetyTests(unittest.TestCase):
                     pathlib.Path(directory) / "final.txt",
                     120,
                 )
+
+    def test_remote_artifact_rejects_parent_traversal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, "unsafe artifact path"):
+                MODULE.copy_remote_artifact(
+                    "worker",
+                    "/home/worker",
+                    "Widget",
+                    "/home/worker/.local/state/borrowedfire-route/Widget/../artifacts/final.txt",
+                    "final.txt",
+                    pathlib.Path(directory) / "final.txt",
+                    120,
+                )
+
+    def test_missing_codex_does_not_reserve_paid_attempt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo, _ = self.make_repo(directory)
+            args = types.SimpleNamespace(
+                repo=str(repo),
+                ref="HEAD",
+                task="Review the change",
+                file=[],
+                tier="auto",
+                dry_run=False,
+                allow_paid=True,
+                worker=None,
+                mode="advice",
+                apply=False,
+            )
+            with (
+                mock.patch.object(MODULE.shutil, "which", return_value=None),
+                mock.patch.object(MODULE, "paid_call_allowed") as policy,
+                mock.patch.object(MODULE, "append_ledger") as ledger,
+                self.assertRaisesRegex(RuntimeError, "Codex CLI is not installed"),
+            ):
+                MODULE.command_run(args)
+            policy.assert_not_called()
+            ledger.assert_not_called()
 
     def test_remote_artifact_copy_timeout_is_a_transport_failure(self):
         with tempfile.TemporaryDirectory() as directory:

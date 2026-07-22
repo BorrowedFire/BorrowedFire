@@ -258,8 +258,12 @@ def task_path_candidates(task: str) -> list[str]:
     """Extract path-shaped task tokens for the authoritative path policy."""
     candidates = []
     for token in task.split():
-        candidate = token.strip("`'\"()[]{}.,:;")
-        if "/" in candidate or candidate.startswith(".env"):
+        candidate = token.strip("`'\"()[]{} ,:;").rstrip(".")
+        # A sensitive file can live at the repository root (for example,
+        # build.sh or App.entitlements), so a slash is not required. Ordinary
+        # prose without a path separator or filename suffix is intentionally
+        # ignored to avoid treating every task word as a path.
+        if "/" in candidate or "." in candidate:
             candidates.append(candidate)
     return candidates
 
@@ -581,7 +585,12 @@ def copy_remote_artifact(
     prefix = f"{worker_home}/.local/state/borrowedfire-route/{slug}/"
     relative = remote.removeprefix(prefix)
     parts = pathlib.PurePosixPath(relative).parts
-    if not remote.startswith(prefix) or len(parts) != 3 or parts[1:] != ("artifacts", artifact_name):
+    if (
+        not remote.startswith(prefix)
+        or any(part in (".", "..") for part in parts)
+        or len(parts) != 3
+        or parts[1:] != ("artifacts", artifact_name)
+    ):
         raise RuntimeError(f"worker returned an unsafe artifact path: {remote}")
     try:
         run_checked(
@@ -786,9 +795,13 @@ def apply_patch(repo: pathlib.Path, commit: str, patch: pathlib.Path) -> None:
     run_checked(["git", "-C", str(repo), "apply", str(patch)])
 
 
-def paid_attempt(repo: pathlib.Path, commit: str, task: str, mode: str) -> tuple[int, pathlib.Path | None, pathlib.Path | None, str]:
+def paid_runtime_preflight() -> None:
     if not shutil.which("codex"):
         raise RuntimeError("Codex CLI is not installed on this controller")
+
+
+def paid_attempt(repo: pathlib.Path, commit: str, task: str, mode: str) -> tuple[int, pathlib.Path | None, pathlib.Path | None, str]:
+    paid_runtime_preflight()
     timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_id = f"{timestamp}-{os.getpid()}-codex"
     slug = safe_slug(repo)
@@ -885,6 +898,7 @@ def command_run(args: argparse.Namespace) -> int:
             print("No paid model was invoked. Re-run with --allow-paid to use Codex.")
             status = EXIT_PAID_REQUIRED
         else:
+            paid_runtime_preflight()
             allowed, policy_reason = paid_call_allowed(
                 repo, commit, args.task, task_hash, decision, reserve=True
             )
@@ -925,6 +939,7 @@ def command_run(args: argparse.Namespace) -> int:
                 break
             print(f"ATTEMPT_FAILED={tier_name}:{status}")
         if status and args.allow_paid:
+            paid_runtime_preflight()
             allowed, policy_reason = paid_call_allowed(
                 repo, commit, args.task, task_hash, decision, reserve=True
             )
