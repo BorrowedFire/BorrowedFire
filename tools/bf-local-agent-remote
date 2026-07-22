@@ -29,12 +29,16 @@ run_id="bf-agent-${repo_slug:0:24}-${commit_sha:0:12}-$$"
 container="$run_id"
 run_dir="$state_dir/$timestamp-$commit_sha-$tier-$run_id"
 report="$run_dir/agent.log"
-patch="$run_dir/changes.patch"
-final="$run_dir/final.txt"
+untrusted_dir="$run_dir/untrusted"
+artifact_dir="$run_dir/artifacts"
+raw_patch="$untrusted_dir/changes.patch"
+raw_final="$untrusted_dir/final.txt"
+patch="$artifact_dir/changes.patch"
+final="$artifact_dir/final.txt"
 result=FAIL
 task_file=
 
-mkdir -p "$run_dir"
+mkdir -p "$run_dir" "$untrusted_dir"
 if ! mkdir "$lock_dir" 2>/dev/null; then
   echo "The GB10 is already running another local agent job." >&2
   exit 75
@@ -58,6 +62,37 @@ cleanup() {
 }
 trap cleanup EXIT
 exec > >(tee -a "$report") 2>&1
+
+seal_artifact() {
+  python3 - "$1" "$2" <<'PY'
+import os
+import stat
+import sys
+
+source, destination = sys.argv[1:]
+source_fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW)
+try:
+    source_stat = os.fstat(source_fd)
+    if not stat.S_ISREG(source_stat.st_mode):
+        raise RuntimeError("artifact source is not a regular file")
+    if source_stat.st_uid != os.getuid() or source_stat.st_nlink != 1:
+        raise RuntimeError("artifact source has unsafe ownership or links")
+    destination_fd = os.open(
+        destination,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+        0o600,
+    )
+    try:
+        while chunk := os.read(source_fd, 1024 * 1024):
+            remaining = memoryview(chunk)
+            while remaining:
+                remaining = remaining[os.write(destination_fd, remaining):]
+    finally:
+        os.close(destination_fd)
+finally:
+    os.close(source_fd)
+PY
+}
 
 printf '%s' "$task_b64" | base64 --decode > "$run_dir/task"
 task_file="$run_dir/task"
@@ -123,13 +158,25 @@ docker run --rm \
   --env "BF_TIER=$tier" \
   --env "BF_MODE=$mode" \
   --env "BF_BASELINE=$baseline" \
-  --env "BF_FINAL_NAME=$(basename "$final")" \
-  --env "BF_PATCH_NAME=$(basename "$patch")" \
+  --env "BF_FINAL_NAME=$(basename "$raw_final")" \
+  --env "BF_PATCH_NAME=$(basename "$raw_patch")" \
   --volume "$workspace:/workspace:$([[ "$mode" == code ]] && echo rw || echo ro)" \
   --volume "$task_file:/input/task:ro" \
-  --volume "$run_dir:/result" \
+  --volume "$untrusted_dir:/result" \
   --workdir /workspace \
   borrowedfire/codex-local:0.145.0
+
+[[ ! -e "$artifact_dir" && ! -L "$artifact_dir" ]] || {
+  echo "The local agent created an unsafe artifact boundary." >&2
+  exit 70
+}
+mkdir "$artifact_dir"
+if [[ -e "$raw_final" || -L "$raw_final" ]]; then
+  seal_artifact "$raw_final" "$final"
+fi
+if [[ -e "$raw_patch" || -L "$raw_patch" ]]; then
+  seal_artifact "$raw_patch" "$patch"
+fi
 
 if [[ "$mode" == code && ! -s "$patch" ]]; then
   echo "The local agent completed without producing a patch." >&2

@@ -86,6 +86,14 @@ class FleetParsingTests(unittest.TestCase):
             fleet.write_text(content, encoding="utf-8")
             self.assertEqual(MODULE.load_worker_host(fleet), "worker-alias")
 
+    def test_worker_seals_untrusted_artifacts_without_following_links(self):
+        helper = (ROOT / "tools" / "bf-local-agent-remote").read_text(encoding="utf-8")
+        self.assertIn('untrusted_dir="$run_dir/untrusted"', helper)
+        self.assertIn('artifact_dir="$run_dir/artifacts"', helper)
+        self.assertIn("os.O_NOFOLLOW", helper)
+        self.assertIn("stat.S_ISREG", helper)
+        self.assertIn("source_stat.st_nlink != 1", helper)
+
 
 class ApplySafetyTests(unittest.TestCase):
     def make_repo(self, directory):
