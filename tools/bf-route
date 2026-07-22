@@ -119,7 +119,11 @@ def load_tiers(path: pathlib.Path | None = None) -> dict[str, Tier]:
         name, endpoint, model = match.groups()
         if "<" in endpoint or "<" in model:
             raise RuntimeError(f"fleet tier {name} still contains template placeholders")
-        if not re.fullmatch(r"https?://[A-Za-z0-9._:-]+/v1", endpoint):
+        endpoint_match = re.fullmatch(
+            r"https?://[A-Za-z0-9._-]+:([0-9]{1,5})/v1",
+            endpoint,
+        )
+        if not endpoint_match or not 1 <= int(endpoint_match.group(1)) <= 65535:
             raise RuntimeError(f"fleet tier {name} has an unsafe endpoint")
         if not re.fullmatch(r"[A-Za-z0-9._/-]+", model):
             raise RuntimeError(f"fleet tier {name} has an unsafe model name")
@@ -182,9 +186,18 @@ def matches_any(text: str, patterns: Sequence[str]) -> bool:
     return any(re.search(pattern, text, re.IGNORECASE | re.MULTILINE) for pattern in patterns)
 
 
-def classify(task: str, files: Sequence[str] = ()) -> RouteDecision:
+def classify(
+    task: str,
+    files: Sequence[str] = (),
+    repo: pathlib.Path | None = None,
+) -> RouteDecision:
     material = "\n".join((task, *files))
     owner_gated = matches_any(material, OWNER_GATED_PATTERNS)
+    if repo is not None:
+        path_patterns, content_patterns = authoritative_patch_patterns(repo)
+        task_as_added_lines = "\n".join(f"+{line}" for line in task.splitlines())
+        owner_gated = owner_gated or any(matches_any(path, path_patterns) for path in files)
+        owner_gated = owner_gated or matches_any(task_as_added_lines, content_patterns)
     if owner_gated:
         return RouteDecision("judgment", "owner-gated risk policy", owner_gated=True)
     if matches_any(material, JUDGMENT_PATTERNS):
@@ -623,8 +636,13 @@ def paid_attempt(repo: pathlib.Path, commit: str, task: str, mode: str) -> tuple
         subprocess.run(["git", "-C", str(repo), "worktree", "remove", "--force", str(worktree)], check=False)
 
 
-def forced_decision(value: str, task: str, files: Sequence[str]) -> RouteDecision:
-    policy = classify(task, files)
+def forced_decision(
+    value: str,
+    task: str,
+    files: Sequence[str],
+    repo: pathlib.Path | None = None,
+) -> RouteDecision:
+    policy = classify(task, files, repo)
     if value == "auto" or policy.tier == "judgment":
         return policy
     if value == "volume":
@@ -642,13 +660,14 @@ def print_decision(decision: RouteDecision) -> None:
 
 
 def command_decide(args: argparse.Namespace) -> int:
-    print_decision(forced_decision(args.tier, args.task, args.file))
+    repo, _ = repository_state(args.repo, args.ref)
+    print_decision(forced_decision(args.tier, args.task, args.file, repo))
     return 0
 
 
 def command_run(args: argparse.Namespace) -> int:
     repo, commit = repository_state(args.repo, args.ref)
-    decision = forced_decision(args.tier, args.task, args.file)
+    decision = forced_decision(args.tier, args.task, args.file, repo)
     print_decision(decision)
     if args.dry_run:
         print(f"REPOSITORY={repo}")
@@ -737,6 +756,8 @@ def parser() -> argparse.ArgumentParser:
 
     decide = commands.add_parser("decide", help="print the deterministic route without executing")
     decide.add_argument("--task", required=True)
+    decide.add_argument("--repo", default=".")
+    decide.add_argument("--ref", default="HEAD")
     decide.add_argument("--file", action="append", default=[])
     decide.add_argument("--tier", choices=("auto", "volume", "quality", "judgment"), default="auto")
     decide.set_defaults(handler=command_decide)

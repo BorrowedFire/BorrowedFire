@@ -88,6 +88,19 @@ class FleetParsingTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "unsafe endpoint"):
                 MODULE.load_tiers(fleet)
 
+    def test_rejects_endpoint_without_explicit_worker_port(self):
+        content = """
+| Tier | Endpoint / harness | Use for |
+|---|---|---|
+| local-quality | `http://host/v1` (`quality-model`, 131072 context) | hard work |
+| local-volume | `http://host:8001/v1` (`volume-model`, 131072 context) | routine work |
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            fleet = pathlib.Path(directory) / "fleet.md"
+            fleet.write_text(content, encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "unsafe endpoint"):
+                MODULE.load_tiers(fleet)
+
     def test_shipped_template_matches_router_schema(self):
         template = ROOT / "prometheus-template" / "config" / "fleet.md"
         with self.assertRaisesRegex(RuntimeError, "template placeholders"):
@@ -302,6 +315,34 @@ class ApplySafetyTests(unittest.TestCase):
             )
             with mock.patch.dict("os.environ", {"PROMETHEUS_DIR": str(root / "brain")}):
                 self.assertEqual(MODULE.project_denylist_extras(repo), ["analytics/**", "audit log"])
+
+    def test_authoritative_and_project_paths_are_gated_before_dispatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            repo = root / "Widget"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(
+                ["git", "-C", str(repo), "remote", "add", "origin", "git@github.com:BorrowedFire/Widget.git"],
+                check=True,
+            )
+            projects = root / "brain" / "projects"
+            projects.mkdir(parents=True)
+            (projects / "widget.md").write_text(
+                "repo: BorrowedFire/Widget\ndenylist_extra: [analytics/**]\n",
+                encoding="utf-8",
+            )
+            with mock.patch.dict("os.environ", {"PROMETHEUS_DIR": str(root / "brain")}):
+                for path in (
+                    "config/development.yaml",
+                    ".env",
+                    "App/App.entitlements",
+                    "analytics/events.py",
+                ):
+                    with self.subTest(path=path):
+                        decision = MODULE.forced_decision("volume", "Fix the typo", [path], repo)
+                        self.assertEqual(decision.tier, "judgment")
+                        self.assertTrue(decision.owner_gated)
 
     def test_transport_exception_reaches_paid_fallback(self):
         with tempfile.TemporaryDirectory() as directory:
