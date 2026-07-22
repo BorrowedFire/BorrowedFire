@@ -133,6 +133,18 @@ def load_tiers(path: pathlib.Path | None = None) -> dict[str, Tier]:
         if not re.fullmatch(r"[A-Za-z0-9._/-]+", model):
             raise RuntimeError(f"fleet tier {name} has an unsafe model name")
         tiers[name] = Tier(name=name, endpoint=endpoint.rstrip("/"), model=model)
+    legacy_pattern = re.compile(
+        r"^\|\s*(local-(?:volume|large))\s*\|\s*`(http://[A-Za-z0-9._-]+:[0-9]{1,5}/v1)`\s*\|",
+        re.MULTILINE,
+    )
+    for match in legacy_pattern.finditer(text):
+        name, endpoint = match.groups()
+        if name in tiers:
+            continue
+        port = int(endpoint.rsplit(":", 1)[1].split("/", 1)[0])
+        if not 1 <= port <= 65535:
+            raise RuntimeError(f"fleet tier {name} has an unsafe endpoint")
+        tiers[name] = Tier(name=name, endpoint=endpoint.rstrip("/"), model="__auto__")
     if "local-quality" not in tiers and "local-large" in tiers:
         legacy = tiers["local-large"]
         tiers["local-quality"] = Tier(
@@ -154,7 +166,10 @@ def load_worker_host(path: pathlib.Path | None = None) -> str:
         raise RuntimeError(f"cannot read fleet configuration: {fleet}: {error}") from error
     match = re.search(r"^- Controller SSH host:\s*`([^`]+)`\s*$", text, re.MULTILINE)
     if not match or not re.fullmatch(r"[A-Za-z0-9._@-]+", match.group(1)):
-        raise RuntimeError("fleet configuration is missing a safe Controller SSH host")
+        raise RuntimeError(
+            "fleet configuration is missing a safe Controller SSH host; "
+            "legacy configurations must add '- Controller SSH host: `<ssh-host-or-alias>`'"
+        )
     return match.group(1)
 
 
@@ -165,7 +180,9 @@ def load_task_timeout(path: pathlib.Path | None = None) -> int:
     except OSError as error:
         raise RuntimeError(f"cannot read fleet configuration: {fleet}: {error}") from error
     match = re.search(r"^- Local task timeout seconds:\s*`([^`]+)`\s*$", text, re.MULTILINE)
-    if not match or not match.group(1).isdigit():
+    if not match:
+        return 900
+    if not match.group(1).isdigit():
         raise RuntimeError("fleet configuration is missing a numeric Local task timeout seconds")
     timeout = int(match.group(1))
     if not 30 <= timeout <= 7200:
@@ -180,7 +197,9 @@ def load_transport_timeout(path: pathlib.Path | None = None) -> int:
     except OSError as error:
         raise RuntimeError(f"cannot read fleet configuration: {fleet}: {error}") from error
     match = re.search(r"^- Local transport timeout seconds:\s*`([^`]+)`\s*$", text, re.MULTILINE)
-    if not match or not match.group(1).isdigit():
+    if not match:
+        return 120
+    if not match.group(1).isdigit():
         raise RuntimeError("fleet configuration is missing a numeric Local transport timeout seconds")
     timeout = int(match.group(1))
     if not 10 <= timeout <= 600:

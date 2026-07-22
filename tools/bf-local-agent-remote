@@ -116,6 +116,23 @@ mapfile -t model_containers < <(docker ps --filter "publish=$port" --format '{{.
   exit 69
 }
 model_container=${model_containers[0]}
+if [[ "$model" == __auto__ ]]; then
+  model=$(python3 - "$port" <<'PY'
+import json
+import re
+import sys
+import urllib.request
+
+port = int(sys.argv[1])
+with urllib.request.urlopen(f"http://127.0.0.1:{port}/v1/models", timeout=10) as response:
+    payload = json.load(response)
+models = [item.get("id") for item in payload.get("data", []) if isinstance(item, dict)]
+if len(models) != 1 or not isinstance(models[0], str) or not re.fullmatch(r"[A-Za-z0-9._/-]+", models[0]):
+    raise SystemExit("Legacy fleet endpoint must expose exactly one safely named model")
+print(models[0])
+PY
+  ) || { echo "Could not discover a unique model for the legacy fleet tier" >&2; exit 69; }
+fi
 container_port=$(docker inspect "$model_container" --format '{{json .NetworkSettings.Ports}}' | python3 -c '
 import json, sys
 host_port = sys.argv[1]

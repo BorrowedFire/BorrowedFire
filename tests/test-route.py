@@ -53,7 +53,15 @@ class ClassificationTests(unittest.TestCase):
     def test_camel_case_sensitive_files_are_owner_gated(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = pathlib.Path(directory)
-            for path in ("src/AuthManager.swift", "src/PaymentService.swift"):
+            for path in (
+                "src/AuthManager.swift",
+                "src/AuthView.swift",
+                "src/UserSession.swift",
+                "src/PermissionsView.swift",
+                "src/PaymentService.swift",
+                "src/SecretStore.swift",
+                "src/ReleaseBuilder.swift",
+            ):
                 with self.subTest(path=path):
                     decision = MODULE.classify("Fix the typo", [path], repo)
                     self.assertEqual(decision.tier, "judgment")
@@ -111,6 +119,24 @@ class FleetParsingTests(unittest.TestCase):
             tiers = MODULE.load_tiers(fleet)
         self.assertEqual(tiers["local-quality"].model, "large-model")
         self.assertEqual(tiers["local-quality"].endpoint, "http://host:8000/v1")
+
+    def test_legacy_endpoint_only_rows_use_worker_model_discovery(self):
+        content = """
+| Tier | Endpoint / harness | Use for |
+|---|---|---|
+| local-volume | `http://legacy-host:8001/v1` | routine work |
+| local-large | `http://legacy-host:8000/v1` | hard work |
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            fleet = pathlib.Path(directory) / "fleet.md"
+            fleet.write_text(content, encoding="utf-8")
+            tiers = MODULE.load_tiers(fleet)
+            self.assertEqual(tiers["local-volume"].model, "__auto__")
+            self.assertEqual(tiers["local-quality"].model, "__auto__")
+            with self.assertRaisesRegex(RuntimeError, "legacy configurations must add"):
+                MODULE.load_worker_host(fleet)
+            self.assertEqual(MODULE.load_task_timeout(fleet), 900)
+            self.assertEqual(MODULE.load_transport_timeout(fleet), 120)
 
     def test_relative_brain_pointer_is_resolved_from_pointer_directory(self):
         with tempfile.TemporaryDirectory() as directory:
