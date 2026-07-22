@@ -42,6 +42,8 @@ runtime from the matching Prometheus project page.
 <!-- bf-route-content: ^\+(?!\+\+)[^\n]*(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key|password|passwd|secret)[A-Za-z0-9_.-]*\s*["']?\s*(?::=|=|:)\s*["']?[A-Za-z0-9/+_.=-]{6,} -->
 <!-- bf-route-content: ^\+(?!\+\+)[^\n]*BEGIN [A-Z0-9 ]*PRIVATE KEY -->
 <!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?|DROP\s+(?:TABLE|DATABASE|SCHEMA))\b -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:ALTER|CREATE(?:\s+OR\s+REPLACE)?|DROP)\s+(?:TABLE|SCHEMA|POLICY|ROLE|FUNCTION|TRIGGER|TYPE|INDEX|VIEW|MATERIALIZED\s+VIEW|EXTENSION)\b -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:(?:ENABLE|DISABLE|FORCE|NO\s+FORCE)\s+ROW\s+LEVEL\s+SECURITY|GRANT\b|REVOKE\b) -->
 <!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:INSERT\s+INTO|UPDATE\s+[A-Za-z0-9_."`]+\s+SET)\b -->
 <!-- bf-route-content: ^\+(?!\+\+)[^\n]*\.(?:insert|update|upsert|delete|destroy)\s*\( -->
 <!-- bf-route-content: ^\+(?!\+\+)[^\n]*(?<![A-Za-z0-9])(?:schema|rls|sessions?|permissions?)(?![A-Za-z0-9]) -->
