@@ -21,6 +21,7 @@ check "claude: remember linked"        test -L "$HOME/.claude/skills/remember"
 check "codex: land linked"             test -L "$HOME/.codex/skills/land"
 check "qwen: maintainer linked"        test -L "$HOME/.qwen/skills/maintainer"
 check "openclaw: digest linked"        test -L "$SB/openclaw-ws/skills/digest"
+check "controller: bf-route linked"   test -L "$HOME/.local/bin/bf-route"
 check "claude: manifest written"       grep -q '^remember link$' "$HOME/.claude/skills/.borrowedfire-manifest"
 check "claude: doctrine block present" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md"
 check "openclaw: doctrine in AGENTS.md" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$SB/openclaw-ws/AGENTS.md"
@@ -79,6 +80,7 @@ check "uninstall removes owned"        test ! -e "$HOME/.claude/skills/remember"
 check "uninstall leaves unowned"       test -d "$HOME/.claude/skills/my-own-skill"
 check "uninstall strips doctrine"      bash -c "! grep -q 'BORROWEDFIRE DOCTRINE' '$HOME/.claude/CLAUDE.md'"
 check "uninstall removes manifest"     test ! -f "$HOME/.claude/skills/.borrowedfire-manifest"
+check "uninstall removes route tool"   test ! -e "$HOME/.local/bin/bf-route"
 
 # --- 8b. --copy converts an existing linked install (Codex P2 #3) ---
 mkdir -p "$HOME/.codex"
@@ -170,7 +172,8 @@ check "adopted-link: uninstallable"    test ! -L "$HOME/.claude/skills/recall"
 # --- 10. negative lint test: broken skill fails lint + blocks install ---
 CLONE="$SB/clone"
 cp -R "$SRC" "$CLONE"
-sed -i 's/^name: ship$/name: shipp/' "$CLONE/skills/ship/SKILL.md"
+sed -i.bak 's/^name: ship$/name: shipp/' "$CLONE/skills/ship/SKILL.md"
+rm -f "$CLONE/skills/ship/SKILL.md.bak"
 if "$CLONE/tools/skill-lint.sh" >/dev/null 2>&1; then fail "lint catches bad name"; else ok "lint catches bad name"; fi
 if "$CLONE/install.sh" >/dev/null 2>&1; then fail "install blocked by lint"; else ok "install blocked by lint"; fi
 

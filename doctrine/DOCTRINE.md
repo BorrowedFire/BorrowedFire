@@ -32,6 +32,12 @@ volume work (bulk edits, first drafts, summarizing) defaults to the local tier w
 one. Instance endpoints, caps, and the paid-task whitelist live in the brain's `config/fleet.md` —
 never hardcoded.
 
+When `bf-route` is installed and the brain defines local tiers, use `bf-route decide` for bounded
+work and `bf-route run` only within the owner's existing edit authorization. Local runs return an
+isolated exact-commit patch by default; `--apply` and `--allow-paid` are separate explicit grants.
+The router's judgment result stays in the current paid harness, and its private fleet policy decides
+which providers are eligible.
+
 **Routing.**
 
 | Need | Skill |

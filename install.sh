@@ -42,6 +42,27 @@ act() { # act <description> <command...>: honor --dry-run
   [ "$DRY" -eq 1 ] || "$@"
 }
 
+install_tool() { # install_tool <source-name> <target-name>
+  local src="$SRC/tools/$1" target="$HOME/.local/bin/$2"
+  if [ -L "$target" ] && [ "$(readlink "$target")" = "$src" ]; then
+    say "  ok       $2 (tool linked)"
+  elif [ -e "$target" ] || [ -L "$target" ]; then
+    say "  SKIP     $2 - existing controller tool is not owned by Borrowed Fire"
+  else
+    act "tool     $2" mkdir -p "$HOME/.local/bin"
+    act "link     $2 (controller tool)" ln -s "$src" "$target"
+  fi
+}
+
+remove_tool() { # remove_tool <source-name> <target-name>
+  local src="$SRC/tools/$1" target="$HOME/.local/bin/$2"
+  if [ -L "$target" ] && [ "$(readlink "$target")" = "$src" ]; then
+    act "remove   $2 (controller tool)" rm -f "$target"
+  elif [ -e "$target" ] || [ -L "$target" ]; then
+    say "  LEAVE    $2 - controller tool is not owned by Borrowed Fire"
+  fi
+}
+
 # --- preflight: never distribute a broken skill set ---
 if [ "$UNINSTALL" -eq 0 ]; then
   if ! "$SRC/tools/skill-lint.sh" >/dev/null; then
@@ -277,6 +298,14 @@ for row in "${HARNESSES[@]}"; do
 
   update_doctrine "$cf"
 done
+
+# Controller-side routing tool. The GB10 remote helper is deployed explicitly
+# to worker hosts because ordinary harness machines must not pretend to be one.
+if [ "$UNINSTALL" -eq 0 ]; then
+  install_tool bf-route bf-route
+else
+  remove_tool bf-route bf-route
+fi
 
 # --- brain pointer ---
 if [ "$UNINSTALL" -eq 0 ]; then
