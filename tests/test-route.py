@@ -73,6 +73,19 @@ class FleetParsingTests(unittest.TestCase):
         self.assertEqual(tiers["local-quality"].model, "quality-model")
         self.assertEqual(tiers["local-volume"].endpoint, "http://host:8001/v1")
 
+    def test_shipped_template_matches_router_schema(self):
+        template = ROOT / "prometheus-template" / "config" / "fleet.md"
+        with self.assertRaisesRegex(RuntimeError, "template placeholders"):
+            MODULE.load_tiers(template)
+        self.assertIn("Controller SSH host", template.read_text(encoding="utf-8"))
+
+    def test_reads_worker_host(self):
+        content = "- Controller SSH host: `worker-alias`\n"
+        with tempfile.TemporaryDirectory() as directory:
+            fleet = pathlib.Path(directory) / "fleet.md"
+            fleet.write_text(content, encoding="utf-8")
+            self.assertEqual(MODULE.load_worker_host(fleet), "worker-alias")
+
 
 class ApplySafetyTests(unittest.TestCase):
     def make_repo(self, directory):
@@ -108,6 +121,18 @@ class ApplySafetyTests(unittest.TestCase):
             (repo / "value.txt").write_text("DIRTY\n", encoding="utf-8")
             with self.assertRaisesRegex(RuntimeError, "dirty or HEAD moved"):
                 MODULE.apply_patch(repo, commit, patch)
+
+    def test_explicit_local_tier_cannot_bypass_owner_gate(self):
+        decision = MODULE.forced_decision("volume", "Change the auth migration", [])
+        self.assertEqual(decision.tier, "judgment")
+        self.assertTrue(decision.owner_gated)
+
+    def test_deploy_and_release_are_owner_gated(self):
+        for task in ("Deploy the app", "Cut a release"):
+            with self.subTest(task=task):
+                decision = MODULE.classify(task)
+                self.assertEqual(decision.tier, "judgment")
+                self.assertTrue(decision.owner_gated)
 
 
 if __name__ == "__main__":

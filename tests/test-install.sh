@@ -22,6 +22,7 @@ check "codex: land linked"             test -L "$HOME/.codex/skills/land"
 check "qwen: maintainer linked"        test -L "$HOME/.qwen/skills/maintainer"
 check "openclaw: digest linked"        test -L "$SB/openclaw-ws/skills/digest"
 check "controller: bf-route linked"   test -L "$HOME/.local/bin/bf-route"
+check "controller: route manifest"    grep -q '^bf-route link$' "$HOME/.local/share/borrowedfire/tools.manifest"
 check "claude: manifest written"       grep -q '^remember link$' "$HOME/.claude/skills/.borrowedfire-manifest"
 check "claude: doctrine block present" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md"
 check "openclaw: doctrine in AGENTS.md" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$SB/openclaw-ws/AGENTS.md"
@@ -31,6 +32,12 @@ check "manifest has 14 entries"        test "$(wc -l < "$HOME/.claude/skills/.bo
 "$SRC/install.sh" --openclaw-workspace "$SB/openclaw-ws" >/dev/null 2>&1
 check "doctrine idempotent (1 block)"  test "$(grep -c 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md")" -eq 1
 check "still 14 manifest entries"      test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 14
+
+# controller tool remains managed if the Borrowed Fire checkout moves
+rm "$HOME/.local/bin/bf-route"
+ln -s "$SB/moved-checkout/tools/bf-route" "$HOME/.local/bin/bf-route"
+"$SRC/install.sh" >/dev/null 2>&1
+check "controller: moved link repointed" test "$(readlink "$HOME/.local/bin/bf-route")" = "$SRC/tools/bf-route"
 
 # --- 3. legacy unowned dir warns, --adopt retires it ---
 mkdir -p "$HOME/.codex/skills/takeoff"; echo x > "$HOME/.codex/skills/takeoff/SKILL.md"

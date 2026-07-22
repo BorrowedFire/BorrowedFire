@@ -49,7 +49,9 @@ cleanup() {
   [[ -s "$patch" ]] && echo "PATCH_REMOTE=$patch"
   [[ -f "$final" ]] && echo "FINAL_REMOTE=$final"
   docker rm -f "$container" >/dev/null 2>&1 || true
-  [[ -n "$task_file" ]] && rm -f "$task_file" || true
+  if [[ -n "$task_file" ]]; then
+    rm -f "$task_file" || true
+  fi
   rm -rf "$workspace" || true
   rmdir "$lock_dir" >/dev/null 2>&1 || true
   exit "$exit_code"
