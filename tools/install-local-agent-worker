@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: install-local-agent-worker --host SSH_HOST
+
+Deploy the credential-free local Codex agent helper and build its pinned ARM64
+container image on an authorized worker. Model endpoints remain in the private
+Prometheus fleet configuration and are not copied by this installer.
+EOF
+}
+
+host=
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --host) host=${2:?--host requires an SSH host}; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 64 ;;
+  esac
+done
+
+[[ "$host" =~ ^[A-Za-z0-9._@-]+$ ]] || { echo "A safe --host is required" >&2; exit 64; }
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+source_dir=".local/src/borrowedfire/codex-local-0.145.0"
+
+ssh -o BatchMode=yes "$host" "mkdir -p ~/$source_dir ~/.local/bin"
+scp \
+  "$root/docker/codex-local/Dockerfile" \
+  "$root/docker/codex-local/agent-entrypoint" \
+  "$host:~/$source_dir/"
+scp "$root/tools/bfgb10-agent-remote" "$host:~/.local/bin/bfgb10-agent-remote"
+
+ssh -o BatchMode=yes "$host" \
+  "chmod 0755 ~/.local/bin/bfgb10-agent-remote ~/$source_dir/agent-entrypoint && \
+   docker build --tag borrowedfire/codex-local:0.145.0 ~/$source_dir && \
+   docker image inspect borrowedfire/codex-local:0.145.0 --format '{{.Id}} {{.Architecture}}'"

@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+workspace=${1:?missing workspace}
+repo_slug=${2:?missing repository slug}
+commit_sha=${3:?missing commit SHA}
+endpoint=${4:?missing model endpoint}
+model=${5:?missing model name}
+tier=${6:?missing tier}
+mode=${7:?missing mode}
+task_b64=${8:?missing encoded task}
+
+case "$workspace" in
+  "$HOME/.cache/borrowedfire-route/"*) ;;
+  *) echo "Refusing workspace outside the managed route cache: $workspace" >&2; exit 64 ;;
+esac
+[[ "$repo_slug" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Invalid repository slug" >&2; exit 64; }
+[[ "$commit_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid commit SHA" >&2; exit 64; }
+[[ "$endpoint" =~ ^https?://[A-Za-z0-9._:-]+/v1$ ]] || { echo "Invalid endpoint" >&2; exit 64; }
+[[ "$model" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "Invalid model" >&2; exit 64; }
+[[ "$tier" == local-volume || "$tier" == local-quality ]] || { echo "Invalid local tier" >&2; exit 64; }
+[[ "$mode" == code || "$mode" == advice ]] || { echo "Invalid mode" >&2; exit 64; }
+
+state_root="$HOME/.local/state/borrowedfire-route"
+state_dir="$state_root/$repo_slug"
+lock_dir="$state_root/.agent.lock"
+timestamp=$(date -u +%Y%m%dT%H%M%SZ)
+run_id="bf-agent-${repo_slug:0:24}-${commit_sha:0:12}-$$"
+container="$run_id"
+run_dir="$state_dir/$timestamp-$commit_sha-$tier-$run_id"
+report="$run_dir/agent.log"
+patch="$run_dir/changes.patch"
+final="$run_dir/final.txt"
+result=FAIL
+task_file=
+
+mkdir -p "$run_dir"
+if ! mkdir "$lock_dir" 2>/dev/null; then
+  echo "The GB10 is already running another local agent job." >&2
+  exit 75
+fi
+
+cleanup() {
+  exit_code=$?
+  trap - EXIT
+  [[ $exit_code -eq 0 ]] && result=PASS
+  echo "RESULT=$result"
+  echo "REPORT_REMOTE=$report"
+  [[ -s "$patch" ]] && echo "PATCH_REMOTE=$patch"
+  [[ -f "$final" ]] && echo "FINAL_REMOTE=$final"
+  docker rm -f "$container" >/dev/null 2>&1 || true
+  [[ -n "$task_file" ]] && rm -f "$task_file" || true
+  rm -rf "$workspace" || true
+  rmdir "$lock_dir" >/dev/null 2>&1 || true
+  exit "$exit_code"
+}
+trap cleanup EXIT
+exec > >(tee -a "$report") 2>&1
+
+printf '%s' "$task_b64" | base64 --decode > "$run_dir/task"
+task_file="$run_dir/task"
+
+port=${endpoint##*:}
+port=${port%/v1}
+[[ "$port" =~ ^[0-9]+$ ]] || { echo "Could not derive the model port" >&2; exit 64; }
+mapfile -t model_containers < <(docker ps --filter "publish=$port" --format '{{.Names}}')
+[[ ${#model_containers[@]} -eq 1 ]] || {
+  echo "Expected exactly one running model container published on port $port" >&2
+  exit 69
+}
+model_container=${model_containers[0]}
+agent_network=borrowedfire-local-agents
+if ! docker network inspect "$agent_network" >/dev/null 2>&1; then
+  docker network create --internal "$agent_network" >/dev/null
+fi
+if docker inspect "$model_container" --format '{{json .NetworkSettings.Networks}}' | grep -q "\"$agent_network\""; then
+  docker network disconnect "$agent_network" "$model_container"
+fi
+docker network connect --alias "model-$port" "$agent_network" "$model_container"
+internal_endpoint="http://model-$port:$port/v1"
+
+git -C "$workspace" init -q
+git -C "$workspace" config user.name "Borrowed Fire Local Agent"
+git -C "$workspace" config user.email "local-agent@invalid"
+git -C "$workspace" add -A
+git -C "$workspace" commit -qm baseline
+baseline=$(git -C "$workspace" rev-parse HEAD)
+
+echo "BORROWED_FIRE_LOCAL_AGENT"
+echo "REPOSITORY=$repo_slug"
+echo "COMMIT_SHA=$commit_sha"
+echo "TIER=$tier"
+echo "MODEL=$model"
+echo "CLAUDE_ELIGIBLE=no"
+echo "STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+docker run --rm \
+  --name "$container" \
+  --network "$agent_network" \
+  --user "$(id -u):$(id -g)" \
+  --cpus 4 \
+  --memory 6g \
+  --pids-limit 512 \
+  --read-only \
+  --tmpfs /tmp:rw,nosuid,size=512m \
+  --tmpfs /home/agent:rw,nosuid,size=128m,mode=1777 \
+  --env CI=true \
+  --env HOME=/home/agent \
+  --env "GIT_COMMIT=$commit_sha" \
+  --env "BF_MODEL=$model" \
+  --env "BF_ENDPOINT=$internal_endpoint" \
+  --env "BF_TIER=$tier" \
+  --env "BF_MODE=$mode" \
+  --env "BF_BASELINE=$baseline" \
+  --env "BF_FINAL_NAME=$(basename "$final")" \
+  --env "BF_PATCH_NAME=$(basename "$patch")" \
+  --volume "$workspace:/workspace:$([[ "$mode" == code ]] && echo rw || echo ro)" \
+  --volume "$task_file:/input/task:ro" \
+  --volume "$run_dir:/result" \
+  --workdir /workspace \
+  borrowedfire/codex-local:0.145.0
+
+if [[ "$mode" == code && ! -s "$patch" ]]; then
+  echo "The local agent completed without producing a patch." >&2
+  exit 10
+fi
+
+echo "COMPLETED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"

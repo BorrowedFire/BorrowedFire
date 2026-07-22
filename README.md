@@ -89,6 +89,35 @@ tools/skill-lint.sh   lint (also install.sh's preflight; runs in CI)
 tests/             installer sandbox matrix + brain-protocol live proof (run in CI)
 ```
 
+## Local model routing
+
+`tools/bf-route` is the controller-side entry point for the optional local fleet. It reads model
+endpoints from the private Prometheus `config/fleet.md`, classifies work with deterministic risk
+rules, and runs local implementation in an isolated exact-commit snapshot. The default experiment
+routes routine work to `local-volume`, deeper work to `local-quality`, and paid judgment to Codex
+only when explicitly permitted. Claude is not part of this experimental route.
+
+```sh
+bf-route decide --task "Update these documentation headings"
+bf-route run --repo . --task "Fix the bounded parser bug"
+bf-route run --repo . --task "Fix the bounded parser bug" --apply
+bf-route run --repo . --task "Perform the final independent review" --mode advice --allow-paid
+```
+
+Local jobs return patch and final-message artifacts under
+`~/.local/state/borrowedfire-route/`. `--apply` refuses a dirty or moved checkout. Paid escalation
+is disabled unless `--allow-paid` is present, and the worker never receives GitHub credentials or
+the Docker socket.
+
+An authorized worker is bootstrapped explicitly rather than by the ordinary harness installer:
+
+```sh
+tools/install-local-agent-worker --host <ssh-host>
+```
+
+The agent container has a read-only root filesystem and runs as the worker user. Its internal
+Docker network can reach the selected local model container but has no internet route.
+
 Skills are plain markdown — readable by any agent that can read files, portable to any harness
 that supports the SKILL.md convention.
 

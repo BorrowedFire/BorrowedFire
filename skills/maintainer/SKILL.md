@@ -39,6 +39,11 @@ tier** when the fleet has one. Endpoints, caps, and the paid-task whitelist are 
 the brain's `config/fleet.md` — never hardcoded in skills. No fleet config → run everything in the
 current harness and note it.
 
+When `bf-route` is installed, call `bf-route decide` while classifying bounded implementation and
+use `bf-route run` only after delegation/edit authorization exists. Treat its patch as worker output
+that still needs the normal `land` review and proof gates. Never add `--apply` or `--allow-paid`
+unless those distinct actions are authorized.
+
 ## Operating model
 
 1. **Scan.** Per active registry repo: open PRs, open issues, CI status, stale branches, latest
