@@ -89,6 +89,15 @@ check "uninstall strips doctrine"      bash -c "! grep -q 'BORROWEDFIRE DOCTRINE
 check "uninstall removes manifest"     test ! -f "$HOME/.claude/skills/.borrowedfire-manifest"
 check "uninstall removes route tool"   test ! -e "$HOME/.local/bin/bf-route"
 
+# controller cleanup still works after the last harness has been removed
+NOHARNESS_HOME="$SB/no-harness-home"
+mkdir -p "$NOHARNESS_HOME/.codex"
+HOME="$NOHARNESS_HOME" "$SRC/install.sh" >/dev/null 2>&1
+rm -rf "$NOHARNESS_HOME/.codex"
+HOME="$NOHARNESS_HOME" "$SRC/install.sh" --uninstall >/dev/null 2>&1
+check "uninstall without harness removes route tool" test ! -e "$NOHARNESS_HOME/.local/bin/bf-route"
+check "uninstall without harness clears route manifest" bash -c "! grep -q '^bf-route ' '$NOHARNESS_HOME/.local/share/borrowedfire/tools.manifest' 2>/dev/null"
+
 # --- 8b. --copy converts an existing linked install (Codex P2 #3) ---
 mkdir -p "$HOME/.codex"
 "$SRC/install.sh" >/dev/null 2>&1

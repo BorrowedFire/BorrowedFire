@@ -42,6 +42,23 @@ act() { # act <description> <command...>: honor --dry-run
   [ "$DRY" -eq 1 ] || "$@"
 }
 
+manifest_mode() { # manifest_mode <manifest> <name> -> prints mode or nothing
+  [ -f "$1" ] && awk -v n="$2" '$1 == n {print $2}' "$1"
+}
+manifest_set() { # manifest_set <manifest> <name> <mode>
+  local mf="$1" name="$2" mode="$3" tmp
+  tmp="$(mktemp)"
+  [ -f "$mf" ] && awk -v n="$name" '$1 != n' "$mf" > "$tmp"
+  echo "$name $mode" >> "$tmp"
+  sort "$tmp" > "$mf" && rm -f "$tmp"
+}
+manifest_del() { # manifest_del <manifest> <name>
+  local mf="$1" name="$2" tmp
+  [ -f "$mf" ] || return 0
+  tmp="$(mktemp)"
+  awk -v n="$name" '$1 != n' "$mf" > "$tmp" && mv "$tmp" "$mf"
+}
+
 install_tool() { # install_tool <source-name> <target-name>
   local src="$SRC/tools/$1" target="$HOME/.local/bin/$2"
   local mf="$HOME/.local/share/borrowedfire/tools.manifest" owned
@@ -106,26 +123,13 @@ if [ -n "$OPENCLAW_WS" ]; then
   fi
 fi
 if [ "${#HARNESSES[@]}" -eq 0 ]; then
+  if [ "$UNINSTALL" -eq 1 ]; then
+    remove_tool bf-route bf-route
+    exit 0
+  fi
   echo "no harnesses detected (looked for ~/.claude, ~/.codex, ~/.qwen; pass --openclaw-workspace for OpenClaw)" >&2
   exit 1
 fi
-
-manifest_mode() { # manifest_mode <manifest> <name> -> prints mode or nothing
-  [ -f "$1" ] && awk -v n="$2" '$1 == n {print $2}' "$1"
-}
-manifest_set() { # manifest_set <manifest> <name> <mode>
-  local mf="$1" name="$2" mode="$3" tmp
-  tmp="$(mktemp)"
-  [ -f "$mf" ] && awk -v n="$name" '$1 != n' "$mf" > "$tmp"
-  echo "$name $mode" >> "$tmp"
-  sort "$tmp" > "$mf" && rm -f "$tmp"
-}
-manifest_del() { # manifest_del <manifest> <name>
-  local mf="$1" name="$2" tmp
-  [ -f "$mf" ] || return 0
-  tmp="$(mktemp)"
-  awk -v n="$name" '$1 != n' "$mf" > "$tmp" && mv "$tmp" "$mf"
-}
 
 copy_skill() { # copy_skill <src> <tgt>: copy + drop the ownership marker inside
   rm -rf "$2" && cp -R "$1" "$2" && touch "$2/.borrowedfire-copy"
