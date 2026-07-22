@@ -59,6 +59,16 @@ OWNER_GATED_PATTERNS = (
     r"\brelease\b",
 )
 
+OWNER_GATED_PATH_PATTERNS = (
+    r"(?:^|/)migrations?(?:/|$)",
+    r"(?:^|/)(?:schema|rls)(?:[._/-]|$)",
+    r"(?:^|/)(?:auth|authentication|authorization|sessions?|permissions?)(?:[._/-]|$)",
+    r"(?:^|/)(?:payments?|billing|iap)(?:[._/-]|$)",
+    r"(?:^|/)(?:secrets?|keys?|signing|credentials?)(?:[._/-]|$)",
+    r"(?:^|/)\.env(?:[._-]|$)",
+    r"(?:^|/)(?:deploy(?:ment)?|releases?)(?:[._/-]|$)",
+)
+
 QUALITY_PATTERNS = (
     r"\bdebug\b",
     r"\binvestigat(?:e|ion)\b",
@@ -307,9 +317,43 @@ def checkout_is_clean_at(repo: pathlib.Path, commit: str) -> bool:
     return head == commit and not status
 
 
+def patch_paths(repo: pathlib.Path, patch: pathlib.Path) -> list[str]:
+    process = subprocess.run(
+        ["git", "-C", str(repo), "apply", "--numstat", "-z", str(patch)],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if process.returncode:
+        message = process.stderr.decode(errors="replace").strip()
+        raise RuntimeError(f"cannot inspect generated patch: {message}")
+    paths: list[str] = []
+    for record in process.stdout.split(b"\0"):
+        if not record:
+            continue
+        fields = record.split(b"\t", 2)
+        if len(fields) != 3:
+            raise RuntimeError("cannot inspect generated patch paths")
+        paths.append(fields[2].decode("utf-8", errors="surrogateescape"))
+    return paths
+
+
+def validate_generated_patch(repo: pathlib.Path, patch: pathlib.Path) -> None:
+    paths = patch_paths(repo, patch)
+    risky_paths = [path for path in paths if matches_any(path, OWNER_GATED_PATH_PATTERNS)]
+    patch_text = patch.read_text(encoding="utf-8", errors="replace")
+    if risky_paths or matches_any(patch_text, OWNER_GATED_PATTERNS):
+        detail = ", ".join(risky_paths) if risky_paths else "sensitive content"
+        raise RuntimeError(
+            "refusing to apply an owner-gated generated patch "
+            f"({detail}); paid review and explicit owner action are required"
+        )
+
+
 def apply_patch(repo: pathlib.Path, commit: str, patch: pathlib.Path) -> None:
     if not checkout_is_clean_at(repo, commit):
         raise RuntimeError("refusing to apply: checkout is dirty or HEAD moved since routing began")
+    validate_generated_patch(repo, patch)
     run_checked(["git", "-C", str(repo), "apply", "--check", str(patch)])
     run_checked(["git", "-C", str(repo), "apply", str(patch)])
 

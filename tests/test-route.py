@@ -122,6 +122,42 @@ class ApplySafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "dirty or HEAD moved"):
                 MODULE.apply_patch(repo, commit, patch)
 
+    def test_generated_migration_patch_is_owner_gated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo, commit = self.make_repo(directory)
+            migration = repo / "supabase" / "migrations" / "20260722.sql"
+            migration.parent.mkdir(parents=True)
+            migration.write_text("select 1;\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(repo), "add", "-N", "."], check=True)
+            patch = repo.parent / "migration.patch"
+            with patch.open("w", encoding="utf-8") as handle:
+                subprocess.run(
+                    ["git", "-C", str(repo), "diff", "--binary", commit],
+                    check=True,
+                    text=True,
+                    stdout=handle,
+                )
+            subprocess.run(["git", "-C", str(repo), "reset", "-q", "HEAD"], check=True)
+            subprocess.run(["git", "-C", str(repo), "clean", "-fdq"], check=True)
+            with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
+                MODULE.apply_patch(repo, commit, patch)
+
+    def test_generated_sensitive_content_is_owner_gated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo, commit = self.make_repo(directory)
+            (repo / "value.txt").write_text("authentication token\n", encoding="utf-8")
+            patch = repo.parent / "sensitive.patch"
+            with patch.open("w", encoding="utf-8") as handle:
+                subprocess.run(
+                    ["git", "-C", str(repo), "diff", "--binary", commit],
+                    check=True,
+                    text=True,
+                    stdout=handle,
+                )
+            subprocess.run(["git", "-C", str(repo), "restore", "value.txt"], check=True)
+            with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
+                MODULE.apply_patch(repo, commit, patch)
+
     def test_explicit_local_tier_cannot_bypass_owner_gate(self):
         decision = MODULE.forced_decision("volume", "Change the auth migration", [])
         self.assertEqual(decision.tier, "judgment")
