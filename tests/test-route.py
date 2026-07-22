@@ -277,6 +277,15 @@ class FleetParsingTests(unittest.TestCase):
         self.assertIn('timeout --signal=TERM --kill-after=30s "${task_timeout}s"', helper)
         self.assertIn("--pull=never", helper)
 
+    def test_worker_disconnects_model_from_agent_network_after_each_job(self):
+        helper = (ROOT / "tools" / "bf-local-agent-remote").read_text(encoding="utf-8")
+        self.assertIn("model_network_connected=0", helper)
+        self.assertIn("model_network_connected=1", helper)
+        self.assertIn(
+            'docker network disconnect "$agent_network" "$model_container" >/dev/null 2>&1 || true',
+            helper,
+        )
+
     def test_worker_preserves_ignored_tracked_files_and_uses_configured_discovery_endpoint(self):
         helper = (ROOT / "tools" / "bf-local-agent-remote").read_text(encoding="utf-8")
         self.assertIn('git -C "$workspace" add -f -A', helper)

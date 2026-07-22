@@ -55,6 +55,14 @@ HOME="$FALLBACK_HOME" "$SRC/install.sh" --uninstall >/dev/null 2>&1
 check "controller fallback: removable" test ! -e "$FALLBACK_HOME/.local/bin/bf-route"
 check "controller fallback: policy removable" test ! -e "$FALLBACK_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
 
+# de-owning a user-modified copied executable removes only unchanged packaged policy
+PATH="$FAKEBIN:$PATH" HOME="$FALLBACK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+echo '# user modification' >> "$FALLBACK_HOME/.local/bin/bf-route"
+PATH="$FAKEBIN:$PATH" HOME="$FALLBACK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+check "controller fallback: modified tool preserved" grep -q 'user modification' "$FALLBACK_HOME/.local/bin/bf-route"
+check "controller fallback: unchanged policy removed on de-own" test ! -e "$FALLBACK_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
+check "controller fallback: modified tool de-owned" bash -c "! grep -q '^bf-route ' '$FALLBACK_HOME/.local/share/borrowedfire/tools.manifest'"
+
 # --- 2. idempotence: re-run, doctrine block appears exactly once ---
 "$SRC/install.sh" --openclaw-workspace "$SB/openclaw-ws" >/dev/null 2>&1
 check "doctrine idempotent (1 block)"  test "$(grep -c 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md")" -eq 1

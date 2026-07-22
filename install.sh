@@ -117,7 +117,11 @@ install_tool() { # install_tool <source-name> <target-name>
       fi
     else
       say "  LEAVE    $2 - copied controller tool or policy was modified; de-owning only"
-      [ "$DRY" -eq 1 ] || { rm -f "$copy_state" "$policy_state"; manifest_del "$mf" "$2"; }
+      if [ "$DRY" -eq 0 ]; then
+        remove_owned_tool_policy "$policy_target" "$policy_state"
+        rm -f "$copy_state"
+        manifest_del "$mf" "$2"
+      fi
     fi
   elif [ -e "$target" ] || [ -L "$target" ]; then
     say "  SKIP     $2 - existing controller tool is not owned by Borrowed Fire"
