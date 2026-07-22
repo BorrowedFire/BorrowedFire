@@ -179,7 +179,7 @@ def validate_worker_host(value: str) -> str:
 
 
 def matches_any(text: str, patterns: Sequence[str]) -> bool:
-    return any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns)
+    return any(re.search(pattern, text, re.IGNORECASE | re.MULTILINE) for pattern in patterns)
 
 
 def classify(task: str, files: Sequence[str] = ()) -> RouteDecision:
@@ -504,23 +504,54 @@ def checkout_is_clean_at(repo: pathlib.Path, commit: str) -> bool:
 
 
 def patch_paths(repo: pathlib.Path, patch: pathlib.Path) -> list[str]:
-    process = subprocess.run(
-        ["git", "-C", str(repo), "apply", "--numstat", "-z", str(patch)],
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    if process.returncode:
-        message = process.stderr.decode(errors="replace").strip()
-        raise RuntimeError(f"cannot inspect generated patch: {message}")
+    with tempfile.TemporaryDirectory(prefix="bf-route-index-") as directory:
+        index = pathlib.Path(directory) / "index"
+        environment = os.environ.copy()
+        environment["GIT_INDEX_FILE"] = str(index)
+        try:
+            run_checked(
+                ["git", "-C", str(repo), "read-tree", "HEAD"],
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            run_checked(
+                ["git", "-C", str(repo), "apply", "--cached", str(patch)],
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            process = subprocess.run(
+                [
+                    "git", "-C", str(repo), "diff", "--cached", "--name-status", "-z",
+                    "--find-renames=1%", "HEAD",
+                ],
+                env=environment,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except subprocess.CalledProcessError as error:
+            detail = error.stderr or ""
+            message = (
+                detail.decode(errors="replace") if isinstance(detail, bytes) else detail
+            ).strip()
+            raise RuntimeError(f"cannot inspect generated patch: {message}") from error
+
+    fields = process.stdout.split(b"\0")
     paths: list[str] = []
-    for record in process.stdout.split(b"\0"):
-        if not record:
-            continue
-        fields = record.split(b"\t", 2)
-        if len(fields) != 3:
+    position = 0
+    while position < len(fields) and fields[position]:
+        status = fields[position].decode("ascii", errors="replace")
+        position += 1
+        path_count = 2 if status.startswith(("R", "C")) else 1
+        if position + path_count > len(fields):
             raise RuntimeError("cannot inspect generated patch paths")
-        paths.append(fields[2].decode("utf-8", errors="surrogateescape"))
+        for field in fields[position:position + path_count]:
+            if not field:
+                raise RuntimeError("cannot inspect generated patch paths")
+            paths.append(field.decode("utf-8", errors="surrogateescape"))
+        position += path_count
     return paths
 
 

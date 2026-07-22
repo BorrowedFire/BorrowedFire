@@ -39,6 +39,9 @@ scp "$root/tools/bf-local-agent-remote" "$host:~/.local/bin/bf-local-agent-remot
 ssh -o BatchMode=yes "$host" bash -s -- "$source_dir" <<'REMOTE'
 set -Eeuo pipefail
 source_dir=${1:?missing source directory}
+for command in docker flock git python3 timeout; do
+  command -v "$command" >/dev/null || { echo "Missing worker dependency: $command" >&2; exit 69; }
+done
 chmod 0755 "$HOME/.local/bin/bf-local-agent-remote" "$HOME/$source_dir/agent-entrypoint"
 docker build --tag borrowedfire/codex-local:0.145.0 "$HOME/$source_dir"
 docker image inspect borrowedfire/codex-local:0.145.0 --format '{{.Id}} {{.Architecture}}'

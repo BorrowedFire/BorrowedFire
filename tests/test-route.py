@@ -124,6 +124,14 @@ class FleetParsingTests(unittest.TestCase):
         self.assertIn("source_stat.st_nlink != 1", helper)
         self.assertIn("BF_RESULT_${result_nonce}_PATCH", helper)
 
+    def test_worker_uses_a_kernel_released_lock(self):
+        helper = (ROOT / "tools" / "bf-local-agent-remote").read_text(encoding="utf-8")
+        self.assertIn('exec 9>"$lock_file"', helper)
+        self.assertIn("flock -n 9", helper)
+        self.assertNotIn('mkdir "$lock_dir"', helper)
+        installer = (ROOT / "tools" / "install-local-agent-worker").read_text(encoding="utf-8")
+        self.assertIn("docker flock git python3 timeout", installer)
+
     def test_worker_resolves_the_container_side_model_port(self):
         helper = (ROOT / "tools" / "bf-local-agent-remote").read_text(encoding="utf-8")
         self.assertIn(".NetworkSettings.Ports", helper)
@@ -201,6 +209,66 @@ class ApplySafetyTests(unittest.TestCase):
             subprocess.run(["git", "-C", str(repo), "restore", "value.txt"], check=True)
             with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
                 MODULE.apply_patch(repo, commit, patch)
+
+    def test_generated_key_assignment_is_owner_gated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo, commit = self.make_repo(directory)
+            (repo / "value.txt").write_text('API_KEY = "xyz789"\n', encoding="utf-8")
+            patch = repo.parent / "key.patch"
+            with patch.open("w", encoding="utf-8") as handle:
+                subprocess.run(
+                    ["git", "-C", str(repo), "diff", "--binary", commit],
+                    check=True,
+                    text=True,
+                    stdout=handle,
+                )
+            subprocess.run(["git", "-C", str(repo), "restore", "value.txt"], check=True)
+            with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
+                MODULE.apply_patch(repo, commit, patch)
+
+    def test_rename_from_owner_gated_path_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = pathlib.Path(directory) / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@invalid"], check=True)
+            (repo / "config").mkdir()
+            (repo / "config" / "development.yaml").write_text("safe: true\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+            subprocess.run(["git", "-C", str(repo), "commit", "-qm", "baseline"], check=True)
+            commit = subprocess.run(
+                ["git", "-C", str(repo), "rev-parse", "HEAD"],
+                check=True,
+                text=True,
+                stdout=subprocess.PIPE,
+            ).stdout.strip()
+            subprocess.run(
+                ["git", "-C", str(repo), "mv", "config/development.yaml", "safe.txt"],
+                check=True,
+            )
+            patch = repo.parent / "rename.patch"
+            with patch.open("w", encoding="utf-8") as handle:
+                subprocess.run(
+                    ["git", "-C", str(repo), "diff", "--binary", commit],
+                    check=True,
+                    text=True,
+                    stdout=handle,
+                )
+            subprocess.run(["git", "-C", str(repo), "reset", "--hard", "-q", commit], check=True)
+            paths = MODULE.patch_paths(repo, patch)
+            self.assertIn("config/development.yaml", paths)
+            self.assertIn("safe.txt", paths)
+            with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
+                MODULE.apply_patch(repo, commit, patch)
+
+    def test_malformed_patch_fails_closed_with_a_readable_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo, _ = self.make_repo(directory)
+            patch = repo.parent / "malformed.patch"
+            patch.write_text("not a patch\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "cannot inspect generated patch"):
+                MODULE.patch_paths(repo, patch)
 
     def test_authoritative_denylist_covers_backfills_and_environment_config(self):
         with tempfile.TemporaryDirectory() as directory:

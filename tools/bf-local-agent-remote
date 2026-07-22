@@ -30,7 +30,7 @@ esac
 
 state_root="$HOME/.local/state/borrowedfire-route"
 state_dir="$state_root/$repo_slug"
-lock_dir="$state_root/.agent.lock"
+lock_file="$state_root/.agent.lockfile"
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
 run_id="bf-agent-${repo_slug:0:24}-${commit_sha:0:12}-$$"
 container="$run_id"
@@ -46,7 +46,8 @@ result=FAIL
 task_file=
 
 mkdir -p "$run_dir" "$untrusted_dir"
-if ! mkdir "$lock_dir" 2>/dev/null; then
+exec 9>"$lock_file"
+if ! flock -n 9; then
   echo "The GB10 is already running another local agent job." >&2
   exit 75
 fi
@@ -64,7 +65,6 @@ cleanup() {
     rm -f "$task_file" || true
   fi
   rm -rf "$workspace" || true
-  rmdir "$lock_dir" >/dev/null 2>&1 || true
   exit "$exit_code"
 }
 trap cleanup EXIT
