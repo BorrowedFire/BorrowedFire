@@ -59,10 +59,26 @@ manifest_del() { # manifest_del <manifest> <name>
   awk -v n="$name" '$1 != n' "$mf" > "$tmp" && mv "$tmp" "$mf"
 }
 
+copy_controller_tool() { # copy_controller_tool <src> <target> <copy-state> <policy-target> <policy-state>
+  local policy_src="$SRC/skills/land/references/denylist.md"
+  mkdir -p "$(dirname "$3")" "$(dirname "$4")"
+  cp "$1" "$2" && chmod 0755 "$2" && cp "$1" "$3" \
+    && cp "$policy_src" "$4" && cp "$policy_src" "$5"
+}
+
+remove_owned_tool_policy() { # remove_owned_tool_policy <policy-target> <policy-state>
+  if [ -f "$1" ] && [ -f "$2" ] && cmp -s "$1" "$2"; then
+    rm -f "$1"
+  fi
+  rm -f "$2"
+}
+
 install_tool() { # install_tool <source-name> <target-name>
   local src="$SRC/tools/$1" target="$HOME/.local/bin/$2"
   local mf="$HOME/.local/share/borrowedfire/tools.manifest" owned
   local copy_state="$HOME/.local/share/borrowedfire/tool-copies/$2"
+  local policy_target="$HOME/.local/share/borrowedfire/tool-data/$2/denylist.md"
+  local policy_state="$HOME/.local/share/borrowedfire/tool-copies/$2.denylist"
   owned="$(manifest_mode "$mf" "$2")"
   if [ -L "$target" ] && [ "$(readlink "$target")" = "$src" ]; then
     say "  ok       $2 (tool linked)"
@@ -70,6 +86,7 @@ install_tool() { # install_tool <source-name> <target-name>
       mkdir -p "$(dirname "$mf")"
       manifest_set "$mf" "$2" link
       rm -f "$copy_state"
+      remove_owned_tool_policy "$policy_target" "$policy_state"
     fi
   elif [ "$owned" = link ] && [ -L "$target" ]; then
     if [ "$DRY" -eq 1 ]; then
@@ -78,8 +95,7 @@ install_tool() { # install_tool <source-name> <target-name>
       say "  repoint  $2 (controller tool)"
     else
       rm -f "$target"
-      mkdir -p "$(dirname "$copy_state")"
-      if cp "$src" "$target" && chmod 0755 "$target" && cp "$src" "$copy_state"; then
+      if copy_controller_tool "$src" "$target" "$copy_state" "$policy_target" "$policy_state"; then
         say "  copy     $2 (symlink unsupported here)"
         manifest_set "$mf" "$2" copy
       else
@@ -87,19 +103,21 @@ install_tool() { # install_tool <source-name> <target-name>
         return 1
       fi
     fi
-  elif [ "$owned" = copy ] && [ -f "$target" ] && [ -f "$copy_state" ]; then
-    if cmp -s "$target" "$copy_state"; then
+  elif [ "$owned" = copy ]; then
+    if [ -f "$target" ] && [ -f "$copy_state" ] && cmp -s "$target" "$copy_state" \
+      && [ -f "$policy_target" ] && [ -f "$policy_state" ] \
+      && cmp -s "$policy_target" "$policy_state"; then
       if [ "$DRY" -eq 1 ]; then
         say "  update   $2 (tool copy)"
-      elif cp "$src" "$target" && chmod 0755 "$target" && cp "$src" "$copy_state"; then
+      elif copy_controller_tool "$src" "$target" "$copy_state" "$policy_target" "$policy_state"; then
         say "  update   $2 (tool copy)"
       else
         echo "controller tool update failed: $2" >&2
         return 1
       fi
     else
-      say "  LEAVE    $2 - copied controller tool was modified; de-owning only"
-      [ "$DRY" -eq 1 ] || { rm -f "$copy_state"; manifest_del "$mf" "$2"; }
+      say "  LEAVE    $2 - copied controller tool or policy was modified; de-owning only"
+      [ "$DRY" -eq 1 ] || { rm -f "$copy_state" "$policy_state"; manifest_del "$mf" "$2"; }
     fi
   elif [ -e "$target" ] || [ -L "$target" ]; then
     say "  SKIP     $2 - existing controller tool is not owned by Borrowed Fire"
@@ -112,9 +130,9 @@ install_tool() { # install_tool <source-name> <target-name>
         say "  link     $2 (controller tool)"
         manifest_set "$mf" "$2" link
         rm -f "$copy_state"
+        remove_owned_tool_policy "$policy_target" "$policy_state"
       else
-        mkdir -p "$(dirname "$copy_state")"
-        if cp "$src" "$target" && chmod 0755 "$target" && cp "$src" "$copy_state"; then
+        if copy_controller_tool "$src" "$target" "$copy_state" "$policy_target" "$policy_state"; then
           say "  copy     $2 (symlink unsupported here)"
           manifest_set "$mf" "$2" copy
         else
@@ -130,6 +148,8 @@ remove_tool() { # remove_tool <source-name> <target-name>
   local src="$SRC/tools/$1" target="$HOME/.local/bin/$2"
   local mf="$HOME/.local/share/borrowedfire/tools.manifest" owned link_target
   local copy_state="$HOME/.local/share/borrowedfire/tool-copies/$2"
+  local policy_target="$HOME/.local/share/borrowedfire/tool-data/$2/denylist.md"
+  local policy_state="$HOME/.local/share/borrowedfire/tool-copies/$2.denylist"
   owned="$(manifest_mode "$mf" "$2")"
   if [ "$owned" = link ] && [ -L "$target" ]; then
     link_target="$(readlink "$target")"
@@ -141,13 +161,15 @@ remove_tool() { # remove_tool <source-name> <target-name>
   elif [ "$owned" = link ] && { [ -e "$target" ] || [ -L "$target" ]; }; then
     say "  LEAVE    $2 - controller tool is no longer an owned symlink; de-owning only"
   elif [ "$owned" = copy ] && [ -f "$target" ] && [ -f "$copy_state" ]; then
-    if cmp -s "$target" "$copy_state"; then
+    if cmp -s "$target" "$copy_state" && [ -f "$policy_target" ] \
+      && [ -f "$policy_state" ] && cmp -s "$policy_target" "$policy_state"; then
       act "remove   $2 (controller tool copy)" rm -f "$target"
+      [ "$DRY" -eq 1 ] || remove_owned_tool_policy "$policy_target" "$policy_state"
     else
-      say "  LEAVE    $2 - copied controller tool was modified; de-owning only"
+      say "  LEAVE    $2 - copied controller tool or policy was modified; de-owning only"
     fi
   fi
-  [ "$DRY" -eq 1 ] || { rm -f "$copy_state"; manifest_del "$mf" "$2"; }
+  [ "$DRY" -eq 1 ] || { rm -f "$copy_state" "$policy_state"; manifest_del "$mf" "$2"; }
 }
 
 # --- preflight: never distribute a broken skill set ---

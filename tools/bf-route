@@ -486,7 +486,15 @@ def project_denylist_extras(repo: pathlib.Path) -> list[str]:
 
 
 def authoritative_patch_patterns(repo: pathlib.Path) -> tuple[list[str], list[str]]:
-    policy = pathlib.Path(__file__).resolve().parents[1] / "skills" / "land" / "references" / "denylist.md"
+    source_policy = (
+        pathlib.Path(__file__).resolve().parents[1]
+        / "skills" / "land" / "references" / "denylist.md"
+    )
+    installed_policy = (
+        pathlib.Path("~/.local/share/borrowedfire/tool-data/bf-route/denylist.md")
+        .expanduser()
+    )
+    policy = source_policy if source_policy.is_file() else installed_policy
     try:
         text = policy.read_text(encoding="utf-8")
     except OSError as error:
