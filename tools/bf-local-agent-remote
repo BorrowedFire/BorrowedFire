@@ -73,8 +73,17 @@ mapfile -t model_containers < <(docker ps --filter "publish=$port" --format '{{.
 model_container=${model_containers[0]}
 agent_network=borrowedfire-local-agents
 if ! docker network inspect "$agent_network" >/dev/null 2>&1; then
-  docker network create --internal "$agent_network" >/dev/null
+  docker network create \
+    --internal \
+    --label borrowedfire.managed=local-agent \
+    "$agent_network" >/dev/null
 fi
+network_internal=$(docker network inspect "$agent_network" --format '{{.Internal}}')
+network_owner=$(docker network inspect "$agent_network" --format '{{index .Labels "borrowedfire.managed"}}')
+[[ "$network_internal" == true && "$network_owner" == local-agent ]] || {
+  echo "Refusing unmanaged or non-internal Docker network: $agent_network" >&2
+  exit 69
+}
 if docker inspect "$model_container" --format '{{json .NetworkSettings.Networks}}' | grep -q "\"$agent_network\""; then
   docker network disconnect "$agent_network" "$model_container"
 fi
