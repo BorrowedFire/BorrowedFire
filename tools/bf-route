@@ -58,13 +58,21 @@ OWNER_GATED_PATTERNS = (
     r"\biap\b",
     r"\bsecrets?\b",
     r"\bcredentials?\b",
-    r"\b(?:api |private |signing )?keys?\b",
+    r"\b(?:api[ _-]?|private[ _-]?|signing[ _-]?)?keys?\b",
+    r"\b(?:(?:access|auth|refresh|bearer|id|session)[ _-]?)?tokens?\b",
+    r"\b(?:password|passwd)\b",
     r"\bsigning\b",
     r"\bconfig(?:uration)?\b",
     r"\benvironments?\b",
     r"\bproduction data\b",
     r"\bproduction (?:config(?:uration)?|environment)\b",
     r"\bdestructive\b",
+    r"\b(?:delete|drop|truncate|wipe|purge|destroy)\b.*"
+    r"\b(?:data|databases?|tables?|rows?|records?|users?|accounts?)\b",
+    r"\b(?:build|compile|archive|publish)\s+(?:the\s+)?"
+    r"(?:app|application|project|package|binary|artifact|release)\b",
+    r"\b(?:create|cut|produce|generate|upload|ship)\s+(?:an?\s+)?"
+    r"(?:release[ _-]?)?build\b",
     r"\bdeploy(?:ment)?\b",
     r"\brelease\b",
 )

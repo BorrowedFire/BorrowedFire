@@ -98,6 +98,11 @@ class ClassificationTests(unittest.TestCase):
             "Update the API keys",
             "Update the environment configuration",
             "Change the staging environment",
+            "Rotate the refresh token",
+            "Change the password",
+            "Delete all user records",
+            "Build the application",
+            "Create a release build",
         ):
             with self.subTest(task=task):
                 decision = MODULE.classify(task)
@@ -299,6 +304,13 @@ class FleetParsingTests(unittest.TestCase):
             helper,
         )
 
+    def test_worker_rejects_workspace_symlinks_and_paths_outside_its_cache(self):
+        helper = (ROOT / "tools" / "bf-local-agent-remote").read_text(encoding="utf-8")
+        self.assertIn('[[ -d "$workspace" && ! -L "$workspace" ]]', helper)
+        self.assertIn('workspace=$(cd "$workspace" && pwd -P)', helper)
+        self.assertIn('home_real=$(cd "$HOME" && pwd -P)', helper)
+        self.assertIn('"$home_real/.cache/borrowedfire-route/$repo_slug/"*', helper)
+
     def test_worker_preserves_ignored_tracked_files_and_uses_configured_discovery_endpoint(self):
         helper = (ROOT / "tools" / "bf-local-agent-remote").read_text(encoding="utf-8")
         self.assertIn('git -C "$workspace" add -f -A', helper)
@@ -371,6 +383,51 @@ class ApplySafetyTests(unittest.TestCase):
             subprocess.run(["git", "-C", str(repo), "clean", "-fdq"], check=True)
             with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
                 MODULE.apply_patch(repo, commit, patch)
+
+    def test_generated_patch_cannot_delete_routing_control_plane_files(self):
+        protected_paths = (
+            "install.sh",
+            "tools/bf-route",
+            "tools/bf-local-agent-remote",
+            "tools/install-local-agent-worker",
+            "docker/codex-local/Dockerfile",
+            "skills/land/references/denylist.md",
+            "skills/maintainer/SKILL.md",
+            "doctrine/DOCTRINE.md",
+            ".github/workflows/skill-lint.yml",
+        )
+        for protected_path in protected_paths:
+            with self.subTest(path=protected_path), tempfile.TemporaryDirectory() as directory:
+                repo = pathlib.Path(directory)
+                subprocess.run(["git", "init", "-q", str(repo)], check=True)
+                subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+                subprocess.run(
+                    ["git", "-C", str(repo), "config", "user.email", "test@invalid"],
+                    check=True,
+                )
+                target = repo / protected_path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("protected\n", encoding="utf-8")
+                subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+                subprocess.run(["git", "-C", str(repo), "commit", "-qm", "baseline"], check=True)
+                commit = subprocess.run(
+                    ["git", "-C", str(repo), "rev-parse", "HEAD"],
+                    check=True,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                ).stdout.strip()
+                target.unlink()
+                patch = repo.parent / f"{target.name}.patch"
+                with patch.open("w", encoding="utf-8") as handle:
+                    subprocess.run(
+                        ["git", "-C", str(repo), "diff", "--binary", commit],
+                        check=True,
+                        text=True,
+                        stdout=handle,
+                    )
+                subprocess.run(["git", "-C", str(repo), "restore", "."], check=True)
+                with self.assertRaisesRegex(RuntimeError, "owner-gated generated patch"):
+                    MODULE.apply_patch(repo, commit, patch)
 
     def test_generated_sensitive_content_is_owner_gated(self):
         with tempfile.TemporaryDirectory() as directory:

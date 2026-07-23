@@ -59,15 +59,33 @@ manifest_del() { # manifest_del <manifest> <name>
   awk -v n="$name" '$1 != n' "$mf" > "$tmp" && mv "$tmp" "$mf"
 }
 
+copy_file_atomic() { # copy_file_atomic <src> <target> <mode>
+  local tmp
+  [ -f "$1" ] && [ ! -L "$1" ] && [ ! -L "$2" ] || return 1
+  mkdir -p "$(dirname "$2")"
+  tmp="$(mktemp "$(dirname "$2")/.borrowedfire-copy.XXXXXX")" || return 1
+  if cp "$1" "$tmp" && chmod "$3" "$tmp" && mv -f "$tmp" "$2"; then
+    return 0
+  fi
+  rm -f "$tmp"
+  return 1
+}
+
 copy_controller_tool() { # copy_controller_tool <src> <target> <copy-state> <policy-target> <policy-state>
-  local policy_src="$SRC/skills/land/references/denylist.md"
-  mkdir -p "$(dirname "$3")" "$(dirname "$4")"
-  cp "$1" "$2" && chmod 0755 "$2" && cp "$1" "$3" \
-    && cp "$policy_src" "$4" && cp "$policy_src" "$5"
+  local policy_src="$SRC/skills/land/references/denylist.md" destination
+  for destination in "$2" "$3" "$4" "$5"; do
+    [ ! -L "$destination" ] || return 1
+  done
+  copy_file_atomic "$1" "$2" 0755 &&
+    copy_file_atomic "$1" "$3" 0600 &&
+    copy_file_atomic "$policy_src" "$4" 0644 &&
+    copy_file_atomic "$policy_src" "$5" 0600
 }
 
 remove_owned_tool_policy() { # remove_owned_tool_policy <policy-target> <policy-state>
-  if [ -f "$1" ] && [ -f "$2" ] && cmp -s "$1" "$2"; then
+  if [ -f "$1" ] && [ ! -L "$1" ] &&
+    [ -f "$2" ] && [ ! -L "$2" ] &&
+    cmp -s "$1" "$2"; then
     rm -f "$1"
   fi
   rm -f "$2"
@@ -104,8 +122,11 @@ install_tool() { # install_tool <source-name> <target-name>
       fi
     fi
   elif [ "$owned" = copy ]; then
-    if [ -f "$target" ] && [ -f "$copy_state" ] && cmp -s "$target" "$copy_state" \
-      && [ -f "$policy_target" ] && [ -f "$policy_state" ] \
+    if [ -f "$target" ] && [ ! -L "$target" ] &&
+      [ -f "$copy_state" ] && [ ! -L "$copy_state" ] &&
+      cmp -s "$target" "$copy_state" \
+      && [ -f "$policy_target" ] && [ ! -L "$policy_target" ] &&
+      [ -f "$policy_state" ] && [ ! -L "$policy_state" ] \
       && cmp -s "$policy_target" "$policy_state"; then
       if [ "$DRY" -eq 1 ]; then
         say "  update   $2 (tool copy)"
@@ -164,9 +185,13 @@ remove_tool() { # remove_tool <source-name> <target-name>
     fi
   elif [ "$owned" = link ] && { [ -e "$target" ] || [ -L "$target" ]; }; then
     say "  LEAVE    $2 - controller tool is no longer an owned symlink; de-owning only"
-  elif [ "$owned" = copy ] && [ -f "$target" ] && [ -f "$copy_state" ]; then
-    if cmp -s "$target" "$copy_state" && [ -f "$policy_target" ] \
-      && [ -f "$policy_state" ] && cmp -s "$policy_target" "$policy_state"; then
+  elif [ "$owned" = copy ] &&
+    [ -f "$target" ] && [ ! -L "$target" ] &&
+    [ -f "$copy_state" ] && [ ! -L "$copy_state" ]; then
+    if cmp -s "$target" "$copy_state" &&
+      [ -f "$policy_target" ] && [ ! -L "$policy_target" ] &&
+      [ -f "$policy_state" ] && [ ! -L "$policy_state" ] &&
+      cmp -s "$policy_target" "$policy_state"; then
       act "remove   $2 (controller tool copy)" rm -f "$target"
     else
       say "  LEAVE    $2 - copied controller tool or policy was modified; de-owning only"
