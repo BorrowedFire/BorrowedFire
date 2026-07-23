@@ -363,6 +363,29 @@ def repository_state(repo_value: str, ref: str) -> tuple[pathlib.Path, str]:
     return top, commit
 
 
+def ensure_local_snapshot_supported(repo: pathlib.Path, commit: str) -> None:
+    tree = subprocess.run(
+        ["git", "-C", str(repo), "ls-tree", "-rz", "--full-tree", commit],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).stdout
+    gitlinks = []
+    for record in tree.split(b"\0"):
+        if not record:
+            continue
+        metadata, raw_path = record.split(b"\t", 1)
+        _, object_type, _ = metadata.split(b" ", 2)
+        if object_type == b"commit":
+            gitlinks.append(os.fsdecode(raw_path))
+    if gitlinks:
+        paths = ", ".join(gitlinks)
+        raise RuntimeError(
+            "local routing does not support repositories with tracked submodules: "
+            f"{paths}"
+        )
+
+
 def safe_slug(repo: pathlib.Path) -> str:
     slug = re.sub(r"[^A-Za-z0-9._-]+", "-", repo.name).strip("-")
     if not slug:
@@ -1032,8 +1055,11 @@ def print_decision(decision: RouteDecision) -> None:
 
 
 def command_decide(args: argparse.Namespace) -> int:
-    repo, _ = repository_state(args.repo, args.ref)
-    print_decision(forced_decision(args.tier, args.task, args.file, repo))
+    repo, commit = repository_state(args.repo, args.ref)
+    decision = forced_decision(args.tier, args.task, args.file, repo)
+    if decision.tier != "judgment":
+        ensure_local_snapshot_supported(repo, commit)
+    print_decision(decision)
     return 0
 
 
@@ -1042,6 +1068,8 @@ def command_run(args: argparse.Namespace) -> int:
         raise RuntimeError("--apply requires --mode code")
     repo, commit = repository_state(args.repo, args.ref)
     decision = forced_decision(args.tier, args.task, args.file, repo)
+    if decision.tier != "judgment":
+        ensure_local_snapshot_supported(repo, commit)
     print_decision(decision)
     if args.dry_run:
         print(f"REPOSITORY={repo}")
