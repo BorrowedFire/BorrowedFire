@@ -908,6 +908,58 @@ class ApplySafetyTests(unittest.TestCase):
         repository.assert_not_called()
         paid.assert_not_called()
 
+    def test_local_routes_reject_gitlinks_before_advertising_or_attempting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo, _ = self.make_repo(directory)
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repo),
+                    "update-index",
+                    "--add",
+                    "--cacheinfo",
+                    f"160000,{'a' * 40},vendor",
+                ],
+                check=True,
+            )
+            subprocess.run(["git", "-C", str(repo), "commit", "-qm", "submodule"], check=True)
+            decide_args = types.SimpleNamespace(
+                repo=str(repo),
+                ref="HEAD",
+                task="Fix the typo",
+                file=[],
+                tier="auto",
+            )
+            run_args = types.SimpleNamespace(
+                repo=str(repo),
+                ref="HEAD",
+                task="Fix the typo",
+                file=[],
+                tier="auto",
+                dry_run=True,
+                allow_paid=False,
+                worker=None,
+                mode="code",
+                apply=False,
+            )
+            for command, args in (
+                (MODULE.command_decide, decide_args),
+                (MODULE.command_run, run_args),
+            ):
+                with (
+                    self.subTest(command=command.__name__),
+                    mock.patch.object(MODULE, "print_decision") as advertised,
+                    mock.patch.object(MODULE, "local_attempt") as attempted,
+                    self.assertRaisesRegex(
+                        RuntimeError,
+                        "tracked submodules: vendor",
+                    ),
+                ):
+                    command(args)
+                advertised.assert_not_called()
+                attempted.assert_not_called()
+
     def test_paid_policy_blocks_disallowed_tasks_and_repeated_attempts(self):
         repo = pathlib.Path("/tmp/Widget")
         commit = "a" * 40
