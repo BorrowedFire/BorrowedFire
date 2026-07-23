@@ -91,6 +91,19 @@ class ClassificationTests(unittest.TestCase):
                     self.assertEqual(decision.tier, "judgment")
                     self.assertTrue(decision.owner_gated)
 
+    def test_sensitive_semantic_categories_are_gated_before_dispatch(self):
+        for task in (
+            "Rotate credentials",
+            "Replace the private key",
+            "Update the API keys",
+            "Update the environment configuration",
+            "Change the staging environment",
+        ):
+            with self.subTest(task=task):
+                decision = MODULE.classify(task)
+                self.assertEqual(decision.tier, "judgment")
+                self.assertTrue(decision.owner_gated)
+
     def test_review_session_is_judgment_but_not_owner_gated(self):
         decision = MODULE.classify("Start a full review session")
         self.assertEqual(decision.tier, "judgment")

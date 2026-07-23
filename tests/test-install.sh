@@ -63,6 +63,16 @@ check "controller fallback: modified tool preserved" grep -q 'user modification'
 check "controller fallback: unchanged policy removed on de-own" test ! -e "$FALLBACK_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
 check "controller fallback: modified tool de-owned" bash -c "! grep -q '^bf-route ' '$FALLBACK_HOME/.local/share/borrowedfire/tools.manifest'"
 
+# uninstall preserves a user-modified copied executable but removes unchanged managed policy
+UNINSTALL_COPY_HOME="$SB/uninstall-copy-home"
+mkdir -p "$UNINSTALL_COPY_HOME/.codex"
+PATH="$FAKEBIN:$PATH" HOME="$UNINSTALL_COPY_HOME" "$SRC/install.sh" >/dev/null 2>&1
+echo '# user modification' >> "$UNINSTALL_COPY_HOME/.local/bin/bf-route"
+HOME="$UNINSTALL_COPY_HOME" "$SRC/install.sh" --uninstall >/dev/null 2>&1
+check "controller uninstall: modified tool preserved" grep -q 'user modification' "$UNINSTALL_COPY_HOME/.local/bin/bf-route"
+check "controller uninstall: unchanged policy removed" test ! -e "$UNINSTALL_COPY_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
+check "controller uninstall: modified tool de-owned" bash -c "! grep -q '^bf-route ' '$UNINSTALL_COPY_HOME/.local/share/borrowedfire/tools.manifest'"
+
 # --- 2. idempotence: re-run, doctrine block appears exactly once ---
 "$SRC/install.sh" --openclaw-workspace "$SB/openclaw-ws" >/dev/null 2>&1
 check "doctrine idempotent (1 block)"  test "$(grep -c 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md")" -eq 1
