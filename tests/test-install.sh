@@ -56,6 +56,17 @@ HOME="$FALLBACK_HOME" "$SRC/install.sh" --uninstall >/dev/null 2>&1
 check "controller fallback: removable" test ! -e "$FALLBACK_HOME/.local/bin/bf-route"
 check "controller fallback: policy removable" test ! -e "$FALLBACK_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
 
+# missing files from a still-manifested copied install are repaired
+REPAIR_COPY_HOME="$SB/repair-copy-home"
+mkdir -p "$REPAIR_COPY_HOME/.codex"
+PATH="$FAKEBIN:$PATH" HOME="$REPAIR_COPY_HOME" "$SRC/install.sh" >/dev/null 2>&1
+rm "$REPAIR_COPY_HOME/.local/bin/bf-route"
+rm "$REPAIR_COPY_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
+PATH="$FAKEBIN:$PATH" HOME="$REPAIR_COPY_HOME" "$SRC/install.sh" >/dev/null 2>&1
+check "controller fallback: missing tool repaired" test -x "$REPAIR_COPY_HOME/.local/bin/bf-route"
+check "controller fallback: missing policy repaired" test -f "$REPAIR_COPY_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
+check "controller fallback: repaired copy remains owned" grep -q '^bf-route copy$' "$REPAIR_COPY_HOME/.local/share/borrowedfire/tools.manifest"
+
 # de-owning a user-modified copied executable removes only unchanged packaged policy
 PATH="$FAKEBIN:$PATH" HOME="$FALLBACK_HOME" "$SRC/install.sh" >/dev/null 2>&1
 echo '# user modification' >> "$FALLBACK_HOME/.local/bin/bf-route"
