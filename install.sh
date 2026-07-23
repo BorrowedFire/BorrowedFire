@@ -168,12 +168,15 @@ remove_tool() { # remove_tool <source-name> <target-name>
     if cmp -s "$target" "$copy_state" && [ -f "$policy_target" ] \
       && [ -f "$policy_state" ] && cmp -s "$policy_target" "$policy_state"; then
       act "remove   $2 (controller tool copy)" rm -f "$target"
-      [ "$DRY" -eq 1 ] || remove_owned_tool_policy "$policy_target" "$policy_state"
     else
       say "  LEAVE    $2 - copied controller tool or policy was modified; de-owning only"
     fi
   fi
-  [ "$DRY" -eq 1 ] || { rm -f "$copy_state" "$policy_state"; manifest_del "$mf" "$2"; }
+  if [ "$DRY" -eq 0 ]; then
+    remove_owned_tool_policy "$policy_target" "$policy_state"
+    rm -f "$copy_state"
+    manifest_del "$mf" "$2"
+  fi
 }
 
 # --- preflight: never distribute a broken skill set ---
