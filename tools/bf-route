@@ -174,6 +174,20 @@ def load_tiers(path: pathlib.Path | None = None) -> dict[str, Tier]:
             endpoint=legacy.endpoint,
             model=legacy.model,
         )
+    if "local-quality" not in tiers and "local-volume" in tiers:
+        available = tiers["local-volume"]
+        tiers["local-quality"] = Tier(
+            name="local-quality",
+            endpoint=available.endpoint,
+            model=available.model,
+        )
+    if "local-volume" not in tiers and "local-quality" in tiers:
+        available = tiers["local-quality"]
+        tiers["local-volume"] = Tier(
+            name="local-volume",
+            endpoint=available.endpoint,
+            model=available.model,
+        )
     missing = {"local-volume", "local-quality"} - tiers.keys()
     if missing:
         raise RuntimeError(f"fleet configuration is missing tiers: {', '.join(sorted(missing))}")
@@ -615,10 +629,9 @@ def write_exact_tree_archive(
                 info.gname = ""
                 info.mtime = 0
                 if object_type == b"commit":
-                    info.type = tarfile.DIRTYPE
-                    info.mode = 0o755
-                    archive.addfile(info)
-                    continue
+                    raise RuntimeError(
+                        f"local routing does not support submodule snapshot entry: {path}"
+                    )
                 if object_type != b"blob":
                     raise RuntimeError(f"unsupported Git tree object type: {os.fsdecode(object_type)}")
                 cat.stdin.write(object_id + b"\n")

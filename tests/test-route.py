@@ -186,6 +186,34 @@ class FleetParsingTests(unittest.TestCase):
             self.assertEqual(MODULE.load_task_timeout(fleet), 900)
             self.assertEqual(MODULE.load_transport_timeout(fleet), 120)
 
+    def test_single_volume_tier_is_used_for_both_local_roles(self):
+        content = """
+| Tier | Endpoint / harness | Use for |
+|---|---|---|
+| local-volume | `http://host:8001/v1` (`volume-model`, 131072 context) | routine work |
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            fleet = pathlib.Path(directory) / "fleet.md"
+            fleet.write_text(content, encoding="utf-8")
+            tiers = MODULE.load_tiers(fleet)
+        self.assertEqual(tiers["local-volume"].model, "volume-model")
+        self.assertEqual(tiers["local-quality"].model, "volume-model")
+        self.assertEqual(tiers["local-quality"].endpoint, "http://host:8001/v1")
+
+    def test_single_quality_tier_is_used_for_both_local_roles(self):
+        content = """
+| Tier | Endpoint / harness | Use for |
+|---|---|---|
+| local-quality | `http://host:8000/v1` (`quality-model`, 131072 context) | hard work |
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            fleet = pathlib.Path(directory) / "fleet.md"
+            fleet.write_text(content, encoding="utf-8")
+            tiers = MODULE.load_tiers(fleet)
+        self.assertEqual(tiers["local-quality"].model, "quality-model")
+        self.assertEqual(tiers["local-volume"].model, "quality-model")
+        self.assertEqual(tiers["local-volume"].endpoint, "http://host:8000/v1")
+
     def test_relative_brain_pointer_is_resolved_from_pointer_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             home = pathlib.Path(directory)
@@ -983,6 +1011,33 @@ class ApplySafetyTests(unittest.TestCase):
                     archive.extractfile("substituted.txt").read(),
                     b"$Format:%H$\n",
                 )
+
+    def test_exact_tree_archive_rejects_submodule_gitlinks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = pathlib.Path(directory) / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@invalid"], check=True)
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repo),
+                    "update-index",
+                    "--add",
+                    "--cacheinfo",
+                    f"160000,{'a' * 40},vendor",
+                ],
+                check=True,
+            )
+            subprocess.run(["git", "-C", str(repo), "commit", "-qm", "submodule"], check=True)
+            commit = subprocess.check_output(
+                ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
+            ).strip()
+            with tempfile.TemporaryFile() as destination:
+                with self.assertRaisesRegex(RuntimeError, "submodule snapshot entry: vendor"):
+                    MODULE.write_exact_tree_archive(repo, commit, destination)
 
     def test_remote_artifact_must_match_current_artifact_shape(self):
         with tempfile.TemporaryDirectory() as directory:
