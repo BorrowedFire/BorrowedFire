@@ -189,7 +189,7 @@ git -C "$workspace" init -q
 git -C "$workspace" config user.name "Borrowed Fire Local Agent"
 git -C "$workspace" config user.email "local-agent@invalid"
 git -C "$workspace" add -f -A
-git -C "$workspace" commit -qm baseline
+git -C "$workspace" commit --allow-empty -qm baseline
 baseline=$(git -C "$workspace" rev-parse HEAD)
 
 echo "BORROWED_FIRE_LOCAL_AGENT"
