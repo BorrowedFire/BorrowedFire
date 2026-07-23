@@ -43,20 +43,39 @@ act() { # act <description> <command...>: honor --dry-run
 }
 
 manifest_mode() { # manifest_mode <manifest> <name> -> prints mode or nothing
-  [ -f "$1" ] && awk -v n="$2" '$1 == n {print $2}' "$1"
+  [ -f "$1" ] && [ ! -L "$1" ] && awk -v n="$2" '$1 == n {print $2}' "$1"
 }
 manifest_set() { # manifest_set <manifest> <name> <mode>
   local mf="$1" name="$2" mode="$3" tmp
-  tmp="$(mktemp)"
+  [ ! -L "$mf" ] || {
+    echo "refusing linked manifest: $mf" >&2
+    return 1
+  }
+  mkdir -p "$(dirname "$mf")"
+  tmp="$(mktemp "$(dirname "$mf")/.borrowedfire-manifest.XXXXXX")" || return 1
   [ -f "$mf" ] && awk -v n="$name" '$1 != n' "$mf" > "$tmp"
   echo "$name $mode" >> "$tmp"
-  sort "$tmp" > "$mf" && rm -f "$tmp"
+  if sort -o "$tmp" "$tmp" && chmod 0600 "$tmp" && mv -f "$tmp" "$mf"; then
+    return 0
+  fi
+  rm -f "$tmp"
+  return 1
 }
 manifest_del() { # manifest_del <manifest> <name>
   local mf="$1" name="$2" tmp
+  [ ! -L "$mf" ] || {
+    echo "refusing linked manifest: $mf" >&2
+    return 1
+  }
   [ -f "$mf" ] || return 0
-  tmp="$(mktemp)"
-  awk -v n="$name" '$1 != n' "$mf" > "$tmp" && mv "$tmp" "$mf"
+  tmp="$(mktemp "$(dirname "$mf")/.borrowedfire-manifest.XXXXXX")" || return 1
+  if awk -v n="$name" '$1 != n' "$mf" > "$tmp" &&
+    chmod 0600 "$tmp" &&
+    mv -f "$tmp" "$mf"; then
+    return 0
+  fi
+  rm -f "$tmp"
+  return 1
 }
 
 copy_file_atomic() { # copy_file_atomic <src> <target> <mode>
@@ -97,6 +116,10 @@ install_tool() { # install_tool <source-name> <target-name>
   local copy_state="$HOME/.local/share/borrowedfire/tool-copies/$2"
   local policy_target="$HOME/.local/share/borrowedfire/tool-data/$2/denylist.md"
   local policy_state="$HOME/.local/share/borrowedfire/tool-copies/$2.denylist"
+  if [ -L "$mf" ]; then
+    say "  SKIP     $2 - controller tool manifest is a symlink"
+    return 0
+  fi
   owned="$(manifest_mode "$mf" "$2")"
   if [ -L "$target" ] && [ "$(readlink "$target")" = "$src" ]; then
     say "  ok       $2 (tool linked)"
@@ -382,6 +405,16 @@ for row in "${HARNESSES[@]}"; do
   mf="$sd/$MANIFEST_NAME"
   say "== $label ($sd)"
   [ "$DRY" -eq 1 ] || mkdir -p "$sd"
+
+  if [ -L "$mf" ]; then
+    say "  SKIP     skills - Borrowed Fire manifest is a symlink"
+    if [ "$UNINSTALL" -eq 1 ]; then
+      remove_doctrine "$cf"
+    else
+      update_doctrine "$cf"
+    fi
+    continue
+  fi
 
   if [ "$UNINSTALL" -eq 1 ]; then
     if [ -f "$mf" ]; then
