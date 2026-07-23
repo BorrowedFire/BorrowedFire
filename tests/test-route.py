@@ -91,6 +91,20 @@ class ClassificationTests(unittest.TestCase):
                     self.assertEqual(decision.tier, "judgment")
                     self.assertTrue(decision.owner_gated)
 
+    def test_protected_paths_are_normalized_before_dispatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = pathlib.Path(directory).resolve()
+            for path in (
+                "./install.sh",
+                str(repo / "install.sh"),
+                "./tools/bf-route",
+                str(repo / "tools" / "bf-route"),
+            ):
+                with self.subTest(path=path):
+                    decision = MODULE.classify("Update the step", [path], repo)
+                    self.assertEqual(decision.tier, "judgment")
+                    self.assertTrue(decision.owner_gated)
+
     def test_sensitive_semantic_categories_are_gated_before_dispatch(self):
         for task in (
             "Rotate credentials",

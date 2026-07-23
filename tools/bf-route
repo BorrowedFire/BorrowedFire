@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import pathlib
+import posixpath
 import re
 import secrets
 import shlex
@@ -280,6 +281,19 @@ def task_path_candidates(task: str) -> list[str]:
     return candidates
 
 
+def normalize_declared_path(value: str, repo: pathlib.Path) -> str:
+    """Return a lexical repository-relative path when the declaration is in this repo."""
+    normalized = posixpath.normpath(value.replace("\\", "/"))
+    candidate = pathlib.PurePosixPath(normalized)
+    if candidate.is_absolute():
+        repository = pathlib.PurePosixPath(repo.resolve().as_posix())
+        try:
+            candidate = candidate.relative_to(repository)
+        except ValueError:
+            return candidate.as_posix()
+    return candidate.as_posix()
+
+
 def classify(
     task: str,
     files: Sequence[str] = (),
@@ -290,7 +304,10 @@ def classify(
     if repo is not None:
         path_patterns, content_patterns = authoritative_patch_patterns(repo)
         task_as_added_lines = "\n".join(f"+{line}" for line in task.splitlines())
-        declared_paths = [*files, *task_path_candidates(task)]
+        declared_paths = [
+            normalize_declared_path(path, repo)
+            for path in (*files, *task_path_candidates(task))
+        ]
         owner_gated = owner_gated or any(matches_any(path, path_patterns) for path in declared_paths)
         owner_gated = owner_gated or matches_any(task_as_added_lines, content_patterns)
     if owner_gated:

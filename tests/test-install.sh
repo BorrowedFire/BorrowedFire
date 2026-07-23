@@ -102,6 +102,21 @@ check "controller fallback: replacement policy symlink preserved" test -L "$POLI
 check "controller fallback: replacement policy symlink target untouched" cmp -s "$POLICY_SYMLINK_EXTERNAL" "$POLICY_SYMLINK_EXTERNAL.before"
 check "controller fallback: replacement policy symlink de-owned" bash -c "! grep -q '^bf-route ' '$POLICY_SYMLINK_HOME/.local/share/borrowedfire/tools.manifest'"
 
+# installer manifests are never read or written through symlinks
+MANIFEST_SYMLINK_HOME="$SB/manifest-symlink-home"
+MANIFEST_SYMLINK_EXTERNAL="$SB/manifest-symlink-external"
+mkdir -p "$MANIFEST_SYMLINK_HOME/.codex/skills" "$MANIFEST_SYMLINK_HOME/.local/share/borrowedfire"
+printf '%s\n' "user-owned manifest" > "$MANIFEST_SYMLINK_EXTERNAL"
+cp "$MANIFEST_SYMLINK_EXTERNAL" "$MANIFEST_SYMLINK_EXTERNAL.before"
+"$REAL_LN" -s "$MANIFEST_SYMLINK_EXTERNAL" "$MANIFEST_SYMLINK_HOME/.local/share/borrowedfire/tools.manifest"
+"$REAL_LN" -s "$MANIFEST_SYMLINK_EXTERNAL" "$MANIFEST_SYMLINK_HOME/.codex/skills/.borrowedfire-manifest"
+HOME="$MANIFEST_SYMLINK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+check "manifest guard: controller manifest symlink preserved" test -L "$MANIFEST_SYMLINK_HOME/.local/share/borrowedfire/tools.manifest"
+check "manifest guard: skill manifest symlink preserved" test -L "$MANIFEST_SYMLINK_HOME/.codex/skills/.borrowedfire-manifest"
+check "manifest guard: external target untouched" cmp -s "$MANIFEST_SYMLINK_EXTERNAL" "$MANIFEST_SYMLINK_EXTERNAL.before"
+check "manifest guard: controller install skipped" test ! -e "$MANIFEST_SYMLINK_HOME/.local/bin/bf-route"
+check "manifest guard: skill install skipped" test ! -e "$MANIFEST_SYMLINK_HOME/.codex/skills/land"
+
 # --- 2. idempotence: re-run, doctrine block appears exactly once ---
 "$SRC/install.sh" --openclaw-workspace "$SB/openclaw-ws" >/dev/null 2>&1
 check "doctrine idempotent (1 block)"  test "$(grep -c 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md")" -eq 1
