@@ -381,6 +381,7 @@ class FleetParsingTests(unittest.TestCase):
     def test_worker_preserves_ignored_tracked_files_and_discovers_models_inside_network(self):
         helper = (ROOT / "tools" / "bf-local-agent-remote").read_text(encoding="utf-8")
         self.assertIn('git -C "$workspace" add -f -A', helper)
+        self.assertIn("commit --allow-empty -qm baseline", helper)
         self.assertIn('--network "$agent_network"', helper)
         self.assertIn('--entrypoint node', helper)
         self.assertIn('- "$internal_endpoint/models"', helper)
@@ -885,6 +886,28 @@ class ApplySafetyTests(unittest.TestCase):
                 self.assertEqual(MODULE.command_run(args), 0)
                 paid.assert_called_once()
 
+    def test_advice_apply_is_rejected_before_route_or_paid_attempt(self):
+        args = types.SimpleNamespace(
+            repo=".",
+            ref="HEAD",
+            task="Review the change",
+            file=[],
+            tier="judgment",
+            dry_run=False,
+            allow_paid=True,
+            worker=None,
+            mode="advice",
+            apply=True,
+        )
+        with (
+            mock.patch.object(MODULE, "repository_state") as repository,
+            mock.patch.object(MODULE, "paid_attempt") as paid,
+            self.assertRaisesRegex(RuntimeError, "--apply requires --mode code"),
+        ):
+            MODULE.command_run(args)
+        repository.assert_not_called()
+        paid.assert_not_called()
+
     def test_paid_policy_blocks_disallowed_tasks_and_repeated_attempts(self):
         repo = pathlib.Path("/tmp/Widget")
         commit = "a" * 40
@@ -1015,6 +1038,8 @@ class ApplySafetyTests(unittest.TestCase):
             )
             (repo / "ignored.txt").write_text("still tracked\n", encoding="utf-8")
             (repo / "substituted.txt").write_text("$Format:%H$\n", encoding="utf-8")
+            (repo / "nested").mkdir()
+            (repo / "nested" / "tracked.txt").write_text("nested\n", encoding="utf-8")
             subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
             subprocess.run(["git", "-C", str(repo), "commit", "-qm", "baseline"], check=True)
             commit = subprocess.check_output(
@@ -1028,6 +1053,10 @@ class ApplySafetyTests(unittest.TestCase):
                 self.assertEqual(
                     archive.extractfile("substituted.txt").read(),
                     b"$Format:%H$\n",
+                )
+                self.assertEqual(
+                    archive.extractfile("nested/tracked.txt").read(),
+                    b"nested\n",
                 )
 
     def test_exact_tree_archive_rejects_submodule_gitlinks(self):

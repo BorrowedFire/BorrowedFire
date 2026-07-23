@@ -1038,6 +1038,8 @@ def command_decide(args: argparse.Namespace) -> int:
 
 
 def command_run(args: argparse.Namespace) -> int:
+    if args.apply and args.mode != "code":
+        raise RuntimeError("--apply requires --mode code")
     repo, commit = repository_state(args.repo, args.ref)
     decision = forced_decision(args.tier, args.task, args.file, repo)
     print_decision(decision)
