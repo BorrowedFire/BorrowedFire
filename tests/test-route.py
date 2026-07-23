@@ -887,6 +887,73 @@ class ApplySafetyTests(unittest.TestCase):
         ):
             MODULE.stream_archive("worker", pathlib.Path("."), "a" * 40, "/remote/work", 120)
 
+    def test_timed_out_archive_transfer_removes_partial_workspace(self):
+        completed = subprocess.CompletedProcess([], 0)
+        with (
+            mock.patch.object(MODULE, "write_exact_tree_archive"),
+            mock.patch.object(
+                MODULE.subprocess,
+                "run",
+                side_effect=[
+                    completed,
+                    subprocess.TimeoutExpired(["ssh"], 120),
+                    completed,
+                ],
+            ) as run,
+            self.assertRaisesRegex(RuntimeError, "timed out while transferring"),
+        ):
+            MODULE.stream_archive("worker", pathlib.Path("."), "a" * 40, "/remote/work", 120)
+        self.assertEqual(run.call_count, 3)
+        self.assertIn("rm -rf /remote/work", run.call_args_list[-1].args[0][-1])
+
+    def test_timed_out_workspace_creation_removes_possible_partial_workspace(self):
+        completed = subprocess.CompletedProcess([], 0)
+        with (
+            mock.patch.object(MODULE, "write_exact_tree_archive"),
+            mock.patch.object(
+                MODULE.subprocess,
+                "run",
+                side_effect=[
+                    subprocess.TimeoutExpired(["ssh"], 120),
+                    completed,
+                ],
+            ) as run,
+            self.assertRaisesRegex(RuntimeError, "timed out while creating"),
+        ):
+            MODULE.stream_archive("worker", pathlib.Path("."), "a" * 40, "/remote/work", 120)
+        self.assertEqual(run.call_count, 2)
+        self.assertIn("rm -rf /remote/work", run.call_args_list[-1].args[0][-1])
+
+    def test_failed_workspace_creation_removes_possible_partial_workspace(self):
+        completed = subprocess.CompletedProcess([], 0)
+        failed = subprocess.CompletedProcess([], 1)
+        with (
+            mock.patch.object(MODULE, "write_exact_tree_archive"),
+            mock.patch.object(
+                MODULE.subprocess,
+                "run",
+                side_effect=[failed, completed],
+            ) as run,
+            self.assertRaisesRegex(RuntimeError, "could not create"),
+        ):
+            MODULE.stream_archive("worker", pathlib.Path("."), "a" * 40, "/remote/work", 120)
+        self.assertEqual(run.call_count, 2)
+        self.assertIn("rm -rf /remote/work", run.call_args_list[-1].args[0][-1])
+
+    def test_failed_archive_cleanup_is_reported(self):
+        completed = subprocess.CompletedProcess([], 0)
+        failed = subprocess.CompletedProcess([], 1)
+        with (
+            mock.patch.object(MODULE, "write_exact_tree_archive"),
+            mock.patch.object(
+                MODULE.subprocess,
+                "run",
+                side_effect=[completed, failed, failed],
+            ),
+            self.assertRaisesRegex(RuntimeError, "failed to clean a failed repository transfer"),
+        ):
+            MODULE.stream_archive("worker", pathlib.Path("."), "a" * 40, "/remote/work", 120)
+
     def test_exact_tree_archive_ignores_export_attributes(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = pathlib.Path(directory) / "repo"
