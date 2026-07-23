@@ -42,6 +42,27 @@ act() { # act <description> <command...>: honor --dry-run
   [ "$DRY" -eq 1 ] || "$@"
 }
 
+tool_path_parents_safe() { # tool_path_parents_safe <managed-path>
+  local path="$1" home="${HOME%/}" parent relative component current
+  case "$path" in
+    "$home"/*) ;;
+    *) return 1 ;;
+  esac
+  parent="$(dirname "$path")"
+  relative="${parent#"$home"/}"
+  current="$home"
+  while [ -n "$relative" ]; do
+    component="${relative%%/*}"
+    current="$current/$component"
+    [ ! -L "$current" ] || return 1
+    if [ "$relative" = "$component" ]; then
+      relative=""
+    else
+      relative="${relative#*/}"
+    fi
+  done
+}
+
 manifest_mode() { # manifest_mode <manifest> <name> -> prints mode or nothing
   [ -f "$1" ] && [ ! -L "$1" ] && awk -v n="$2" '$1 == n {print $2}' "$1"
 }
@@ -80,8 +101,10 @@ manifest_del() { # manifest_del <manifest> <name>
 
 copy_file_atomic() { # copy_file_atomic <src> <target> <mode>
   local tmp
-  [ -f "$1" ] && [ ! -L "$1" ] && [ ! -L "$2" ] || return 1
+  [ -f "$1" ] && [ ! -L "$1" ] && [ ! -L "$2" ] &&
+    tool_path_parents_safe "$2" || return 1
   mkdir -p "$(dirname "$2")"
+  tool_path_parents_safe "$2" || return 1
   tmp="$(mktemp "$(dirname "$2")/.borrowedfire-copy.XXXXXX")" || return 1
   if cp "$1" "$tmp" && chmod "$3" "$tmp" && mv -f "$tmp" "$2"; then
     return 0
@@ -112,10 +135,16 @@ remove_owned_tool_policy() { # remove_owned_tool_policy <policy-target> <policy-
 
 install_tool() { # install_tool <source-name> <target-name>
   local src="$SRC/tools/$1" target="$HOME/.local/bin/$2"
-  local mf="$HOME/.local/share/borrowedfire/tools.manifest" owned target_ok policy_ok
+  local mf="$HOME/.local/share/borrowedfire/tools.manifest" owned target_ok policy_ok managed
   local copy_state="$HOME/.local/share/borrowedfire/tool-copies/$2"
   local policy_target="$HOME/.local/share/borrowedfire/tool-data/$2/denylist.md"
   local policy_state="$HOME/.local/share/borrowedfire/tool-copies/$2.denylist"
+  for managed in "$target" "$mf" "$copy_state" "$policy_target" "$policy_state"; do
+    if ! tool_path_parents_safe "$managed"; then
+      say "  SKIP     $2 - controller tool parent is a symlink"
+      return 0
+    fi
+  done
   if [ -L "$mf" ]; then
     say "  SKIP     $2 - controller tool manifest is a symlink"
     return 0
@@ -205,10 +234,16 @@ install_tool() { # install_tool <source-name> <target-name>
 
 remove_tool() { # remove_tool <source-name> <target-name>
   local src="$SRC/tools/$1" target="$HOME/.local/bin/$2"
-  local mf="$HOME/.local/share/borrowedfire/tools.manifest" owned link_target
+  local mf="$HOME/.local/share/borrowedfire/tools.manifest" owned link_target managed
   local copy_state="$HOME/.local/share/borrowedfire/tool-copies/$2"
   local policy_target="$HOME/.local/share/borrowedfire/tool-data/$2/denylist.md"
   local policy_state="$HOME/.local/share/borrowedfire/tool-copies/$2.denylist"
+  for managed in "$target" "$mf" "$copy_state" "$policy_target" "$policy_state"; do
+    if ! tool_path_parents_safe "$managed"; then
+      say "  SKIP     $2 - controller tool parent is a symlink"
+      return 0
+    fi
+  done
   owned="$(manifest_mode "$mf" "$2")"
   if [ "$owned" = link ] && [ -L "$target" ]; then
     link_target="$(readlink "$target")"
