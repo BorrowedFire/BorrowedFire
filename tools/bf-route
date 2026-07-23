@@ -67,6 +67,7 @@ OWNER_GATED_PATTERNS = (
     r"\bsigning\b",
     r"\bconfig(?:uration)?\b",
     r"\benvironments?\b",
+    r"\b(?:entitlements?|xcconfig)\b",
     r"\bproduction data\b",
     r"\bproduction (?:config(?:uration)?|environment)\b",
     r"\bdestructive\b",
@@ -156,11 +157,13 @@ def load_tiers(path: pathlib.Path | None = None) -> dict[str, Tier]:
             raise RuntimeError(f"fleet tier {name} has an unsafe model name")
         tiers[name] = Tier(name=name, endpoint=endpoint.rstrip("/"), model=model)
     legacy_pattern = re.compile(
-        r"^\|\s*(local-(?:volume|large))\s*\|\s*`(http://[A-Za-z0-9._-]+:[0-9]{1,5}/v1)`\s*\|",
+        r"^\|\s*(?P<name>local-(?:volume|large))\s*\|\s*"
+        r"(?P<quote>`?)(?P<endpoint>http://[A-Za-z0-9._-]+:[0-9]{1,5}/v1)"
+        r"(?P=quote)\s*\|",
         re.MULTILINE,
     )
     for match in legacy_pattern.finditer(text):
-        name, endpoint = match.groups()
+        name, endpoint = match.group("name", "endpoint")
         if name in tiers:
             continue
         port = int(endpoint.rsplit(":", 1)[1].split("/", 1)[0])

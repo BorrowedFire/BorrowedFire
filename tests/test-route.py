@@ -118,6 +118,8 @@ class ClassificationTests(unittest.TestCase):
             "Delete all user records",
             "Build the application",
             "Create a release build",
+            "Fix the App entitlements file",
+            "Fix the xcconfig file",
         ):
             with self.subTest(task=task):
                 decision = MODULE.classify(task)
@@ -185,6 +187,22 @@ class FleetParsingTests(unittest.TestCase):
                 MODULE.load_worker_host(fleet)
             self.assertEqual(MODULE.load_task_timeout(fleet), 900)
             self.assertEqual(MODULE.load_transport_timeout(fleet), 120)
+
+    def test_legacy_endpoint_only_rows_without_backticks_are_supported(self):
+        content = """
+| Tier | Endpoint / harness | Use for |
+|---|---|---|
+| local-volume | http://legacy-host:8001/v1 | routine work |
+| local-large | http://legacy-host:8000/v1 | hard work |
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            fleet = pathlib.Path(directory) / "fleet.md"
+            fleet.write_text(content, encoding="utf-8")
+            tiers = MODULE.load_tiers(fleet)
+        self.assertEqual(tiers["local-volume"].endpoint, "http://legacy-host:8001/v1")
+        self.assertEqual(tiers["local-volume"].model, "__auto__")
+        self.assertEqual(tiers["local-quality"].endpoint, "http://legacy-host:8000/v1")
+        self.assertEqual(tiers["local-quality"].model, "__auto__")
 
     def test_single_volume_tier_is_used_for_both_local_roles(self):
         content = """
