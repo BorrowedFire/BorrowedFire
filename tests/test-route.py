@@ -332,11 +332,13 @@ class FleetParsingTests(unittest.TestCase):
         self.assertIn('home_real=$(cd "$HOME" && pwd -P)', helper)
         self.assertIn('"$home_real/.cache/borrowedfire-route/$repo_slug/"*', helper)
 
-    def test_worker_preserves_ignored_tracked_files_and_uses_configured_discovery_endpoint(self):
+    def test_worker_preserves_ignored_tracked_files_and_discovers_models_inside_network(self):
         helper = (ROOT / "tools" / "bf-local-agent-remote").read_text(encoding="utf-8")
         self.assertIn('git -C "$workspace" add -f -A', helper)
-        self.assertIn('python3 - "$endpoint/models"', helper)
-        self.assertNotIn('http://127.0.0.1:{port}/v1/models', helper)
+        self.assertIn('--network "$agent_network"', helper)
+        self.assertIn('--entrypoint node', helper)
+        self.assertIn('- "$internal_endpoint/models"', helper)
+        self.assertNotIn('python3 - "$endpoint/models"', helper)
 
     def test_ci_syntax_checks_each_shell_script(self):
         workflow = (ROOT / ".github" / "workflows" / "skill-lint.yml").read_text(

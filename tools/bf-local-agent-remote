@@ -132,23 +132,6 @@ model_container=${model_containers[0]}
   echo "Model container has an unsafe name" >&2
   exit 69
 }
-if [[ "$model" == __auto__ ]]; then
-  model=$(python3 - "$endpoint/models" <<'PY'
-import json
-import re
-import sys
-import urllib.request
-
-url = sys.argv[1]
-with urllib.request.urlopen(url, timeout=10) as response:
-    payload = json.load(response)
-models = [item.get("id") for item in payload.get("data", []) if isinstance(item, dict)]
-if len(models) != 1 or not isinstance(models[0], str) or not re.fullmatch(r"[A-Za-z0-9._/-]+", models[0]):
-    raise SystemExit("Legacy fleet endpoint must expose exactly one safely named model")
-print(models[0])
-PY
-  ) || { echo "Could not discover a unique model for the legacy fleet tier" >&2; exit 69; }
-fi
 container_port=$(docker inspect "$model_container" --format '{{json .NetworkSettings.Ports}}' | python3 -c '
 import json, sys
 host_port = sys.argv[1]
@@ -182,6 +165,25 @@ else
   internal_model_host="model-$port"
 fi
 internal_endpoint="http://$internal_model_host:$container_port/v1"
+if [[ "$model" == __auto__ ]]; then
+  model=$(docker run --rm \
+    --pull=never \
+    --network "$agent_network" \
+    --entrypoint node \
+    borrowedfire/codex-local:0.145.0 \
+    - "$internal_endpoint/models" <<'JS'
+const url = process.argv[2];
+const response = await fetch(url, {signal: AbortSignal.timeout(10000)});
+if (!response.ok) process.exit(1);
+const payload = await response.json();
+const models = Array.isArray(payload.data)
+  ? payload.data.map(item => item && item.id).filter(id => typeof id === "string")
+  : [];
+if (models.length !== 1 || !/^[A-Za-z0-9._/-]+$/.test(models[0])) process.exit(1);
+process.stdout.write(models[0]);
+JS
+  ) || { echo "Could not discover a unique model through the isolated worker network" >&2; exit 69; }
+fi
 
 git -C "$workspace" init -q
 git -C "$workspace" config user.name "Borrowed Fire Local Agent"

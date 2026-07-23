@@ -112,7 +112,7 @@ remove_owned_tool_policy() { # remove_owned_tool_policy <policy-target> <policy-
 
 install_tool() { # install_tool <source-name> <target-name>
   local src="$SRC/tools/$1" target="$HOME/.local/bin/$2"
-  local mf="$HOME/.local/share/borrowedfire/tools.manifest" owned
+  local mf="$HOME/.local/share/borrowedfire/tools.manifest" owned target_ok policy_ok
   local copy_state="$HOME/.local/share/borrowedfire/tool-copies/$2"
   local policy_target="$HOME/.local/share/borrowedfire/tool-data/$2/denylist.md"
   local policy_state="$HOME/.local/share/borrowedfire/tool-copies/$2.denylist"
@@ -145,12 +145,23 @@ install_tool() { # install_tool <source-name> <target-name>
       fi
     fi
   elif [ "$owned" = copy ]; then
-    if [ -f "$target" ] && [ ! -L "$target" ] &&
+    target_ok=0
+    policy_ok=0
+    if { [ ! -e "$target" ] && [ ! -L "$target" ]; } ||
+      { [ -f "$target" ] && [ ! -L "$target" ] &&
+        [ -f "$copy_state" ] && [ ! -L "$copy_state" ] &&
+        cmp -s "$target" "$copy_state"; }; then
+      target_ok=1
+    fi
+    if { [ ! -e "$policy_target" ] && [ ! -L "$policy_target" ]; } ||
+      { [ -f "$policy_target" ] && [ ! -L "$policy_target" ] &&
+        [ -f "$policy_state" ] && [ ! -L "$policy_state" ] &&
+        cmp -s "$policy_target" "$policy_state"; }; then
+      policy_ok=1
+    fi
+    if [ "$target_ok" -eq 1 ] && [ "$policy_ok" -eq 1 ] &&
       [ -f "$copy_state" ] && [ ! -L "$copy_state" ] &&
-      cmp -s "$target" "$copy_state" \
-      && [ -f "$policy_target" ] && [ ! -L "$policy_target" ] &&
-      [ -f "$policy_state" ] && [ ! -L "$policy_state" ] \
-      && cmp -s "$policy_target" "$policy_state"; then
+      [ -f "$policy_state" ] && [ ! -L "$policy_state" ]; then
       if [ "$DRY" -eq 1 ]; then
         say "  update   $2 (tool copy)"
       elif copy_controller_tool "$src" "$target" "$copy_state" "$policy_target" "$policy_state"; then
