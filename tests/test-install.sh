@@ -35,6 +35,7 @@ REAL_LN=$(command -v ln)
 mkdir -p "$FALLBACK_HOME/.codex" "$FAKEBIN"
 {
   echo '#!/bin/sh'
+  # shellcheck disable=SC2016 # $1 belongs to the generated fake-ln script.
   echo 'case "$1" in -s|-sfn) exit 1 ;; esac'
   printf 'exec %q "$@"\n' "$REAL_LN"
 } > "$FAKEBIN/ln"
