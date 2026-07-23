@@ -305,7 +305,7 @@ class FleetParsingTests(unittest.TestCase):
     def test_worker_resolves_the_container_side_model_port(self):
         helper = (ROOT / "tools" / "bf-local-agent-remote").read_text(encoding="utf-8")
         self.assertIn(".NetworkSettings.Ports", helper)
-        self.assertIn('internal_endpoint="http://model-$port:$container_port/v1"', helper)
+        self.assertIn('internal_endpoint="http://$internal_model_host:$container_port/v1"', helper)
         self.assertIn('timeout --signal=TERM --kill-after=30s "${task_timeout}s"', helper)
         self.assertIn("--pull=never", helper)
 
@@ -315,6 +315,12 @@ class FleetParsingTests(unittest.TestCase):
         self.assertIn("model_network_connected=1", helper)
         self.assertIn(
             'docker network disconnect "$agent_network" "$model_container" >/dev/null 2>&1 || true',
+            helper,
+        )
+        self.assertIn("internal_model_host=$model_container", helper)
+        self.assertIn('internal_model_host="model-$port"', helper)
+        self.assertNotIn(
+            'docker network disconnect "$agent_network" "$model_container"\n',
             helper,
         )
 
@@ -330,6 +336,13 @@ class FleetParsingTests(unittest.TestCase):
         self.assertIn('git -C "$workspace" add -f -A', helper)
         self.assertIn('python3 - "$endpoint/models"', helper)
         self.assertNotIn('http://127.0.0.1:{port}/v1/models', helper)
+
+    def test_ci_syntax_checks_each_shell_script(self):
+        workflow = (ROOT / ".github" / "workflows" / "skill-lint.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("for script in install.sh", workflow)
+        self.assertIn('bash -n "$script"', workflow)
 
 
 class ApplySafetyTests(unittest.TestCase):

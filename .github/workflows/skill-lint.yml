@@ -13,7 +13,10 @@ jobs:
       - name: Lint skills
         run: bash tools/skill-lint.sh
       - name: Syntax-check shell scripts
-        run: bash -n install.sh tools/skill-lint.sh tools/bf-local-agent-remote tools/install-local-agent-worker docker/codex-local/agent-entrypoint
+        run: |
+          for script in install.sh tools/skill-lint.sh tools/bf-local-agent-remote tools/install-local-agent-worker docker/codex-local/agent-entrypoint; do
+            bash -n "$script"
+          done
       - name: shellcheck
         run: shellcheck install.sh tools/skill-lint.sh tools/bf-local-agent-remote tools/install-local-agent-worker docker/codex-local/agent-entrypoint tests/test-install.sh tests/test-brain.sh
       - name: Routing policy tests

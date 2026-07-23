@@ -128,6 +128,10 @@ mapfile -t model_containers < <(docker ps --filter "publish=$port" --format '{{.
   exit 69
 }
 model_container=${model_containers[0]}
+[[ "$model_container" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || {
+  echo "Model container has an unsafe name" >&2
+  exit 69
+}
 if [[ "$model" == __auto__ ]]; then
   model=$(python3 - "$endpoint/models" <<'PY'
 import json
@@ -171,11 +175,13 @@ network_owner=$(docker network inspect "$agent_network" --format '{{index .Label
   exit 69
 }
 if docker inspect "$model_container" --format '{{json .NetworkSettings.Networks}}' | grep -q "\"$agent_network\""; then
-  docker network disconnect "$agent_network" "$model_container"
+  internal_model_host=$model_container
+else
+  docker network connect --alias "model-$port" "$agent_network" "$model_container"
+  model_network_connected=1
+  internal_model_host="model-$port"
 fi
-docker network connect --alias "model-$port" "$agent_network" "$model_container"
-model_network_connected=1
-internal_endpoint="http://model-$port:$container_port/v1"
+internal_endpoint="http://$internal_model_host:$container_port/v1"
 
 git -C "$workspace" init -q
 git -C "$workspace" config user.name "Borrowed Fire Local Agent"
