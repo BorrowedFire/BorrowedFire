@@ -661,6 +661,18 @@ def stream_archive(
     remote_workspace: str,
     transport_timeout: int,
 ) -> None:
+    def cleanup_remote_workspace(context: str) -> None:
+        try:
+            cleanup = subprocess.run(
+                [*ssh_base(worker), f"rm -rf {shlex.quote(remote_workspace)}"],
+                check=False,
+                timeout=transport_timeout,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError(f"timed out while cleaning {context}") from error
+        if cleanup.returncode:
+            raise RuntimeError(f"failed to clean {context}")
+
     with tempfile.TemporaryFile() as archive:
         write_exact_tree_archive(repo, commit, archive)
         archive.seek(0)
@@ -671,8 +683,10 @@ def stream_archive(
                 timeout=transport_timeout,
             )
         except subprocess.TimeoutExpired as error:
+            cleanup_remote_workspace("a timed-out workspace creation")
             raise RuntimeError("timed out while creating the worker workspace") from error
         if mkdir.returncode:
+            cleanup_remote_workspace("a failed workspace creation")
             raise RuntimeError("could not create the managed GB10 workspace")
         try:
             extract = subprocess.run(
@@ -682,16 +696,10 @@ def stream_archive(
                 timeout=transport_timeout,
             )
         except subprocess.TimeoutExpired as error:
+            cleanup_remote_workspace("a timed-out repository transfer")
             raise RuntimeError("timed out while transferring the repository snapshot") from error
         if extract.returncode:
-            try:
-                subprocess.run(
-                    [*ssh_base(worker), f"rm -rf {shlex.quote(remote_workspace)}"],
-                    check=False,
-                    timeout=transport_timeout,
-                )
-            except subprocess.TimeoutExpired as error:
-                raise RuntimeError("timed out while cleaning a failed repository transfer") from error
+            cleanup_remote_workspace("a failed repository transfer")
             raise RuntimeError("failed to transfer the exact repository snapshot to GB10")
 
 
