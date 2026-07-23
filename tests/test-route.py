@@ -7,6 +7,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import tarfile
 import tempfile
 import types
 import unittest
@@ -873,13 +874,10 @@ class ApplySafetyTests(unittest.TestCase):
             self.assertIn("cap reached", reason)
 
     def test_archive_cleanup_timeout_is_a_transport_failure(self):
-        archive = mock.Mock()
-        archive.stdout = mock.Mock()
-        archive.wait.return_value = 0
         completed = subprocess.CompletedProcess([], 0)
         failed = subprocess.CompletedProcess([], 1)
         with (
-            mock.patch.object(MODULE.subprocess, "Popen", return_value=archive),
+            mock.patch.object(MODULE, "write_exact_tree_archive"),
             mock.patch.object(
                 MODULE.subprocess,
                 "run",
@@ -888,6 +886,34 @@ class ApplySafetyTests(unittest.TestCase):
             self.assertRaisesRegex(RuntimeError, "timed out while cleaning"),
         ):
             MODULE.stream_archive("worker", pathlib.Path("."), "a" * 40, "/remote/work", 120)
+
+    def test_exact_tree_archive_ignores_export_attributes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = pathlib.Path(directory) / "repo"
+            repo.mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@invalid"], check=True)
+            (repo / ".gitattributes").write_text(
+                "ignored.txt export-ignore\nsubstituted.txt export-subst\n",
+                encoding="utf-8",
+            )
+            (repo / "ignored.txt").write_text("still tracked\n", encoding="utf-8")
+            (repo / "substituted.txt").write_text("$Format:%H$\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+            subprocess.run(["git", "-C", str(repo), "commit", "-qm", "baseline"], check=True)
+            commit = subprocess.check_output(
+                ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
+            ).strip()
+            archive_path = pathlib.Path(directory) / "snapshot.tar"
+            with archive_path.open("w+b") as destination:
+                MODULE.write_exact_tree_archive(repo, commit, destination)
+            with tarfile.open(archive_path) as archive:
+                self.assertEqual(archive.extractfile("ignored.txt").read(), b"still tracked\n")
+                self.assertEqual(
+                    archive.extractfile("substituted.txt").read(),
+                    b"$Format:%H$\n",
+                )
 
     def test_remote_artifact_must_match_current_artifact_shape(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -15,6 +15,7 @@ import datetime as dt
 import fnmatch
 import fcntl
 import hashlib
+import io
 import json
 import os
 import pathlib
@@ -25,6 +26,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 from typing import Sequence
 
@@ -571,6 +573,87 @@ def remote_home(worker: str, transport_timeout: int) -> str:
     return home.rstrip("/")
 
 
+def write_exact_tree_archive(
+    repo: pathlib.Path,
+    commit: str,
+    destination,
+) -> None:
+    """Write committed blobs and modes without applying export or checkout attributes."""
+    tree = subprocess.run(
+        ["git", "-C", str(repo), "ls-tree", "-rz", "--full-tree", commit],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).stdout
+    cat = subprocess.Popen(
+        ["git", "-C", str(repo), "cat-file", "--batch"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    assert cat.stdin is not None
+    assert cat.stdout is not None
+    try:
+        with tarfile.open(
+            fileobj=destination,
+            mode="w|",
+            format=tarfile.PAX_FORMAT,
+            encoding="utf-8",
+            errors="surrogateescape",
+        ) as archive:
+            for record in tree.split(b"\0"):
+                if not record:
+                    continue
+                metadata, raw_path = record.split(b"\t", 1)
+                raw_mode, object_type, object_id = metadata.split(b" ", 2)
+                path = os.fsdecode(raw_path)
+                mode = int(raw_mode, 8)
+                info = tarfile.TarInfo(path)
+                info.uid = 0
+                info.gid = 0
+                info.uname = ""
+                info.gname = ""
+                info.mtime = 0
+                if object_type == b"commit":
+                    info.type = tarfile.DIRTYPE
+                    info.mode = 0o755
+                    archive.addfile(info)
+                    continue
+                if object_type != b"blob":
+                    raise RuntimeError(f"unsupported Git tree object type: {os.fsdecode(object_type)}")
+                cat.stdin.write(object_id + b"\n")
+                cat.stdin.flush()
+                header = cat.stdout.readline().rstrip(b"\n").split()
+                if len(header) != 3 or header[1] != b"blob":
+                    raise RuntimeError("could not read an exact blob from Git")
+                size = int(header[2])
+                content = cat.stdout.read(size)
+                terminator = cat.stdout.read(1)
+                if len(content) != size or terminator != b"\n":
+                    raise RuntimeError("Git returned a truncated blob")
+                if mode == 0o120000:
+                    info.type = tarfile.SYMTYPE
+                    info.mode = 0o777
+                    info.linkname = os.fsdecode(content)
+                    archive.addfile(info)
+                else:
+                    info.type = tarfile.REGTYPE
+                    info.mode = 0o755 if mode & 0o111 else 0o644
+                    info.size = size
+                    archive.addfile(info, io.BytesIO(content))
+        cat.stdin.close()
+        if cat.wait() != 0:
+            detail = (cat.stderr.read() if cat.stderr else b"").decode(errors="replace").strip()
+            raise RuntimeError(f"could not read exact Git tree: {detail}")
+    finally:
+        if cat.poll() is None:
+            cat.kill()
+            cat.wait()
+        for stream in (cat.stdin, cat.stdout, cat.stderr):
+            if stream is not None and not stream.closed:
+                stream.close()
+
+
 def stream_archive(
     worker: str,
     repo: pathlib.Path,
@@ -578,43 +661,38 @@ def stream_archive(
     remote_workspace: str,
     transport_timeout: int,
 ) -> None:
-    try:
-        mkdir = subprocess.run(
-            [*ssh_base(worker), f"mkdir -p {shlex.quote(remote_workspace)}"],
-            check=False,
-            timeout=transport_timeout,
-        )
-    except subprocess.TimeoutExpired as error:
-        raise RuntimeError("timed out while creating the worker workspace") from error
-    if mkdir.returncode:
-        raise RuntimeError("could not create the managed GB10 workspace")
-    archive = subprocess.Popen(["git", "-C", str(repo), "archive", "--format=tar", commit], stdout=subprocess.PIPE)
-    assert archive.stdout is not None
-    try:
-        extract = subprocess.run(
-            [*ssh_base(worker), f"tar -xf - -C {shlex.quote(remote_workspace)}"],
-            stdin=archive.stdout,
-            check=False,
-            timeout=transport_timeout,
-        )
-    except subprocess.TimeoutExpired as error:
-        archive.stdout.close()
-        archive.kill()
-        archive.wait()
-        raise RuntimeError("timed out while transferring the repository snapshot") from error
-    else:
-        archive.stdout.close()
-        archive_status = archive.wait()
-    if archive_status or extract.returncode:
+    with tempfile.TemporaryFile() as archive:
+        write_exact_tree_archive(repo, commit, archive)
+        archive.seek(0)
         try:
-            subprocess.run(
-                [*ssh_base(worker), f"rm -rf {shlex.quote(remote_workspace)}"],
+            mkdir = subprocess.run(
+                [*ssh_base(worker), f"mkdir -p {shlex.quote(remote_workspace)}"],
                 check=False,
                 timeout=transport_timeout,
             )
         except subprocess.TimeoutExpired as error:
-            raise RuntimeError("timed out while cleaning a failed repository transfer") from error
-        raise RuntimeError("failed to transfer the exact repository snapshot to GB10")
+            raise RuntimeError("timed out while creating the worker workspace") from error
+        if mkdir.returncode:
+            raise RuntimeError("could not create the managed GB10 workspace")
+        try:
+            extract = subprocess.run(
+                [*ssh_base(worker), f"tar -xf - -C {shlex.quote(remote_workspace)}"],
+                stdin=archive,
+                check=False,
+                timeout=transport_timeout,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError("timed out while transferring the repository snapshot") from error
+        if extract.returncode:
+            try:
+                subprocess.run(
+                    [*ssh_base(worker), f"rm -rf {shlex.quote(remote_workspace)}"],
+                    check=False,
+                    timeout=transport_timeout,
+                )
+            except subprocess.TimeoutExpired as error:
+                raise RuntimeError("timed out while cleaning a failed repository transfer") from error
+            raise RuntimeError("failed to transfer the exact repository snapshot to GB10")
 
 
 def copy_remote_artifact(
