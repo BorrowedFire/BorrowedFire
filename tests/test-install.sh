@@ -73,6 +73,35 @@ check "controller uninstall: modified tool preserved" grep -q 'user modification
 check "controller uninstall: unchanged policy removed" test ! -e "$UNINSTALL_COPY_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
 check "controller uninstall: modified tool de-owned" bash -c "! grep -q '^bf-route ' '$UNINSTALL_COPY_HOME/.local/share/borrowedfire/tools.manifest'"
 
+# copied controller updates never follow a replacement symlink
+TOOL_SYMLINK_HOME="$SB/tool-symlink-home"
+TOOL_SYMLINK_EXTERNAL="$SB/tool-symlink-external"
+mkdir -p "$TOOL_SYMLINK_HOME/.codex"
+PATH="$FAKEBIN:$PATH" HOME="$TOOL_SYMLINK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+cp "$TOOL_SYMLINK_HOME/.local/bin/bf-route" "$TOOL_SYMLINK_EXTERNAL"
+cp "$TOOL_SYMLINK_EXTERNAL" "$TOOL_SYMLINK_EXTERNAL.before"
+rm "$TOOL_SYMLINK_HOME/.local/bin/bf-route"
+"$REAL_LN" -s "$TOOL_SYMLINK_EXTERNAL" "$TOOL_SYMLINK_HOME/.local/bin/bf-route"
+PATH="$FAKEBIN:$PATH" HOME="$TOOL_SYMLINK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+check "controller fallback: replacement tool symlink preserved" test -L "$TOOL_SYMLINK_HOME/.local/bin/bf-route"
+check "controller fallback: replacement tool symlink target untouched" cmp -s "$TOOL_SYMLINK_EXTERNAL" "$TOOL_SYMLINK_EXTERNAL.before"
+check "controller fallback: replacement tool symlink de-owned" bash -c "! grep -q '^bf-route ' '$TOOL_SYMLINK_HOME/.local/share/borrowedfire/tools.manifest'"
+
+# packaged policy updates never follow a replacement symlink
+POLICY_SYMLINK_HOME="$SB/policy-symlink-home"
+POLICY_SYMLINK_EXTERNAL="$SB/policy-symlink-external"
+POLICY_SYMLINK_TARGET="$POLICY_SYMLINK_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
+mkdir -p "$POLICY_SYMLINK_HOME/.codex"
+PATH="$FAKEBIN:$PATH" HOME="$POLICY_SYMLINK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+cp "$POLICY_SYMLINK_TARGET" "$POLICY_SYMLINK_EXTERNAL"
+cp "$POLICY_SYMLINK_EXTERNAL" "$POLICY_SYMLINK_EXTERNAL.before"
+rm "$POLICY_SYMLINK_TARGET"
+"$REAL_LN" -s "$POLICY_SYMLINK_EXTERNAL" "$POLICY_SYMLINK_TARGET"
+PATH="$FAKEBIN:$PATH" HOME="$POLICY_SYMLINK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+check "controller fallback: replacement policy symlink preserved" test -L "$POLICY_SYMLINK_TARGET"
+check "controller fallback: replacement policy symlink target untouched" cmp -s "$POLICY_SYMLINK_EXTERNAL" "$POLICY_SYMLINK_EXTERNAL.before"
+check "controller fallback: replacement policy symlink de-owned" bash -c "! grep -q '^bf-route ' '$POLICY_SYMLINK_HOME/.local/share/borrowedfire/tools.manifest'"
+
 # --- 2. idempotence: re-run, doctrine block appears exactly once ---
 "$SRC/install.sh" --openclaw-workspace "$SB/openclaw-ws" >/dev/null 2>&1
 check "doctrine idempotent (1 block)"  test "$(grep -c 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md")" -eq 1

@@ -12,11 +12,17 @@ task_b64=${8:?missing encoded task}
 result_nonce=${9:?missing result nonce}
 task_timeout=${10:?missing task timeout}
 
+[[ "$repo_slug" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Invalid repository slug" >&2; exit 64; }
+[[ -d "$workspace" && ! -L "$workspace" ]] || {
+  echo "Refusing a missing or linked worker workspace" >&2
+  exit 64
+}
+home_real=$(cd "$HOME" && pwd -P)
+workspace=$(cd "$workspace" && pwd -P)
 case "$workspace" in
-  "$HOME/.cache/borrowedfire-route/"*) ;;
+  "$home_real/.cache/borrowedfire-route/$repo_slug/"*) ;;
   *) echo "Refusing workspace outside the managed route cache: $workspace" >&2; exit 64 ;;
 esac
-[[ "$repo_slug" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Invalid repository slug" >&2; exit 64; }
 [[ "$commit_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid commit SHA" >&2; exit 64; }
 [[ "$endpoint" =~ ^http://[A-Za-z0-9._-]+:([0-9]{1,5})/v1$ ]] || {
   echo "Invalid endpoint" >&2

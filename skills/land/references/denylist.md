@@ -23,6 +23,13 @@ These machine-readable rules are consumed by `bf-route` before it applies a gene
 them aligned with the authoritative categories above; project `denylist_extra` entries are added at
 runtime from the matching Prometheus project page.
 
+<!-- bf-route-path: ^install\.sh$ -->
+<!-- bf-route-path: ^tools/(?:bf-route|bf-local-agent-remote|install-local-agent-worker)$ -->
+<!-- bf-route-path: ^docker/codex-local(?:/|$) -->
+<!-- bf-route-path: ^skills/land/references/denylist\.md$ -->
+<!-- bf-route-path: ^skills/maintainer/SKILL\.md$ -->
+<!-- bf-route-path: ^doctrine/DOCTRINE\.md$ -->
+<!-- bf-route-path: ^\.github/workflows/skill-lint\.yml$ -->
 <!-- bf-route-path: (?:^|/)migrations?(?:/|$) -->
 <!-- bf-route-path: (?:^|/)(?:schema|rls)(?:[._/-]|$) -->
 <!-- bf-route-path: (?:^|/)(?:auth|authentication|authorization|sessions?|permissions?)(?:[._/-]|$) -->
