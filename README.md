@@ -102,7 +102,9 @@ Legacy `local-volume` / `local-large` rows that contain only an endpoint remain 
 router uses conservative timeout defaults and requires that each legacy endpoint expose exactly
 one model from `/v1/models`. To migrate an existing brain, add a `Controller SSH host` row under
 the `## Router settings` heading, using the SSH host or alias for that worker; model names and
-timeout rows do not need to be added.
+timeout rows do not need to be added. If only one local tier is configured, it serves both local
+routing roles. Repositories with Git submodules are rejected from local routing because their
+gitlink alone cannot produce an exact, self-contained snapshot.
 
 ```sh
 bf-route decide --task "Update these documentation headings"
