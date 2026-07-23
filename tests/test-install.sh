@@ -114,6 +114,23 @@ check "controller fallback: replacement policy symlink preserved" test -L "$POLI
 check "controller fallback: replacement policy symlink target untouched" cmp -s "$POLICY_SYMLINK_EXTERNAL" "$POLICY_SYMLINK_EXTERNAL.before"
 check "controller fallback: replacement policy symlink de-owned" bash -c "! grep -q '^bf-route ' '$POLICY_SYMLINK_HOME/.local/share/borrowedfire/tools.manifest'"
 
+# controller tool install never follows symlinked managed parent directories
+PARENT_SYMLINK_HOME="$SB/parent-symlink-home"
+PARENT_SYMLINK_EXTERNAL="$SB/parent-symlink-external"
+PARENT_SYMLINK_PATH="$PARENT_SYMLINK_HOME/.local/share/borrowedfire/tool-data/bf-route"
+mkdir -p "$PARENT_SYMLINK_HOME/.codex" \
+  "$(dirname "$PARENT_SYMLINK_PATH")" \
+  "$PARENT_SYMLINK_EXTERNAL"
+printf '%s\n' "user-owned policy" > "$PARENT_SYMLINK_EXTERNAL/denylist.md"
+cp "$PARENT_SYMLINK_EXTERNAL/denylist.md" "$PARENT_SYMLINK_EXTERNAL/denylist.md.before"
+"$REAL_LN" -s "$PARENT_SYMLINK_EXTERNAL" "$PARENT_SYMLINK_PATH"
+OUT="$(PATH="$FAKEBIN:$PATH" HOME="$PARENT_SYMLINK_HOME" "$SRC/install.sh" 2>&1)"
+check "controller parent guard: symlink preserved" test -L "$PARENT_SYMLINK_PATH"
+check "controller parent guard: external target untouched" \
+  cmp -s "$PARENT_SYMLINK_EXTERNAL/denylist.md" "$PARENT_SYMLINK_EXTERNAL/denylist.md.before"
+check "controller parent guard: tool install skipped" test ! -e "$PARENT_SYMLINK_HOME/.local/bin/bf-route"
+check "controller parent guard: skip reported" grep -q 'SKIP.*controller tool parent is a symlink' <<<"$OUT"
+
 # installer manifests are never read or written through symlinks
 MANIFEST_SYMLINK_HOME="$SB/manifest-symlink-home"
 MANIFEST_SYMLINK_EXTERNAL="$SB/manifest-symlink-external"
