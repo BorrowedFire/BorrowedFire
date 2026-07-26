@@ -12,8 +12,8 @@ secrets/signing, destructive operations, deploys/releases, and store submission.
 never widens the owner's existing authorization.
 
 **Fleet.** Let the active workflow and the private `config/fleet.md` choose eligible tiers.
-Judgment stays with the current capable harness; bounded volume work may use a configured local
-tier. Never hardcode private endpoints, caps, or provider policy.
+Judgment stays with the current capable harness; bounded volume work defaults to a configured
+local tier when one is available. Never hardcode private endpoints, caps, or provider policy.
 
 **Routing.**
 
