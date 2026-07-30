@@ -58,6 +58,7 @@ deleted).
 | [bootstrap](skills/bootstrap/SKILL.md) | Wire a new repo/app/idea into the system and register it in the brain. |
 | [qa-audit](skills/qa-audit/SKILL.md) | Bounded QA loop: feature inventory, test matrix, defects, safe fixes, confidence report. |
 | [signal](skills/signal/SKILL.md) | Marketing front door: route customer-facing copy through the Corey Haines Marketing Skills. |
+| [session-closeout](skills/session-closeout/SKILL.md) | Five-line honesty audit of requested, completed, missing, unasked, and unverified work. |
 
 ### How they fit together
 
@@ -81,7 +82,7 @@ context file. The high-risk denylist (always owner-gated) is defined once in
 ## Repo layout
 
 ```
-skills/            14 SKILL.md skills (+ agents/openai.yaml metadata, references/)
+skills/            15 SKILL.md skills (+ agents/openai.yaml metadata, references/)
 doctrine/          the managed context block install.sh distributes
 prometheus-template/  starting tree for your private brain repo
 install.sh         manifest-owned cross-harness installer

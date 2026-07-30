@@ -31,4 +31,5 @@ local tier when one is available. Never hardcode private endpoints, caps, or pro
 | register a new repo/app/idea | `bootstrap` |
 | bounded QA loop | `qa-audit` |
 | marketing / customer-facing copy | `signal` |
+| audit requested vs completed work at session end | `session-closeout` |
 <!-- END BORROWEDFIRE DOCTRINE -->
