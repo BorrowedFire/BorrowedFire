@@ -10,8 +10,9 @@ execute the best available checks, record defects, fix what is safe and in scope
 report confidence plus remaining risk.
 
 This skill is intentionally bounded. It is not a promise to test an entire codebase forever, and
-it should not become spreadsheet theater. The output is durable repo evidence in `qa/`, backed by
-real commands, app paths, screenshots, logs, test results, or review notes.
+it should not become spreadsheet theater. The output is durable repo evidence under the selected
+artifact directory (default `qa/`), backed by real commands, app paths, screenshots, logs, test
+results, or review notes.
 
 ## When to Use
 
@@ -47,14 +48,17 @@ Optional flags:
 | `--max-passes N` | 2 | Limit fix/regression loops. |
 | `--artifact-dir PATH` | `qa` | Write audit artifacts somewhere else. |
 
+`--no-fix` overrides `--fix-safe`. Resolve `<audit-dir>` once from `--artifact-dir` (default
+`qa`) and use that same path for every pass, artifact, and report.
+
 ## Required Artifacts
 
 Create or update these files in the repo unless the user asks for a different location:
 
-- `qa/feature-inventory.md` - entrypoints, screens/routes/endpoints/jobs/configs discovered from code.
-- `qa/test-matrix.md` - checks mapped to features, risk, method, owner/agent status, and evidence.
-- `qa/defects.md` - defects with severity, repro, evidence, status, fix commit if any, and regression result.
-- `qa/coverage-summary.md` - confidence, what was proven, what was not proven, residual risks, and next decisions.
+- `<audit-dir>/feature-inventory.md` - entrypoints, screens/routes/endpoints/jobs/configs discovered from code.
+- `<audit-dir>/test-matrix.md` - checks mapped to features, risk, method, owner/agent status, and evidence.
+- `<audit-dir>/defects.md` - defects with severity, repro, evidence, status, fix commit if any, and regression result.
+- `<audit-dir>/coverage-summary.md` - confidence, what was proven, what was not proven, residual risks, and next decisions.
 
 **Artifact policy:** artifacts are committed on the audit branch (they are the evidence trail).
 Whether they merge to the default branch is the owner's standing convention per repo — if
@@ -98,13 +102,16 @@ fix/regression pass:
 3. Mark lifecycle re-entry, async suspension, authorization identity/role, migration/legacy state,
    retention/deletion/cleanup, and retry/idempotency as `applicable`, `not applicable` with a
    reason, or `unverified`.
-4. Add the resulting state and negative paths to `qa/test-matrix.md`.
-5. Fix the smallest coherent invariant boundary, add regression coverage for each exposed
-   transition, and rerun focused plus adjacent-consumer checks.
+4. Add the resulting state and negative paths to `<audit-dir>/test-matrix.md`.
+5. When fixing is allowed, fix the smallest coherent invariant boundary, add regression coverage
+   for each exposed transition, and rerun focused plus adjacent-consumer checks. When `--no-fix`
+   is active, do not edit implementation or tests; record the candidate boundary, required
+   regressions, and missing proof in `<audit-dir>/defects.md` and
+   `<audit-dir>/coverage-summary.md`.
 
-A third related defect after this audit, an unbounded invariant, or a required
-product/security/architecture decision ends the pass and becomes a decision-ready escalation.
-Do not raise the pass limit or keep patching symptoms.
+A new validated related defect after this audit and a subsequent pass, an unbounded invariant, or
+a required product/security/architecture decision ends the pass and becomes a decision-ready
+escalation. Do not raise the pass limit or keep patching symptoms.
 
 ## Feature Inventory Heuristics
 
@@ -129,7 +136,7 @@ Use repo-native discovery before guesses:
 
 ## Fix Boundaries
 
-Allowed without another ask when `--fix-safe` is active:
+Allowed without another ask when `--fix-safe` is active and `--no-fix` is not:
 
 - Test fixes, obvious null/error handling, broken links/routes, validation gaps, copy typos,
   small UI state bugs, narrow regressions with clear evidence.
@@ -157,7 +164,7 @@ Final report should be short and evidence-first:
 
 ```
 QA Audit: <scope>
-Artifacts: qa/feature-inventory.md, qa/test-matrix.md, qa/defects.md, qa/coverage-summary.md
+Artifacts: <audit-dir>/feature-inventory.md, <audit-dir>/test-matrix.md, <audit-dir>/defects.md, <audit-dir>/coverage-summary.md
 
 Proven:
 - <feature/check -> evidence>

@@ -133,12 +133,12 @@ escalate decision-ready immediately. Do not spend another speculative review rou
 review cycles fail to converge** (each round still surfaces new findings in the same design
 area — classify every remaining finding as blocker / follow-up / out-of-scope, file the
 follow-ups with the analysis preserved, and escalate rather than continuing speculative fixes)
-· a **new related finding surfaces after the invariant audit and subsequent re-review**, showing
-the model is still incomplete · the **same finding recurs after a genuine fix** · cumulative fixes
-push the diff past **2× the frozen scope baseline** (files or non-test LOC from step 0) without an
-explicit owner scope expansion · the reviewer is silent ~60 min · any denylist trigger. These are
-hard stops, not suggestions — an owner who wants another round will say so; do not pre-spend it
-for them.
+· a **new validated related finding surfaces after the invariant audit and subsequent re-review**,
+showing the model is still incomplete · the **same finding recurs after a genuine fix** ·
+cumulative fixes push the diff past **2× the frozen scope baseline** (files or non-test LOC from
+step 0) without an explicit owner scope expansion · the reviewer is silent ~60 min · any denylist
+trigger. These are hard stops, not suggestions — an owner who wants another round will say so; do
+not pre-spend it for them.
 
 **9 · Live Proof Gate (gate #3) — pre-merge, not optional.** Prove the *exact final candidate*
 works through its real changed path. **Never infer a waiver from "review clean" or "tests pass."**

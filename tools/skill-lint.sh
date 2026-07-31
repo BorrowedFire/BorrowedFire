@@ -74,7 +74,27 @@ for m in remember recall digest; do
 done
 [ -f "$SKILLS_DIR/remember/references/brain-schema.md" ] || err "missing remember/references/brain-schema.md (recall + digest depend on it)"
 
-# 8. cross-skill duplicate trigger phrases (quoted strings in descriptions)
+# 8. workflow contracts that must survive review-loop edits
+LAND_SKILL="$SKILLS_DIR/land/SKILL.md"
+QA_AUDIT_SKILL="$SKILLS_DIR/qa-audit/SKILL.md"
+
+if ! body "$LAND_SKILL" | grep -qF 'new validated related finding surfaces after the invariant audit and subsequent re-review'; then
+  err "land: post-audit escalation must require a new validated related finding"
+fi
+
+if body "$QA_AUDIT_SKILL" | grep -qE 'qa/(feature-inventory|test-matrix|defects|coverage-summary)\.md'; then
+  err "qa-audit: artifact consumers must use <audit-dir>, not a hard-coded qa/ path"
+fi
+
+if ! body "$QA_AUDIT_SKILL" | grep -qF '`--no-fix` overrides `--fix-safe`'; then
+  err "qa-audit: --no-fix precedence is missing"
+fi
+
+if ! body "$QA_AUDIT_SKILL" | grep -qF 'When `--no-fix`'; then
+  err "qa-audit: invariant circuit breaker must preserve audit-only mode"
+fi
+
+# 9. cross-skill duplicate trigger phrases (quoted strings in descriptions)
 TMP="$(mktemp)"
 for dir in "$SKILLS_DIR"/*/; do
   name="$(basename "$dir")"

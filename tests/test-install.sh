@@ -177,6 +177,31 @@ rm -f "$CLONE/skills/ship/SKILL.md.bak"
 if "$CLONE/tools/skill-lint.sh" >/dev/null 2>&1; then fail "lint catches bad name"; else ok "lint catches bad name"; fi
 if "$CLONE/install.sh" >/dev/null 2>&1; then fail "install blocked by lint"; else ok "install blocked by lint"; fi
 
+# --- 11. workflow-contract regressions fail closed ---
+contract_lint_case() {
+  label="$1"
+  relative_file="$2"
+  edit_expression="$3"
+  contract_clone="$SB/contract-$label"
+  cp -R "$SRC" "$contract_clone"
+  sed -i.bak "$edit_expression" "$contract_clone/$relative_file"
+  rm -f "$contract_clone/$relative_file.bak"
+  if "$contract_clone/tools/skill-lint.sh" >/dev/null 2>&1; then
+    fail "contract lint: $label"
+  else
+    ok "contract lint: $label"
+  fi
+}
+
+contract_lint_case "post-audit-validation" "skills/land/SKILL.md" \
+  's/new validated related finding surfaces/new related finding surfaces/'
+contract_lint_case "artifact-root-routing" "skills/qa-audit/SKILL.md" \
+  's#<audit-dir>/test-matrix.md#qa/test-matrix.md#'
+contract_lint_case "no-fix-precedence" "skills/qa-audit/SKILL.md" \
+  's/`--no-fix` overrides `--fix-safe`/`--no-fix` and `--fix-safe`/'
+contract_lint_case "audit-only-mode" "skills/qa-audit/SKILL.md" \
+  's/When `--no-fix`/When audit-only mode/'
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 rm -rf "$SB"
