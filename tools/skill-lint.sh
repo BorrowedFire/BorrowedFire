@@ -86,11 +86,11 @@ if body "$QA_AUDIT_SKILL" | grep -qE 'qa/(feature-inventory|test-matrix|defects|
   err "qa-audit: artifact consumers must use <audit-dir>, not a hard-coded qa/ path"
 fi
 
-if ! body "$QA_AUDIT_SKILL" | grep -qF '`--no-fix` overrides `--fix-safe`'; then
+if ! body "$QA_AUDIT_SKILL" | grep -qF "\`--no-fix\` overrides \`--fix-safe\`"; then
   err "qa-audit: --no-fix precedence is missing"
 fi
 
-if ! body "$QA_AUDIT_SKILL" | grep -qF 'When `--no-fix`'; then
+if ! body "$QA_AUDIT_SKILL" | grep -qF "When \`--no-fix\`"; then
   err "qa-audit: invariant circuit breaker must preserve audit-only mode"
 fi
 

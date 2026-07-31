@@ -198,9 +198,9 @@ contract_lint_case "post-audit-validation" "skills/land/SKILL.md" \
 contract_lint_case "artifact-root-routing" "skills/qa-audit/SKILL.md" \
   's#<audit-dir>/test-matrix.md#qa/test-matrix.md#'
 contract_lint_case "no-fix-precedence" "skills/qa-audit/SKILL.md" \
-  's/`--no-fix` overrides `--fix-safe`/`--no-fix` and `--fix-safe`/'
+  "s/\`--no-fix\` overrides \`--fix-safe\`/\`--no-fix\` and \`--fix-safe\`/"
 contract_lint_case "audit-only-mode" "skills/qa-audit/SKILL.md" \
-  's/When `--no-fix`/When audit-only mode/'
+  "s/When \`--no-fix\`/When audit-only mode/"
 
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
