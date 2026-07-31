@@ -82,6 +82,10 @@ if ! body "$LAND_SKILL" | grep -qF 'new validated related finding surfaces after
   err "land: post-audit escalation must require a new validated related finding"
 fi
 
+if ! body "$LAND_SKILL" | grep -qF 'Only findings **eligible for in-loop fixing** under the frozen scope and release-branch rule'; then
+  err "land: related-finding audits must preserve release-branch eligibility"
+fi
+
 if body "$QA_AUDIT_SKILL" | grep -qE 'qa/(feature-inventory|test-matrix|defects|coverage-summary)\.md'; then
   err "qa-audit: artifact consumers must use <audit-dir>, not a hard-coded qa/ path"
 fi

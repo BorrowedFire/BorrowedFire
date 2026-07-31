@@ -113,6 +113,11 @@ a fact.*
 area** ends comment-by-comment patching before another review is requested. Pause edits and write a
 bounded invariant audit in the PR or land log:
 
+Only findings **eligible for in-loop fixing** under the frozen scope and release-branch rule in
+step 0 count toward this trigger. On a release/beta/hotfix/signing branch, group two or more related
+non-blockers into one main-branch follow-up that explicitly requires this invariant audit before
+implementation; do not expand or delay the release branch to perform it.
+
 1. Name the violated invariant and its authoritative owner/state transition.
 2. Enumerate every entry point and consumer, including lifecycle re-entry, async suspension,
    authorization identity/role, migration or legacy state, retention/deletion/cleanup, and

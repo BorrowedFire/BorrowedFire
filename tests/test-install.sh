@@ -195,6 +195,8 @@ contract_lint_case() {
 
 contract_lint_case "post-audit-validation" "skills/land/SKILL.md" \
   's/new validated related finding surfaces/new related finding surfaces/'
+contract_lint_case "release-branch-eligibility" "skills/land/SKILL.md" \
+  's/Only findings \*\*eligible for in-loop fixing\*\*/Only validated findings/'
 contract_lint_case "artifact-root-routing" "skills/qa-audit/SKILL.md" \
   's#<audit-dir>/test-matrix.md#qa/test-matrix.md#'
 contract_lint_case "no-fix-precedence" "skills/qa-audit/SKILL.md" \
