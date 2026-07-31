@@ -109,14 +109,35 @@ a fact.*
   review — "file missing" alongside "I checked that file".)
 - **Judgment / design / decision-record / product →** escalate decision-ready (below). Don't guess.
 
+**Related-finding circuit breaker (mandatory).** The **second validated finding in the same design
+area** ends comment-by-comment patching before another review is requested. Pause edits and write a
+bounded invariant audit in the PR or land log:
+
+1. Name the violated invariant and its authoritative owner/state transition.
+2. Enumerate every entry point and consumer, including lifecycle re-entry, async suspension,
+   authorization identity/role, migration or legacy state, retention/deletion/cleanup, and
+   retry/idempotency where applicable. Mark each dimension `applicable`, `not applicable` with a
+   reason, or `unverified`; never silently omit one.
+3. Build a state/negative-path matrix from those dimensions and inspect every runtime site that
+   reads, writes, caches, migrates, or deletes the state.
+4. Replace one-off patches with the smallest coherent invariant enforcement. Add a regression for
+   each newly exposed transition or negative path, then run the focused tests **and every adjacent
+   consumer suite**.
+5. Record the matrix, exact-head proof, and any intentionally unsupported state before re-requesting
+   review. The audit does not reset `--max-rounds`.
+
+If the invariant cannot be bounded or proven without a product/security/architecture decision,
+escalate decision-ready immediately. Do not spend another speculative review round.
+
 **8 · Circuit-breakers — stop and escalate when:** `--max-rounds` reached · **two consecutive
 review cycles fail to converge** (each round still surfaces new findings in the same design
 area — classify every remaining finding as blocker / follow-up / out-of-scope, file the
 follow-ups with the analysis preserved, and escalate rather than continuing speculative fixes)
-· the **same finding recurs after a genuine fix** · cumulative fixes push the diff past **2× the
-frozen scope baseline** (files or non-test LOC from step 0) without an explicit owner scope
-expansion · the reviewer is silent ~60 min · any denylist trigger. These are hard stops, not
-suggestions — an owner who wants another round will say so; do not pre-spend it for them.
+· a **third validated finding in an audited design area** shows the invariant model is still
+incomplete · the **same finding recurs after a genuine fix** · cumulative fixes push the diff past
+**2× the frozen scope baseline** (files or non-test LOC from step 0) without an explicit owner
+scope expansion · the reviewer is silent ~60 min · any denylist trigger. These are hard stops,
+not suggestions — an owner who wants another round will say so; do not pre-spend it for them.
 
 **9 · Live Proof Gate (gate #3) — pre-merge, not optional.** Prove the *exact final candidate*
 works through its real changed path. **Never infer a waiver from "review clean" or "tests pass."**

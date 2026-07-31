@@ -76,8 +76,8 @@ unstated, keep them on the audit branch/PR and ask once in the report.
    checks for the scoped surface. Prefer real app/browser/simulator/API execution over static
    guesses.
 6. **Log defects.** Every defect needs severity, affected feature, repro steps, expected/actual
-   behavior, evidence, and status. If evidence is weak, mark it "needs repro" instead of
-   pretending.
+   behavior, evidence, status, and suspected root invariant. If evidence is weak, mark it
+   "needs repro" instead of pretending.
 7. **Fix safe issues.** If fixing is allowed, only fix narrow, high-confidence issues inside
    scope. All fixes go on **one audit branch**; the branch lands through `land` (its gates, its
    denylist) — qa-audit never merges its own fixes. Avoid redesigns, product calls, or anything on
@@ -87,6 +87,24 @@ unstated, keep them on the audit branch/PR and ask once in the report.
 9. **Summarize.** Update `coverage-summary.md` with confidence, completed evidence, untested
    surfaces, open defects by severity, and decision-ready next steps. Capture recurring defect
    patterns via `remember` to `lessons/`.
+
+## Defect-Class Circuit Breaker
+
+The **second validated defect with the same root invariant** stops isolated fixes. Before another
+fix/regression pass:
+
+1. Name the invariant and the authoritative owner/state transition.
+2. Inventory every entry point and consumer.
+3. Mark lifecycle re-entry, async suspension, authorization identity/role, migration/legacy state,
+   retention/deletion/cleanup, and retry/idempotency as `applicable`, `not applicable` with a
+   reason, or `unverified`.
+4. Add the resulting state and negative paths to `qa/test-matrix.md`.
+5. Fix the smallest coherent invariant boundary, add regression coverage for each exposed
+   transition, and rerun focused plus adjacent-consumer checks.
+
+A third related defect after this audit, an unbounded invariant, or a required
+product/security/architecture decision ends the pass and becomes a decision-ready escalation.
+Do not raise the pass limit or keep patching symptoms.
 
 ## Feature Inventory Heuristics
 

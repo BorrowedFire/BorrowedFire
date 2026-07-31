@@ -172,7 +172,8 @@ check "adopted-link: uninstallable"    test ! -L "$HOME/.claude/skills/recall"
 # --- 10. negative lint test: broken skill fails lint + blocks install ---
 CLONE="$SB/clone"
 cp -R "$SRC" "$CLONE"
-sed -i 's/^name: ship$/name: shipp/' "$CLONE/skills/ship/SKILL.md"
+sed -i.bak 's/^name: ship$/name: shipp/' "$CLONE/skills/ship/SKILL.md"
+rm -f "$CLONE/skills/ship/SKILL.md.bak"
 if "$CLONE/tools/skill-lint.sh" >/dev/null 2>&1; then fail "lint catches bad name"; else ok "lint catches bad name"; fi
 if "$CLONE/install.sh" >/dev/null 2>&1; then fail "install blocked by lint"; else ok "install blocked by lint"; fi
 
