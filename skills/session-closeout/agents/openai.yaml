@@ -1,0 +1,7 @@
+interface:
+  display_name: "Session Closeout"
+  short_description: "Audit requested, completed, missing, and unverified work"
+  default_prompt: "Use $session-closeout to audit this task before ending the session."
+
+policy:
+  allow_implicit_invocation: true
