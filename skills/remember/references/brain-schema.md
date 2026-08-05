@@ -172,8 +172,10 @@ commit — it fails, and recall already reports the brain as stale. Reconcile ed
 by design, and rebasing one does not stop on the conflict: union absorbs it and corrupts
 silently. Duplicated
 frontmatter keys found on any pull are union-merge artifacts; digest repairs them under this same
-protocol. Union-merged pages are never stubbed or restructured wholesale; a duplicate registry
-page is listed under INDEX.md's needs-review instead.
+protocol. Union-merged pages are never stubbed in place during dedup or restructured wholesale —
+a duplicate registry page is listed under INDEX.md's needs-review instead. Inbox promotion's
+archived stub is different and stays as-is: a sanctioned whole-file `git mv` off the live path,
+per the caveat above.
 
 ## Degradation ladder (brain unreachable)
 

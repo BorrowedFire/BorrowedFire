@@ -23,13 +23,14 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
   summaries, `## Relations` edges, or settled log bullets only via the schema's **reconcile
   protocol**: clean tree and nothing unpushed, lock held, one page per commit, pushed
   immediately, dropped and redone on rejection (three rejections → drop for good and report).
-  Union-merged pages are never stubbed — list a duplicate registry page under INDEX.md's
-  needs-review instead. Inbox promotion is whole-file `git mv`, and only for inbox files older
-  than 1 day.
+  Union-merged pages are never stubbed in place during dedup — list a duplicate registry page
+  under INDEX.md's needs-review instead. Inbox promotion is unaffected: whole-file `git mv`
+  (including its archived-stub move), and only for inbox files older than 1 day.
 - **Never delete content during consolidation** — merge it. A page superseded by a merge becomes a
   stub (`status: archived`) whose body is one wikilink to the survivor, so inbound links keep
-  resolving (union-merged pages are never stubbed — see the caveat above). Git history is the true
-  backup; still, prefer archiving over deletion.
+  resolving (union-merged pages are never stubbed in place — see the caveat above; inbox
+  promotion's whole-file stub move is exempt). Git history is the true backup; still, prefer
+  archiving over deletion.
 - **Merges need evidence.** Dedupe `jane-doe` / `jane-d` only when page content confirms the same
   entity; otherwise tag both `needs-review` and list them in the report.
 - **Preserve timelines.** Merging appends log sections in date order, writer tags intact; never
