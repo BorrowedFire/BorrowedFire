@@ -28,7 +28,7 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
   than 1 day.
 - **Never delete content during consolidation** — merge it. A page superseded by a merge becomes a
   stub (`status: archived`) whose body is one wikilink to the survivor, so inbound links keep
-  resolving (union-merged pages are never stubbed — see the caveat below). Git history is the true
+  resolving (union-merged pages are never stubbed — see the caveat above). Git history is the true
   backup; still, prefer archiving over deletion.
 - **Merges need evidence.** Dedupe `jane-doe` / `jane-d` only when page content confirms the same
   entity; otherwise tag both `needs-review` and list them in the report.

@@ -148,22 +148,29 @@ stale summary paragraphs, and broken wikilinks in settled content on union-merge
 only by `digest`, under the digest lock, one page per commit:
 
 0. Precondition: clean tree and nothing unpushed (`git status --porcelain` empty,
-   `git log @{u}..` empty). Otherwise push or finish the batch first — or defer the reconcile.
+   `git log @{u}..` empty; with no remote, porcelain-empty alone). Otherwise push or finish the
+   batch first — or defer the reconcile.
 1. `git pull --rebase` immediately before the edit.
 2. Touch only settled content — frontmatter, the summary above `## Relations`/`## Log`,
    `## Relations` edge lines, or an existing log bullet needing link repair. Never delete a log
-   bullet, and never touch a **live append point**: the final log bullet (end of file), and on
-   `projects/` pages the line after `## Queue` where claims land.
+   bullet, and never touch a **live append point**: the final log bullet (end of file), on
+   `projects/` pages the line after `## Queue` where claims land — and on any union page, the
+   file's last content line, whatever it is.
 3. Commit the edit alone — `brain: digest reconcile <path> [<harness>@<host>]` — and `git push`
    immediately, before any other digest work.
 4. On push rejection, drop the edit (`git reset --hard HEAD~1`), `git pull --rebase`, and redo it
    from the fresh state — never carry an in-place union-path edit through a rebase. After three
-   rejections: drop the edit for good, list the page under INDEX.md's needs-review, and report.
-   Never leave a reconcile commit unpushed.
+   rejections: drop the edit for good, record it as a dated bullet on the day's `journal/` page
+   (append-only, durable) plus INDEX.md's needs-review list, and report. Never leave a reconcile
+   commit unpushed.
 
-A stranded unpushed `brain: digest reconcile` commit found at the start of ANY brain operation is
-dropped (`git reset --hard @{u}`) before pulling — reconcile edits are disposable by design, and
-rebasing one does not stop on the conflict: union absorbs it and corrupts silently. Duplicated
+A stranded unpushed `brain: digest reconcile` commit found at the start of any brain operation
+that will `git pull --rebase` (captures, digest runs, lock claims) is dropped before pulling —
+`git reset --hard @{u}` when it is the **only** unpushed commit; anything else unpushed beneath
+it → abort and report instead. `recall` is exempt: its `--ff-only` pull cannot rebase a stranded
+commit — it fails, and recall already reports the brain as stale. Reconcile edits are disposable
+by design, and rebasing one does not stop on the conflict: union absorbs it and corrupts
+silently. Duplicated
 frontmatter keys found on any pull are union-merge artifacts; digest repairs them under this same
 protocol. Union-merged pages are never stubbed or restructured wholesale; a duplicate registry
 page is listed under INDEX.md's needs-review instead.
