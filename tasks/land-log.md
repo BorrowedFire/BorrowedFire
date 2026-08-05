@@ -13,4 +13,11 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
   (precondition, Relations whitelist, both append points, retry bound, stranded-commit guard,
   no-stub rule). Core mechanics confirmed correct; no P1s. Follow-ups filed as a repo issue
   (test coverage for the protocol; template README scoping).
+- Round 3–4: verify pass caught one regression in the hardening (guard conscripted read-only
+  recall into a hard reset) — fixed with four P3 one-liners; Codex round 3 validated one
+  literal-reading defect in the no-stub rule — scoped to in-place dedup with the inbox
+  promotion exemption explicit. Final: adversarial CLEAN ×2, Codex clean @ `e2692f496b`.
+- Outcome: squash-merged as `4788afa` (2026-08-04). Live proof: reconcile protocol executed
+  against the real brain pre-merge. Follow-ups: issue #11 (protocol test coverage; template
+  README scoping; lock-claim blanket-reset precondition).
 - PR: https://github.com/BorrowedFire/BorrowedFire/pull/10
