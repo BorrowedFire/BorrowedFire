@@ -17,14 +17,19 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
   committer-date staleness at 2h, release in the same run even on failure). No lock, no
   restructuring.
 - **Respect the union-merge caveat** (schema §Sync): on `journal/`, `inbox/`, and `projects/`
-  paths, never delete `## Log` content and never touch the final log bullet — a concurrent append
-  landing in the same hunk resurrects deleted lines via union merge. Reconcile stale frontmatter,
-  summaries, or settled log bullets only via the schema's **reconcile protocol**: lock held, one
-  page per commit, pushed immediately, dropped and redone on rejection. Inbox promotion is
-  whole-file `git mv`, and only for inbox files older than 1 day.
+  paths, never delete `## Log` content and never touch a live append point — the final log
+  bullet, and on `projects/` pages the line after `## Queue` — since a concurrent change landing
+  in the same hunk duplicates or resurrects lines via union merge. Reconcile stale frontmatter,
+  summaries, `## Relations` edges, or settled log bullets only via the schema's **reconcile
+  protocol**: clean tree and nothing unpushed, lock held, one page per commit, pushed
+  immediately, dropped and redone on rejection (three rejections → drop for good and report).
+  Union-merged pages are never stubbed — list a duplicate registry page under INDEX.md's
+  needs-review instead. Inbox promotion is whole-file `git mv`, and only for inbox files older
+  than 1 day.
 - **Never delete content during consolidation** — merge it. A page superseded by a merge becomes a
   stub (`status: archived`) whose body is one wikilink to the survivor, so inbound links keep
-  resolving. Git history is the true backup; still, prefer archiving over deletion.
+  resolving (union-merged pages are never stubbed — see the caveat below). Git history is the true
+  backup; still, prefer archiving over deletion.
 - **Merges need evidence.** Dedupe `jane-doe` / `jane-d` only when page content confirms the same
   entity; otherwise tag both `needs-review` and list them in the report.
 - **Preserve timelines.** Merging appends log sections in date order, writer tags intact; never

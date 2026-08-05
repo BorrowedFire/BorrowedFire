@@ -144,20 +144,29 @@ stub), and only for inbox files **older than 1 day** — the writer-suffix namin
 file's path unique, and the age horizon keeps it clear of in-flight appends.
 
 **Reconcile protocol (digest-only exception to the caveat):** stale frontmatter (`updated:`),
-stale summary paragraphs, and broken wikilinks in settled log bullets on union-merged pages are
-fixed only by `digest`, under the digest lock, one page per commit:
+stale summary paragraphs, and broken wikilinks in settled content on union-merged pages are fixed
+only by `digest`, under the digest lock, one page per commit:
 
+0. Precondition: clean tree and nothing unpushed (`git status --porcelain` empty,
+   `git log @{u}..` empty). Otherwise push or finish the batch first — or defer the reconcile.
 1. `git pull --rebase` immediately before the edit.
-2. Touch only settled content — frontmatter, the summary above `## Relations`/`## Log`, or an
-   existing log bullet needing link repair. Never delete a log bullet, and never touch the final
-   log bullet: end-of-file is the live append point.
+2. Touch only settled content — frontmatter, the summary above `## Relations`/`## Log`,
+   `## Relations` edge lines, or an existing log bullet needing link repair. Never delete a log
+   bullet, and never touch a **live append point**: the final log bullet (end of file), and on
+   `projects/` pages the line after `## Queue` where claims land.
 3. Commit the edit alone — `brain: digest reconcile <path> [<harness>@<host>]` — and `git push`
    immediately, before any other digest work.
 4. On push rejection, drop the edit (`git reset --hard HEAD~1`), `git pull --rebase`, and redo it
-   from the fresh state — never carry an in-place union-path edit through a rebase.
+   from the fresh state — never carry an in-place union-path edit through a rebase. After three
+   rejections: drop the edit for good, list the page under INDEX.md's needs-review, and report.
+   Never leave a reconcile commit unpushed.
 
-Duplicated frontmatter keys found on any pull are union-merge artifacts; digest repairs them under
-this same protocol.
+A stranded unpushed `brain: digest reconcile` commit found at the start of ANY brain operation is
+dropped (`git reset --hard @{u}`) before pulling — reconcile edits are disposable by design, and
+rebasing one does not stop on the conflict: union absorbs it and corrupts silently. Duplicated
+frontmatter keys found on any pull are union-merge artifacts; digest repairs them under this same
+protocol. Union-merged pages are never stubbed or restructured wholesale; a duplicate registry
+page is listed under INDEX.md's needs-review instead.
 
 ## Degradation ladder (brain unreachable)
 

@@ -31,7 +31,7 @@ registry frontmatter, sync protocol, and degradation ladder. Do not invent conve
   `projects/` pages, append your line and touch *nothing else* — do not bump `updated:` or edit
   any frontmatter (two concurrent frontmatter edits on a `merge=union` path can concatenate into
   corrupt YAML). `digest` reconciles `updated:` under its lock via the schema's reconcile protocol
-(§Sync).
+  (§Sync).
 - **Link while you write.** Mention a known person/company/project → wikilink it. Stated relations
   ("Jane works at Acme") go under `## Relations` with a typed edge.
 - **Keep the user's words** in the log entry; add your own summary only in addition.
