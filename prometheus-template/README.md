@@ -42,5 +42,9 @@ brain).
 - This repo stays **private**. No secrets in it either way — reference where credentials live,
   never their values.
 - Never force-push, never rewrite history — history is the audit log.
-- Agents append; only `digest` restructures. Humans are welcome to edit anything — it's your
-  brain; run `digest` afterward to re-index.
+- Agents append; only `digest` restructures. It's your brain — edit non-union pages (`people/`,
+  `companies/`, `meetings/`, `decisions/`, `lessons/`, `notes/`) freely. On the union-merged
+  paths (`journal/`, `inbox/`, `projects/`) append instead of rewriting: an in-place edit there
+  can silently duplicate or resurrect lines when it races another machine's append. Route those
+  fixes through `digest`'s reconcile protocol (schema §Reconcile protocol), and run `digest`
+  afterward to re-index.

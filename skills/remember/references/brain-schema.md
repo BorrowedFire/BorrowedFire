@@ -202,9 +202,11 @@ Only one digest runs fleet-wide at a time. Cooperative lock via push-wins arbitr
 1. **Claim:** `git pull --rebase`; if `.locks/digest.md` exists → held, abort. Else commit the
    file (host + harness + ISO timestamp) and `git push`.
 2. **On push rejection:** `git fetch`, inspect the remote `.locks/digest.md`. If the remote has a
-   lock → someone else won: `git reset --hard @{u}` (drops the local claim) and abort. If the
-   remote has no lock (the rejection was an unrelated capture landing) → `git pull --rebase` and
-   push the claim again.
+   lock → someone else won — drop the local claim and abort: `git reset --hard @{u}` only when
+   the claim is the **only** unpushed commit; with anything else unpushed beneath it (e.g. a
+   push-pending capture), `git reset --hard HEAD~1` drops just the claim and leaves the rest to
+   sync on its normal retry. If the remote has no lock (the rejection was an unrelated capture
+   landing) → `git pull --rebase` and push the claim again.
 3. **Staleness:** a lock whose *committer date* (not local clock) is older than 2 hours may be
    deleted (commit + push the deletion, then re-claim from step 1).
 4. **Release:** delete the lock file, commit, push — in the same run that took it, even on failure.
