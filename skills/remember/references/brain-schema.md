@@ -135,15 +135,47 @@ the degradation ladder below, and report the conflict — never leave a brain cl
 never guess a hand-merge of someone else's content.
 
 **Union-merge caveat (binding on ALL writers):** union merge takes both sides of a conflicting
-hunk, so any in-place *edit* inside a union-merged path can collide with another writer's
-in-flight append — two concurrent edits of the same frontmatter line (e.g. both bumping
-`updated:`) can concatenate into duplicated, corrupt YAML. Therefore on `journal/`, `inbox/`, and
-`projects/` paths every writer is **strictly append-only, frontmatter included**: append your
-line, touch nothing else. `digest` reconciles `updated:` and other frontmatter under its lock.
-Digest additionally never edits these files in place at all: inbox promotion is **whole-file
-move** (`git mv` to the destination page or an `archive/` stub), and only for inbox files **older
-than 1 day** — the writer-suffix naming makes a moved file's path unique, and the age horizon
-keeps it clear of in-flight appends.
+hunk, so two writers editing the same line (e.g. both bumping `updated:`) concatenate into
+duplicated, corrupt YAML, and a rewrite that lands in the same hunk as another writer's in-flight
+append resurrects the lines it deleted. Therefore on `journal/`, `inbox/`, and `projects/` paths
+every writer is **strictly append-only, frontmatter included**: append your line, touch nothing
+else. Inbox promotion is **whole-file move** (`git mv` to the destination page or an `archive/`
+stub), and only for inbox files **older than 1 day** — the writer-suffix naming makes a moved
+file's path unique, and the age horizon keeps it clear of in-flight appends.
+
+**Reconcile protocol (digest-only exception to the caveat):** stale frontmatter (`updated:`),
+stale summary paragraphs, and broken wikilinks in settled content on union-merged pages are fixed
+only by `digest`, under the digest lock, one page per commit:
+
+0. Precondition: clean tree and nothing unpushed (`git status --porcelain` empty,
+   `git log @{u}..` empty; with no remote, porcelain-empty alone). Otherwise push or finish the
+   batch first — or defer the reconcile.
+1. `git pull --rebase` immediately before the edit.
+2. Touch only settled content — frontmatter, the summary above `## Relations`/`## Log`,
+   `## Relations` edge lines, or an existing log bullet needing link repair. Never delete a log
+   bullet, and never touch a **live append point**: the final log bullet (end of file), on
+   `projects/` pages the line after `## Queue` where claims land — and on any union page, the
+   file's last content line, whatever it is.
+3. Commit the edit alone — `brain: digest reconcile <path> [<harness>@<host>]` — and `git push`
+   immediately, before any other digest work.
+4. On push rejection, drop the edit (`git reset --hard HEAD~1`), `git pull --rebase`, and redo it
+   from the fresh state — never carry an in-place union-path edit through a rebase. After three
+   rejections: drop the edit for good, record it as a dated bullet on the day's `journal/` page
+   (append-only, durable) plus INDEX.md's needs-review list, and report. Never leave a reconcile
+   commit unpushed.
+
+A stranded unpushed `brain: digest reconcile` commit found at the start of any brain operation
+that will `git pull --rebase` (captures, digest runs, lock claims) is dropped before pulling —
+`git reset --hard @{u}` when it is the **only** unpushed commit; anything else unpushed beneath
+it → abort and report instead. `recall` is exempt: its `--ff-only` pull cannot rebase a stranded
+commit — it fails, and recall already reports the brain as stale. Reconcile edits are disposable
+by design, and rebasing one does not stop on the conflict: union absorbs it and corrupts
+silently. Duplicated
+frontmatter keys found on any pull are union-merge artifacts; digest repairs them under this same
+protocol. Union-merged pages are never stubbed in place during dedup or restructured wholesale —
+a duplicate registry page is listed under INDEX.md's needs-review instead. Inbox promotion's
+archived stub is different and stays as-is: a sanctioned whole-file `git mv` off the live path,
+per the caveat above.
 
 ## Degradation ladder (brain unreachable)
 
