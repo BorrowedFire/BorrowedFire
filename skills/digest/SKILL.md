@@ -16,9 +16,12 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
 - **Take the digest lock first** (schema §Digest lock: push-wins claim on `.locks/digest.md`,
   committer-date staleness at 2h, release in the same run even on failure). No lock, no
   restructuring.
-- **Respect the union-merge caveat** (schema §Sync): never edit `journal/`, `inbox/`, or
-  `projects/` files in place — in-flight appends from other writers would silently resurrect your
-  deletions. Inbox promotion is whole-file `git mv`, and only for inbox files older than 1 day.
+- **Respect the union-merge caveat** (schema §Sync): on `journal/`, `inbox/`, and `projects/`
+  paths, never delete `## Log` content and never touch the final log bullet — a concurrent append
+  landing in the same hunk resurrects deleted lines via union merge. Reconcile stale frontmatter,
+  summaries, or settled log bullets only via the schema's **reconcile protocol**: lock held, one
+  page per commit, pushed immediately, dropped and redone on rejection. Inbox promotion is
+  whole-file `git mv`, and only for inbox files older than 1 day.
 - **Never delete content during consolidation** — merge it. A page superseded by a merge becomes a
   stub (`status: archived`) whose body is one wikilink to the survivor, so inbound links keep
   resolving. Git history is the true backup; still, prefer archiving over deletion.
@@ -28,7 +31,8 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
   collapse dated bullets into an undated summary.
 - **Bounded pass.** Default budget: eligible inbox + outboxes + link repair + top dedup
   candidates. Leave a `needs-review` trail rather than running unbounded.
-- Commit in batches (`brain: digest YYYY-MM-DD [<harness>@<host>]`), push per the sync protocol.
+- Commit in batches (`brain: digest YYYY-MM-DD [<harness>@<host>]`), push per the sync protocol;
+  reconcile-protocol edits are the exception — one page per commit, pushed immediately.
 
 ## Flow
 

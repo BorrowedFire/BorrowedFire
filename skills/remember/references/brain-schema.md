@@ -135,15 +135,29 @@ the degradation ladder below, and report the conflict — never leave a brain cl
 never guess a hand-merge of someone else's content.
 
 **Union-merge caveat (binding on ALL writers):** union merge takes both sides of a conflicting
-hunk, so any in-place *edit* inside a union-merged path can collide with another writer's
-in-flight append — two concurrent edits of the same frontmatter line (e.g. both bumping
-`updated:`) can concatenate into duplicated, corrupt YAML. Therefore on `journal/`, `inbox/`, and
-`projects/` paths every writer is **strictly append-only, frontmatter included**: append your
-line, touch nothing else. `digest` reconciles `updated:` and other frontmatter under its lock.
-Digest additionally never edits these files in place at all: inbox promotion is **whole-file
-move** (`git mv` to the destination page or an `archive/` stub), and only for inbox files **older
-than 1 day** — the writer-suffix naming makes a moved file's path unique, and the age horizon
-keeps it clear of in-flight appends.
+hunk, so two writers editing the same line (e.g. both bumping `updated:`) concatenate into
+duplicated, corrupt YAML, and a rewrite that lands in the same hunk as another writer's in-flight
+append resurrects the lines it deleted. Therefore on `journal/`, `inbox/`, and `projects/` paths
+every writer is **strictly append-only, frontmatter included**: append your line, touch nothing
+else. Inbox promotion is **whole-file move** (`git mv` to the destination page or an `archive/`
+stub), and only for inbox files **older than 1 day** — the writer-suffix naming makes a moved
+file's path unique, and the age horizon keeps it clear of in-flight appends.
+
+**Reconcile protocol (digest-only exception to the caveat):** stale frontmatter (`updated:`),
+stale summary paragraphs, and broken wikilinks in settled log bullets on union-merged pages are
+fixed only by `digest`, under the digest lock, one page per commit:
+
+1. `git pull --rebase` immediately before the edit.
+2. Touch only settled content — frontmatter, the summary above `## Relations`/`## Log`, or an
+   existing log bullet needing link repair. Never delete a log bullet, and never touch the final
+   log bullet: end-of-file is the live append point.
+3. Commit the edit alone — `brain: digest reconcile <path> [<harness>@<host>]` — and `git push`
+   immediately, before any other digest work.
+4. On push rejection, drop the edit (`git reset --hard HEAD~1`), `git pull --rebase`, and redo it
+   from the fresh state — never carry an in-place union-path edit through a rebase.
+
+Duplicated frontmatter keys found on any pull are union-merge artifacts; digest repairs them under
+this same protocol.
 
 ## Degradation ladder (brain unreachable)
 
