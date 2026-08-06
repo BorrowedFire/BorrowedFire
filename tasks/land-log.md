@@ -21,3 +21,19 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
   against the real brain pre-merge. Follow-ups: issue #11 (protocol test coverage; template
   README scoping; lock-claim blanket-reset precondition).
 - PR: https://github.com/BorrowedFire/BorrowedFire/pull/10
+
+## 2026-08-05 — reconcile protocol test coverage + doc scopings (issue #11)
+- Item: https://github.com/BorrowedFire/BorrowedFire/issues/11 — live two-clone coverage for the
+  reconcile protocol (drop-and-redo, final-bullet adjacency + settled control, post-Queue append
+  point, stranded-commit guard, test 3 hardened to the schema's unconditional claim), template
+  README "edit anything" scoped to the union-merge caveat, and the addendum's only-unpushed-commit
+  precondition added to the digest-lock claim step 2.
+- Class: Autonomous (tests + docs; 3 files, +93/−8; denylist: no match; merge owner-gated per
+  instruction).
+- Gates at open: local CI parity green (skill-lint 15/15 · test-brain 46/46, up from 22/22 ·
+  test-install 63/63 · bash -n clean; shellcheck covered by CI).
+- Negative checks (labs on scratch copies, not the repo): guard's drop removed from test 11 →
+  "guard: single updated: key" FAILS (45/1); `projects/*.md merge=union` removed from the
+  template → new test 3 red on both checks while origin/main's test 3 stays green — the exact
+  blind spot issue #11 named.
+- Outcome: PR opened, driven to review-clean; merge stopped at the owner gate per instruction.
