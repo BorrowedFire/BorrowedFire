@@ -31,7 +31,7 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
 - Class: Autonomous (tests + docs; 3 files, +93/−8; denylist: no match; merge owner-gated per
   instruction).
 - Gates at open: local CI parity green (skill-lint 15/15 · test-brain 46/46, up from 22/22 ·
-  test-install 63/63 · bash -n clean; shellcheck via CI lane — not installed locally).
+  test-install 63/63 · bash -n clean; shellcheck covered by CI).
 - Negative checks (labs on scratch copies, not the repo): guard's drop removed from test 11 →
   "guard: single updated: key" FAILS (45/1); `projects/*.md merge=union` removed from the
   template → new test 3 red on both checks while origin/main's test 3 stays green — the exact
