@@ -42,6 +42,237 @@ act() { # act <description> <command...>: honor --dry-run
   [ "$DRY" -eq 1 ] || "$@"
 }
 
+tool_path_parents_safe() { # tool_path_parents_safe <managed-path>
+  local path="$1" home="${HOME%/}" parent relative component current
+  case "$path" in
+    "$home"/*) ;;
+    *) return 1 ;;
+  esac
+  parent="$(dirname "$path")"
+  relative="${parent#"$home"/}"
+  current="$home"
+  while [ -n "$relative" ]; do
+    component="${relative%%/*}"
+    current="$current/$component"
+    [ ! -L "$current" ] || return 1
+    if [ "$relative" = "$component" ]; then
+      relative=""
+    else
+      relative="${relative#*/}"
+    fi
+  done
+}
+
+manifest_mode() { # manifest_mode <manifest> <name> -> prints mode or nothing
+  [ -f "$1" ] && [ ! -L "$1" ] && awk -v n="$2" '$1 == n {print $2}' "$1"
+}
+manifest_set() { # manifest_set <manifest> <name> <mode>
+  local mf="$1" name="$2" mode="$3" tmp
+  [ ! -L "$mf" ] || {
+    echo "refusing linked manifest: $mf" >&2
+    return 1
+  }
+  mkdir -p "$(dirname "$mf")"
+  tmp="$(mktemp "$(dirname "$mf")/.borrowedfire-manifest.XXXXXX")" || return 1
+  [ -f "$mf" ] && awk -v n="$name" '$1 != n' "$mf" > "$tmp"
+  echo "$name $mode" >> "$tmp"
+  if sort -o "$tmp" "$tmp" && chmod 0600 "$tmp" && mv -f "$tmp" "$mf"; then
+    return 0
+  fi
+  rm -f "$tmp"
+  return 1
+}
+manifest_del() { # manifest_del <manifest> <name>
+  local mf="$1" name="$2" tmp
+  [ ! -L "$mf" ] || {
+    echo "refusing linked manifest: $mf" >&2
+    return 1
+  }
+  [ -f "$mf" ] || return 0
+  tmp="$(mktemp "$(dirname "$mf")/.borrowedfire-manifest.XXXXXX")" || return 1
+  if awk -v n="$name" '$1 != n' "$mf" > "$tmp" &&
+    chmod 0600 "$tmp" &&
+    mv -f "$tmp" "$mf"; then
+    return 0
+  fi
+  rm -f "$tmp"
+  return 1
+}
+
+copy_file_atomic() { # copy_file_atomic <src> <target> <mode>
+  local tmp
+  [ -f "$1" ] && [ ! -L "$1" ] && [ ! -L "$2" ] &&
+    tool_path_parents_safe "$2" || return 1
+  mkdir -p "$(dirname "$2")"
+  tool_path_parents_safe "$2" || return 1
+  tmp="$(mktemp "$(dirname "$2")/.borrowedfire-copy.XXXXXX")" || return 1
+  if cp "$1" "$tmp" && chmod "$3" "$tmp" && mv -f "$tmp" "$2"; then
+    return 0
+  fi
+  rm -f "$tmp"
+  return 1
+}
+
+copy_controller_tool() { # copy_controller_tool <src> <target> <copy-state> <policy-target> <policy-state>
+  local policy_src="$SRC/skills/land/references/denylist.md" destination
+  for destination in "$2" "$3" "$4" "$5"; do
+    [ ! -L "$destination" ] || return 1
+  done
+  copy_file_atomic "$1" "$2" 0755 &&
+    copy_file_atomic "$1" "$3" 0600 &&
+    copy_file_atomic "$policy_src" "$4" 0644 &&
+    copy_file_atomic "$policy_src" "$5" 0600
+}
+
+remove_owned_tool_policy() { # remove_owned_tool_policy <policy-target> <policy-state>
+  if [ -f "$1" ] && [ ! -L "$1" ] &&
+    [ -f "$2" ] && [ ! -L "$2" ] &&
+    cmp -s "$1" "$2"; then
+    rm -f "$1"
+  fi
+  rm -f "$2"
+}
+
+install_tool() { # install_tool <source-name> <target-name>
+  local src="$SRC/tools/$1" target="$HOME/.local/bin/$2"
+  local mf="$HOME/.local/share/borrowedfire/tools.manifest" owned target_ok policy_ok managed
+  local copy_state="$HOME/.local/share/borrowedfire/tool-copies/$2"
+  local policy_target="$HOME/.local/share/borrowedfire/tool-data/$2/denylist.md"
+  local policy_state="$HOME/.local/share/borrowedfire/tool-copies/$2.denylist"
+  for managed in "$target" "$mf" "$copy_state" "$policy_target" "$policy_state"; do
+    if ! tool_path_parents_safe "$managed"; then
+      say "  SKIP     $2 - controller tool parent is a symlink"
+      return 0
+    fi
+  done
+  if [ -L "$mf" ]; then
+    say "  SKIP     $2 - controller tool manifest is a symlink"
+    return 0
+  fi
+  owned="$(manifest_mode "$mf" "$2")"
+  if [ -L "$target" ] && [ "$(readlink "$target")" = "$src" ]; then
+    say "  ok       $2 (tool linked)"
+    if [ "$DRY" -eq 0 ] && [ "$owned" != link ]; then
+      mkdir -p "$(dirname "$mf")"
+      manifest_set "$mf" "$2" link
+      rm -f "$copy_state"
+      remove_owned_tool_policy "$policy_target" "$policy_state"
+    fi
+  elif [ "$owned" = link ] && [ -L "$target" ]; then
+    if [ "$DRY" -eq 1 ]; then
+      say "  repoint  $2 (controller tool)"
+    elif ln -sfn "$src" "$target" 2>/dev/null; then
+      say "  repoint  $2 (controller tool)"
+    else
+      rm -f "$target"
+      if copy_controller_tool "$src" "$target" "$copy_state" "$policy_target" "$policy_state"; then
+        say "  copy     $2 (symlink unsupported here)"
+        manifest_set "$mf" "$2" copy
+      else
+        echo "controller tool install failed: $2" >&2
+        return 1
+      fi
+    fi
+  elif [ "$owned" = copy ]; then
+    target_ok=0
+    policy_ok=0
+    if { [ ! -e "$target" ] && [ ! -L "$target" ]; } ||
+      { [ -f "$target" ] && [ ! -L "$target" ] &&
+        [ -f "$copy_state" ] && [ ! -L "$copy_state" ] &&
+        cmp -s "$target" "$copy_state"; }; then
+      target_ok=1
+    fi
+    if { [ ! -e "$policy_target" ] && [ ! -L "$policy_target" ]; } ||
+      { [ -f "$policy_target" ] && [ ! -L "$policy_target" ] &&
+        [ -f "$policy_state" ] && [ ! -L "$policy_state" ] &&
+        cmp -s "$policy_target" "$policy_state"; }; then
+      policy_ok=1
+    fi
+    if [ "$target_ok" -eq 1 ] && [ "$policy_ok" -eq 1 ] &&
+      [ -f "$copy_state" ] && [ ! -L "$copy_state" ] &&
+      [ -f "$policy_state" ] && [ ! -L "$policy_state" ]; then
+      if [ "$DRY" -eq 1 ]; then
+        say "  update   $2 (tool copy)"
+      elif copy_controller_tool "$src" "$target" "$copy_state" "$policy_target" "$policy_state"; then
+        say "  update   $2 (tool copy)"
+      else
+        echo "controller tool update failed: $2" >&2
+        return 1
+      fi
+    else
+      say "  LEAVE    $2 - copied controller tool or policy was modified; de-owning only"
+      if [ "$DRY" -eq 0 ]; then
+        remove_owned_tool_policy "$policy_target" "$policy_state"
+        rm -f "$copy_state"
+        manifest_del "$mf" "$2"
+      fi
+    fi
+  elif [ -e "$target" ] || [ -L "$target" ]; then
+    say "  SKIP     $2 - existing controller tool is not owned by Borrowed Fire"
+  else
+    if [ "$DRY" -eq 1 ]; then
+      say "  link     $2 (controller tool)"
+    else
+      mkdir -p "$HOME/.local/bin" "$(dirname "$mf")"
+      if ln -s "$src" "$target" 2>/dev/null; then
+        say "  link     $2 (controller tool)"
+        manifest_set "$mf" "$2" link
+        rm -f "$copy_state"
+        remove_owned_tool_policy "$policy_target" "$policy_state"
+      else
+        if copy_controller_tool "$src" "$target" "$copy_state" "$policy_target" "$policy_state"; then
+          say "  copy     $2 (symlink unsupported here)"
+          manifest_set "$mf" "$2" copy
+        else
+          echo "controller tool install failed: $2" >&2
+          return 1
+        fi
+      fi
+    fi
+  fi
+}
+
+remove_tool() { # remove_tool <source-name> <target-name>
+  local src="$SRC/tools/$1" target="$HOME/.local/bin/$2"
+  local mf="$HOME/.local/share/borrowedfire/tools.manifest" owned link_target managed
+  local copy_state="$HOME/.local/share/borrowedfire/tool-copies/$2"
+  local policy_target="$HOME/.local/share/borrowedfire/tool-data/$2/denylist.md"
+  local policy_state="$HOME/.local/share/borrowedfire/tool-copies/$2.denylist"
+  for managed in "$target" "$mf" "$copy_state" "$policy_target" "$policy_state"; do
+    if ! tool_path_parents_safe "$managed"; then
+      say "  SKIP     $2 - controller tool parent is a symlink"
+      return 0
+    fi
+  done
+  owned="$(manifest_mode "$mf" "$2")"
+  if [ "$owned" = link ] && [ -L "$target" ]; then
+    link_target="$(readlink "$target")"
+    if [ "$link_target" = "$src" ] || [ ! -e "$target" ]; then
+      act "remove   $2 (controller tool)" rm -f "$target"
+    else
+      say "  LEAVE    $2 - working controller symlink was replaced; de-owning only"
+    fi
+  elif [ "$owned" = link ] && { [ -e "$target" ] || [ -L "$target" ]; }; then
+    say "  LEAVE    $2 - controller tool is no longer an owned symlink; de-owning only"
+  elif [ "$owned" = copy ] &&
+    [ -f "$target" ] && [ ! -L "$target" ] &&
+    [ -f "$copy_state" ] && [ ! -L "$copy_state" ]; then
+    if cmp -s "$target" "$copy_state" &&
+      [ -f "$policy_target" ] && [ ! -L "$policy_target" ] &&
+      [ -f "$policy_state" ] && [ ! -L "$policy_state" ] &&
+      cmp -s "$policy_target" "$policy_state"; then
+      act "remove   $2 (controller tool copy)" rm -f "$target"
+    else
+      say "  LEAVE    $2 - copied controller tool or policy was modified; de-owning only"
+    fi
+  fi
+  if [ "$DRY" -eq 0 ]; then
+    remove_owned_tool_policy "$policy_target" "$policy_state"
+    rm -f "$copy_state"
+    manifest_del "$mf" "$2"
+  fi
+}
+
 # --- preflight: never distribute a broken skill set ---
 if [ "$UNINSTALL" -eq 0 ]; then
   if ! "$SRC/tools/skill-lint.sh" >/dev/null; then
@@ -65,26 +296,13 @@ if [ -n "$OPENCLAW_WS" ]; then
   fi
 fi
 if [ "${#HARNESSES[@]}" -eq 0 ]; then
+  if [ "$UNINSTALL" -eq 1 ]; then
+    remove_tool bf-route bf-route
+    exit 0
+  fi
   echo "no harnesses detected (looked for ~/.claude, ~/.codex, ~/.qwen; pass --openclaw-workspace for OpenClaw)" >&2
   exit 1
 fi
-
-manifest_mode() { # manifest_mode <manifest> <name> -> prints mode or nothing
-  [ -f "$1" ] && awk -v n="$2" '$1 == n {print $2}' "$1"
-}
-manifest_set() { # manifest_set <manifest> <name> <mode>
-  local mf="$1" name="$2" mode="$3" tmp
-  tmp="$(mktemp)"
-  [ -f "$mf" ] && awk -v n="$name" '$1 != n' "$mf" > "$tmp"
-  echo "$name $mode" >> "$tmp"
-  sort "$tmp" > "$mf" && rm -f "$tmp"
-}
-manifest_del() { # manifest_del <manifest> <name>
-  local mf="$1" name="$2" tmp
-  [ -f "$mf" ] || return 0
-  tmp="$(mktemp)"
-  awk -v n="$name" '$1 != n' "$mf" > "$tmp" && mv "$tmp" "$mf"
-}
 
 copy_skill() { # copy_skill <src> <tgt>: copy + drop the ownership marker inside
   rm -rf "$2" && cp -R "$1" "$2" && touch "$2/.borrowedfire-copy"
@@ -234,6 +452,16 @@ for row in "${HARNESSES[@]}"; do
   say "== $label ($sd)"
   [ "$DRY" -eq 1 ] || mkdir -p "$sd"
 
+  if [ -L "$mf" ]; then
+    say "  SKIP     skills - Borrowed Fire manifest is a symlink"
+    if [ "$UNINSTALL" -eq 1 ]; then
+      remove_doctrine "$cf"
+    else
+      update_doctrine "$cf"
+    fi
+    continue
+  fi
+
   if [ "$UNINSTALL" -eq 1 ]; then
     if [ -f "$mf" ]; then
       snap="$(mktemp)"; cp "$mf" "$snap"   # snapshot: remove_entry rewrites the manifest
@@ -278,13 +506,22 @@ for row in "${HARNESSES[@]}"; do
   update_doctrine "$cf"
 done
 
+# Controller-side routing tool. The GB10 remote helper is deployed explicitly
+# to worker hosts because ordinary harness machines must not pretend to be one.
+if [ "$UNINSTALL" -eq 0 ]; then
+  install_tool bf-route bf-route || exit 1
+else
+  remove_tool bf-route bf-route
+fi
+
 # --- brain pointer ---
 if [ "$UNINSTALL" -eq 0 ]; then
   ptr="$HOME/.config/borrowedfire/brain"
   if [ -n "$BRAIN" ]; then
     if [ -d "$BRAIN" ]; then
-      act "brain pointer -> $BRAIN" mkdir -p "$(dirname "$ptr")"
-      [ "$DRY" -eq 1 ] || printf '%s\n' "$BRAIN" > "$ptr"
+      brain_path=$(cd "$BRAIN" && pwd -P)
+      act "brain pointer -> $brain_path" mkdir -p "$(dirname "$ptr")"
+      [ "$DRY" -eq 1 ] || printf '%s\n' "$brain_path" > "$ptr"
     else
       echo "warning: --brain '$BRAIN' does not exist; pointer not written. Clone your brain repo there first (see prometheus-template/README.md)." >&2
     fi
