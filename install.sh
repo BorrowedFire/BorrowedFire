@@ -90,6 +90,35 @@ if [ "${#HARNESSES[@]}" -eq 0 ]; then
   exit 1
 fi
 
+# Bind an explicitly requested brain before automatic-learning doctrine can be
+# activated in any harness. A rejected or unwritable switch must not leave new
+# doctrine silently using an older pointer.
+if [ "$UNINSTALL" -eq 0 ] && [ -n "$BRAIN" ]; then
+  if ! is_prometheus_root "$BRAIN"; then
+    echo "error: --brain '$BRAIN' is not an exact Prometheus Git root with the required schema; installation aborted before doctrine changes." >&2
+    exit 1
+  fi
+  BRAIN="$(cd "$BRAIN" && pwd -P)"
+  ptr="$HOME/.config/borrowedfire/brain"
+  say "  brain pointer -> $BRAIN"
+  if [ "$DRY" -eq 0 ]; then
+    ptr_dir="$(dirname "$ptr")"
+    mkdir -p "$ptr_dir" || {
+      echo "error: brain pointer directory could not be created; installation aborted before doctrine changes." >&2
+      exit 1
+    }
+    ptr_tmp="$(mktemp "$ptr_dir/.brain.XXXXXX")" || {
+      echo "error: brain pointer staging file could not be created; installation aborted before doctrine changes." >&2
+      exit 1
+    }
+    if ! printf '%s\n' "$BRAIN" > "$ptr_tmp" || ! chmod 600 "$ptr_tmp" || ! mv -f "$ptr_tmp" "$ptr"; then
+      rm -f "$ptr_tmp"
+      echo "error: brain pointer could not be written atomically; installation aborted before doctrine changes." >&2
+      exit 1
+    fi
+  fi
+fi
+
 manifest_mode() { # manifest_mode <manifest> <name> -> prints mode or nothing
   [ -f "$1" ] && awk -v n="$2" '$1 == n {print $2}' "$1"
 }
@@ -442,17 +471,11 @@ fi
 # --- brain pointer ---
 if [ "$UNINSTALL" -eq 0 ]; then
   ptr="$HOME/.config/borrowedfire/brain"
-  if [ -n "$BRAIN" ]; then
-    if is_prometheus_root "$BRAIN"; then
-      BRAIN="$(cd "$BRAIN" && pwd -P)"
-      act "brain pointer -> $BRAIN" mkdir -p "$(dirname "$ptr")"
-      [ "$DRY" -eq 1 ] || printf '%s\n' "$BRAIN" > "$ptr"
-    else
-      echo "warning: --brain '$BRAIN' is not an exact Prometheus Git root with the required schema; pointer not written." >&2
-    fi
-  elif [ ! -f "$ptr" ] && is_prometheus_root "$HOME/prometheus"; then
+  if [ -z "$BRAIN" ] && [ ! -f "$ptr" ] && is_prometheus_root "$HOME/prometheus"; then
     act "brain pointer -> $HOME/prometheus" mkdir -p "$(dirname "$ptr")"
-    [ "$DRY" -eq 1 ] || printf '%s\n' "$HOME/prometheus" > "$ptr"
+    if [ "$DRY" -eq 0 ]; then
+      printf '%s\n' "$HOME/prometheus" > "$ptr" && chmod 600 "$ptr"
+    fi
   fi
 fi
 

@@ -12,6 +12,9 @@ fi
 if [ "${FAKE_OPENCLAW_FAIL_AGENTS_LIST:-0}" -eq 1 ] && [ "${1:-}" = "agents" ] && [ "${2:-}" = "list" ]; then
   exit 9
 fi
+if [ "${FAKE_OPENCLAW_FAIL_SKILLS_CHECK:-0}" -eq 1 ] && [ "${1:-}" = "skills" ] && [ "${2:-}" = "check" ]; then
+  exit 9
+fi
 if [ "${FAKE_OPENCLAW_FAIL_ENABLE_AFTER_COMMIT:-0}" -eq 1 ] && [ "${1:-}" = "cron" ] && [ "${2:-}" = "enable" ]; then
   exit 9
 fi
@@ -31,6 +34,30 @@ if [ "${1:-}" = "agents" ] && [ "${2:-}" = "list" ]; then
     printf '[{"id":"main","workspace":"%s"},{"id":"alternate","workspace":"%s"}]\n' \
       "${FAKE_OPENCLAW_WORKSPACE:?}" "${FAKE_OPENCLAW_ALT_WORKSPACE:-${FAKE_OPENCLAW_WORKSPACE:?}}"
   fi
+  exit 0
+fi
+if [ "${1:-}" = "skills" ] && [ "${2:-}" = "check" ]; then
+  agent="main"
+  previous=""
+  for value in "$@"; do
+    if [ "$previous" = "--agent" ]; then agent="$value"; fi
+    previous="$value"
+  done
+  if [ "$agent" = "alternate" ]; then
+    workspace="${FAKE_OPENCLAW_ALT_WORKSPACE:-${FAKE_OPENCLAW_WORKSPACE:?}}"
+  else
+    workspace="${FAKE_OPENCLAW_WORKSPACE:?}"
+  fi
+  if [ "${FAKE_OPENCLAW_SKILLS_HIDDEN:-0}" -eq 1 ]; then
+    visible='["recall","digest"]'
+  else
+    visible='["borrowedfire-learn","remember","recall","digest"]'
+  fi
+  python3 - "$agent" "$workspace" "$visible" <<'PY'
+import json
+import sys
+print(json.dumps({"agentId": sys.argv[1], "workspaceDir": sys.argv[2], "modelVisible": json.loads(sys.argv[3])}))
+PY
   exit 0
 fi
 if [ "${1:-}" = "message" ] && [ "${2:-}" = "send" ]; then
@@ -63,14 +90,55 @@ if [ "${1:-}" = "cron" ] && [ "${2:-}" = "list" ]; then
   if [ "${FAKE_OPENCLAW_LIST_TRUNCATED:-0}" -eq 1 ]; then
     printf '{"jobs":[{"id":"other-job","declarationKey":"other.declaration","enabled":true}],"total":201,"offset":0,"limit":200,"hasMore":true,"nextOffset":200}\n'
   else
-    printf '{"jobs":[{"id":"fixture-job","declarationKey":"borrowedfire.prometheus-learning.v1","agentId":"main","enabled":true}],"total":1,"offset":0,"limit":1,"hasMore":false,"nextOffset":null}\n'
+    python3 - "$OPENCLAW_ARGS_FILE" "${FAKE_OPENCLAW_DUPLICATE_DECLARATIONS:-0}" <<'PY'
+import json
+import sys
+
+lines = open(sys.argv[1], encoding="utf-8").read().splitlines()
+calls = []
+current = []
+for line in lines:
+    if line == "CALL":
+        if current:
+            calls.append(current)
+        current = []
+    else:
+        current.append(line)
+if current:
+    calls.append(current)
+removed = {call[2] for call in calls if len(call) >= 3 and call[:2] == ["cron", "rm"]}
+jobs = [
+    {
+        "id": "fixture-job",
+        "declarationKey": "borrowedfire.prometheus-learning.v1",
+        "agentId": "main",
+        "enabled": True,
+    }
+]
+if sys.argv[2] == "1":
+    jobs.append({
+        "id": "duplicate-job",
+        "declarationKey": "borrowedfire.prometheus-learning.v1",
+        "agentId": "alternate",
+        "enabled": True,
+    })
+jobs = [job for job in jobs if job["id"] not in removed]
+print(json.dumps({
+    "jobs": jobs,
+    "total": len(jobs),
+    "offset": 0,
+    "limit": 200,
+    "hasMore": False,
+    "nextOffset": None,
+}))
+PY
   fi
   exit 0
 fi
 if [ "${1:-}" = "cron" ] && [ "${2:-}" = "get" ]; then
   get_mismatch="${FAKE_OPENCLAW_GET_MISMATCH:-0}"
   [ "${FAKE_OPENCLAW_STALE_SESSION_KEY:-0}" -eq 0 ] || get_mismatch="session"
-  python3 - "$OPENCLAW_ARGS_FILE" "$get_mismatch" "${FAKE_OPENCLAW_POST_ENABLE_MISMATCH:-0}" <<'PY'
+  python3 - "$OPENCLAW_ARGS_FILE" "$get_mismatch" "${FAKE_OPENCLAW_POST_ENABLE_MISMATCH:-0}" "${3:-fixture-job}" <<'PY'
 import json
 import os
 import sys
@@ -118,7 +186,7 @@ else:
     tools_allow = last_value("--tools").replace(",", " ").split()
 
 print(json.dumps({
-    "id": "fixture-job",
+    "id": sys.argv[4],
     "declarationKey": "borrowedfire.prometheus-learning.v1",
     "name": last_value("--name"),
     "displayName": last_value("--display-name"),

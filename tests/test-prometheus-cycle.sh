@@ -42,6 +42,8 @@ check "uses DST-safe nightly default" grep -qx '35 3 \* \* \*' "$OPENCLAW_ARGS_F
 check "uses isolated session" grep -qx 'isolated' "$OPENCLAW_ARGS_FILE"
 check "clears stale explicit session keys" grep -qx -- '--clear-session-key' "$OPENCLAW_ARGS_FILE"
 check "binds the main agent by default" grep -qx 'main' "$OPENCLAW_ARGS_FILE"
+check "checks effective skill visibility" grep -qx 'skills' "$OPENCLAW_ARGS_FILE"
+check "checks skills for the exact agent" grep -qx -- '--agent' "$OPENCLAW_ARGS_FILE"
 check "creates disabled before alert setup" grep -qx -- '--disabled' "$OPENCLAW_ARGS_FILE"
 check "enables only after configuration" grep -qx 'enable' "$OPENCLAW_ARGS_FILE"
 check "removes unsupported expect-final flag" bash -c "! grep -qx -- '--expect-final' '$OPENCLAW_ARGS_FILE'"
@@ -84,6 +86,18 @@ else
   ok "restrictive payload tool allowlist fails closed"
 fi
 check "restrictive payload tool allowlist disables the job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+
+rm -f "$OPENCLAW_ARGS_FILE"
+if FAKE_OPENCLAW_SKILLS_HIDDEN=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "agent-hidden learning skill fails closed"
+else
+  ok "agent-hidden learning skill fails closed"
+fi
+check "hidden learning skill declares no job" bash -c "! grep -qx 'add' '$OPENCLAW_ARGS_FILE'"
+check "hidden learning skill disables the stale declaration" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "hidden learning skill verifies the stale declaration" grep -qx 'get' "$OPENCLAW_ARGS_FILE"
 
 rm -f "$OPENCLAW_ARGS_FILE"
 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
@@ -133,6 +147,20 @@ FAKE_OPENCLAW_ALT_WORKSPACE="$SB/openclaw-alt" \
   --notify-channel imessage --notify-to owner-route >/dev/null
 check "configured alternate agent converges" grep -qx 'alternate' "$OPENCLAW_ARGS_FILE"
 check "alternate workspace gets a distinct watermark" grep -Eq 'notes/openclaw-.+-alternate-openclaw-alt-[0-9a-f]{12}-ingest.md' "$OPENCLAW_ARGS_FILE"
+check "agent change disables the prior declaration" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "agent change removes the prior declaration" grep -qx 'rm' "$OPENCLAW_ARGS_FILE"
+
+rm -f "$OPENCLAW_ARGS_FILE"
+FAKE_OPENCLAW_DUPLICATE_DECLARATIONS=1 \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+check "duplicate declarations are both disabled" \
+  test "$(grep -c '^disable$' "$OPENCLAW_ARGS_FILE")" -eq 2
+check "duplicate declarations are both removed" \
+  test "$(grep -c '^rm$' "$OPENCLAW_ARGS_FILE")" -eq 2
+check "duplicate declaration cleanup converges one replacement" \
+  test "$(grep -c '^add$' "$OPENCLAW_ARGS_FILE")" -eq 1
 
 mkdir -p "$SB/host-one-bin" "$SB/host-two-bin"
 # shellcheck disable=SC2016  # write a literal fixture script that expands its own argument

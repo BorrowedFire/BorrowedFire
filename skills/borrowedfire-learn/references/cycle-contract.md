@@ -47,10 +47,11 @@ the audit trail for material captures. Do not add “ran successfully” journal
 
 ## Installation
 
-After installing Borrowed Fire skills into the OpenClaw workspace, run from the canonical public
-Borrowed Fire checkout:
+From the canonical public Borrowed Fire checkout, install copy-mode skills into the exact OpenClaw
+agent workspace, bind the private brain, and then declare the controller:
 
 ```sh
+./install.sh --copy --brain /absolute/path/to/prometheus --openclaw-workspace /absolute/path/to/openclaw-workspace
 ./tools/install-prometheus-cycle.sh --notify-channel <channel> --notify-to <owner-route>
 ```
 
@@ -59,7 +60,12 @@ OpenClaw job. It requires an explicit owner-notification destination and sends a
 route-verification message before enabling the job. A private host-local route hash includes the
 full controller binding and effective OpenClaw config digest, so profile, state/config, or default
 account changes require a fresh proof. It does not pin a model/provider; private fleet policy
-remains authoritative.
+remains authoritative. Before it mutates the scheduler, it also asks OpenClaw to prove that
+`borrowedfire-learn`, `remember`, `recall`, and `digest` are visible to the exact configured agent.
+Copy mode is the portable default for OpenClaw; a symlink install is accepted only when OpenClaw's
+effective trusted-target and agent-skill policies expose the same complete stack. Changing agents
+disables, removes, and verifies removal of the prior declaration before creating the replacement,
+so one declaration key cannot leave two nightly controllers enabled.
 
 Useful overrides:
 

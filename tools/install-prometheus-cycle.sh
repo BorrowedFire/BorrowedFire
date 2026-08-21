@@ -164,11 +164,12 @@ disable_job_and_verify() {
   job_enabled_state_is "$job_id" false
 }
 
-disable_existing_declaration() {
-  local list_output job_id
+read_declaration_inventory() {
+  local destination="$1" list_output
   list_output="$("$OPENCLAW_BIN" cron list --all --json)" || return 1
-  job_id="$(printf '%s' "$list_output" | python3 -c '
+  printf '%s' "$list_output" | python3 -c '
 import json
+import re
 import sys
 
 declaration_key = sys.argv[1]
@@ -192,16 +193,78 @@ matches = [
     if isinstance(job, dict)
     and job.get("declarationKey") == declaration_key
 ]
-if len(matches) > 1:
-    raise SystemExit(1)
-if matches:
-    job_id = matches[0].get("id")
-    if not isinstance(job_id, str) or not job_id.strip():
+for job in matches:
+    job_id = job.get("id")
+    agent_id = job.get("agentId")
+    if (
+        not isinstance(job_id, str)
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]*", job_id)
+        or not isinstance(agent_id, str)
+        or "\n" in agent_id
+        or "\t" in agent_id
+    ):
         raise SystemExit(1)
-    print(job_id.strip())
-' "$DECLARATION_KEY")" || return 1
-  [ -n "$job_id" ] || return 0
-  disable_job_and_verify "$job_id"
+    print(f"{job_id}\t{agent_id}")
+' "$DECLARATION_KEY" > "$destination"
+}
+
+disable_existing_declaration() {
+  local inventory job_id _agent_id failed=0
+  inventory="$(mktemp)" || return 1
+  if ! read_declaration_inventory "$inventory"; then
+    rm -f "$inventory"
+    return 1
+  fi
+  while IFS=$'\t' read -r job_id _agent_id; do
+    [ -n "$job_id" ] || continue
+    disable_job_and_verify "$job_id" || failed=1
+  done < "$inventory"
+  rm -f "$inventory"
+  [ "$failed" -eq 0 ]
+}
+
+declaration_is_absent_or_single_for_agent() {
+  local inventory expected_agent="$1" count=0 job_id agent_id matched=0
+  inventory="$(mktemp)" || return 1
+  if ! read_declaration_inventory "$inventory"; then
+    rm -f "$inventory"
+    return 1
+  fi
+  while IFS=$'\t' read -r job_id agent_id; do
+    [ -n "$job_id" ] || continue
+    count=$((count + 1))
+    [ "$agent_id" = "$expected_agent" ] && matched=1
+  done < "$inventory"
+  rm -f "$inventory"
+  [ "$count" -eq 0 ] || { [ "$count" -eq 1 ] && [ "$matched" -eq 1 ]; }
+}
+
+remove_existing_declarations() {
+  local inventory job_id _agent_id failed=0 remaining
+  inventory="$(mktemp)" || return 1
+  if ! read_declaration_inventory "$inventory"; then
+    rm -f "$inventory"
+    return 1
+  fi
+  while IFS=$'\t' read -r job_id _agent_id; do
+    [ -n "$job_id" ] || continue
+    if ! disable_job_and_verify "$job_id" ||
+       ! "$OPENCLAW_BIN" cron rm "$job_id" >/dev/null 2>&1; then
+      failed=1
+    fi
+  done < "$inventory"
+  rm -f "$inventory"
+  [ "$failed" -eq 0 ] || return 1
+  remaining="$(mktemp)" || return 1
+  if ! read_declaration_inventory "$remaining"; then
+    rm -f "$remaining"
+    return 1
+  fi
+  if [ -s "$remaining" ]; then
+    rm -f "$remaining"
+    return 1
+  fi
+  rm -f "$remaining"
 }
 
 fail_declaration_safely() {
@@ -280,6 +343,33 @@ fi
 AGENT_WORKSPACE="$(cd "$AGENT_WORKSPACE" && pwd -P)"
 if ! managed_learning_stack_matches "$AGENT_WORKSPACE"; then
   fail_declaration_safely 'Requested OpenClaw workspace lacks the exact installer-managed learning stack and doctrine from this checkout.'
+fi
+SKILLS_OUTPUT="$("$OPENCLAW_BIN" skills check --agent "$AGENT_ID" --json)" ||
+  fail_declaration_safely 'Effective OpenClaw skill visibility could not be inspected for the requested agent.'
+if ! printf '%s' "$SKILLS_OUTPUT" | python3 -c '
+import json
+import os
+import sys
+
+expected_agent, expected_workspace = sys.argv[1:]
+required = {"borrowedfire-learn", "remember", "recall", "digest"}
+try:
+    payload = json.load(sys.stdin)
+except (json.JSONDecodeError, OSError):
+    raise SystemExit(1)
+visible = payload.get("modelVisible") if isinstance(payload, dict) else None
+if (
+    not isinstance(payload, dict)
+    or payload.get("agentId") != expected_agent
+    or not isinstance(payload.get("workspaceDir"), str)
+    or os.path.realpath(payload["workspaceDir"]) != os.path.realpath(expected_workspace)
+    or not isinstance(visible, list)
+    or not all(isinstance(item, str) for item in visible)
+    or not required.issubset(set(visible))
+):
+    raise SystemExit(1)
+' "$AGENT_ID" "$AGENT_WORKSPACE"; then
+  fail_declaration_safely 'The requested agent cannot see the complete learning skill stack; use a copy install or configure trusted symlink targets and agent skill visibility.'
 fi
 
 resolve_host_name() {
@@ -490,6 +580,12 @@ ARGS=(
   --message "$MESSAGE"
   --json
 )
+
+if ! declaration_is_absent_or_single_for_agent "$AGENT_ID"; then
+  if ! remove_existing_declarations; then
+    fail_declaration_safely 'Existing declaration-key jobs could not be safely migrated to the requested agent.'
+  fi
+fi
 
 STATUS_OUTPUT="$("$OPENCLAW_BIN" cron status --json)" ||
   fail_declaration_safely 'OpenClaw scheduler status could not be inspected; no job was declared.'

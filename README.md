@@ -85,13 +85,15 @@ For genuinely unattended improvement, install the nightly controller on exactly 
 OpenClaw host after installing its workspace skills:
 
 ```sh
+./install.sh --copy --brain /absolute/path/to/prometheus --openclaw-workspace /absolute/path/to/openclaw-workspace
 ./tools/install-prometheus-cycle.sh --notify-channel <channel> --notify-to <owner-route>
 ```
 
 It declares one idempotent job at 03:35 America/New_York by default, does not pin a provider/model,
 binds the OpenClaw `main` agent unless overridden with `--agent`, requires a concrete owner route,
-enables only after a one-time live route proof and scheduler-level failure-alert verification, and
-remains silent on routine success or a no-op. See
+verifies the complete learning stack is visible to that exact agent, migrates the declaration when
+the agent changes, enables only after a one-time live route proof and scheduler-level failure-alert
+verification, and remains silent on routine success or a no-op. See
 [`skills/borrowedfire-learn/references/cycle-contract.md`](skills/borrowedfire-learn/references/cycle-contract.md).
 
 ## Repo layout

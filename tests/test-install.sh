@@ -85,6 +85,36 @@ touch "$HOME/prometheus/INDEX.md" "$HOME/prometheus/config/fleet.md"
 "$SRC/install.sh" >/dev/null 2>&1
 check "schema-valid brain without helper template is accepted" \
   grep -q "$HOME/prometheus" "$HOME/.config/borrowedfire/brain"
+check "explicit brain pointer is owner-private" \
+  test "$(stat -c '%a' "$HOME/.config/borrowedfire/brain" 2>/dev/null || stat -f '%Lp' "$HOME/.config/borrowedfire/brain" 2>/dev/null)" = 600
+
+INVALID_BRAIN_HOME="$SB/invalid-explicit-brain-home"
+mkdir -p "$INVALID_BRAIN_HOME/.codex" "$INVALID_BRAIN_HOME/.config/borrowedfire"
+printf '%s\n' "$HOME/prometheus" > "$INVALID_BRAIN_HOME/.config/borrowedfire/brain"
+if HOME="$INVALID_BRAIN_HOME" "$SRC/install.sh" --brain "$SB/not-a-brain" >/dev/null 2>&1; then
+  fail "invalid explicit brain fails before install"
+else
+  ok "invalid explicit brain fails before install"
+fi
+check "invalid explicit brain leaves prior pointer intact" \
+  grep -qxF "$HOME/prometheus" "$INVALID_BRAIN_HOME/.config/borrowedfire/brain"
+check "invalid explicit brain installs no skills" test ! -e "$INVALID_BRAIN_HOME/.codex/skills"
+check "invalid explicit brain installs no doctrine" test ! -e "$INVALID_BRAIN_HOME/.codex/AGENTS.md"
+
+PARTIAL_HOME="$SB/partial-install-home"
+mkdir -p "$PARTIAL_HOME/.codex/skills/borrowedfire-learn" "$PARTIAL_HOME/.config/borrowedfire"
+echo foreign > "$PARTIAL_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
+printf '%s\n' "$SB/old-brain" > "$PARTIAL_HOME/.config/borrowedfire/brain"
+CANONICAL_TEST_BRAIN="$(cd "$HOME/prometheus" && pwd -P)"
+if HOME="$PARTIAL_HOME" "$SRC/install.sh" --brain "$CANONICAL_TEST_BRAIN" >/dev/null 2>&1; then
+  fail "partial harness failure remains nonzero after brain switch"
+else
+  ok "partial harness failure remains nonzero after brain switch"
+fi
+check "valid requested brain is bound before partial harness failure" \
+  grep -qxF "$CANONICAL_TEST_BRAIN" "$PARTIAL_HOME/.config/borrowedfire/brain"
+check "partial harness failure never retains stale automatic doctrine" bash -c \
+  "! grep -q 'run \`borrowedfire-learn\` automatically' '$PARTIAL_HOME/.codex/AGENTS.md'"
 
 NESTED_HOME="$SB/nested-brain-home"
 mkdir -p "$NESTED_HOME/.codex" "$NESTED_HOME/prometheus/config" "$NESTED_HOME/prometheus/projects"
