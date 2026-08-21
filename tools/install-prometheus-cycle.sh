@@ -387,6 +387,31 @@ CHANNEL_STATUS_OUTPUT="$("$OPENCLAW_BIN" channels status --json)" ||
   fail_declaration_safely 'Effective notification-channel account status could not be inspected.'
 OPENCLAW_VERSION_OUTPUT="$("$OPENCLAW_BIN" --version)" ||
   fail_declaration_safely 'OpenClaw runtime version could not be inspected.'
+OPENCLAW_BASE_HOME="${OPENCLAW_HOME:-$HOME}"
+OPENCLAW_CONFIG_FILE_OUTPUT="$("$OPENCLAW_BIN" config file)" ||
+  fail_declaration_safely 'Active OpenClaw config path could not be inspected.'
+OPENCLAW_ACTIVE_CONFIG_PATH="$(printf '%s' "$OPENCLAW_CONFIG_FILE_OUTPUT" | python3 -c '
+import os
+import re
+import sys
+
+base_home = os.path.realpath(os.path.abspath(os.path.expanduser(sys.argv[1])))
+ansi = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+lines = [ansi.sub("", line).strip() for line in sys.stdin.read().splitlines()]
+lines = [line for line in lines if line]
+if not lines:
+    raise SystemExit(1)
+value = lines[-1]
+if value == "~":
+    value = base_home
+elif value.startswith("~/"):
+    value = os.path.join(base_home, value[2:])
+elif not os.path.isabs(value):
+    raise SystemExit(1)
+print(os.path.realpath(os.path.abspath(value)))
+' "$OPENCLAW_BASE_HOME")" || {
+  fail_declaration_safely 'OpenClaw returned no single valid active config path.'
+}
 EFFECTIVE_ROUTE_STATE="$(python3 - "$AGENT_ID" "$NOTIFY_CHANNEL" "$AGENT_BINDINGS_OUTPUT" \
   "$CHANNEL_CONFIG_OUTPUT" "$CHANNEL_STATUS_OUTPUT" "$OPENCLAW_VERSION_OUTPUT" <<'PY'
 import hashlib
@@ -533,11 +558,10 @@ HOST_NAME="$(resolve_host_name)" ||
   fail_declaration_safely 'Stable host name could not be resolved; no job was declared.'
 MACHINE_ID="$(resolve_machine_identity)" ||
   fail_declaration_safely 'Stable machine identity could not be resolved; no job was declared.'
-OPENCLAW_BASE_HOME="${OPENCLAW_HOME:-$HOME}"
 OPENCLAW_PROFILE_NAME="${OPENCLAW_PROFILE:-default}"
 CONTROLLER_BINDING="$(python3 - "$HOST_NAME" "$MACHINE_ID" "$AGENT_ID" "$AGENT_WORKSPACE" \
-  "$OPENCLAW_BASE_HOME" "${OPENCLAW_STATE_DIR:-}" "${OPENCLAW_CONFIG_PATH:-}" \
-  "$OPENCLAW_PROFILE_NAME" "$EFFECTIVE_ROUTE_CONFIG_DIGEST" <<'PY'
+  "$OPENCLAW_BASE_HOME" "${OPENCLAW_STATE_DIR:-}" "$OPENCLAW_PROFILE_NAME" \
+  "$OPENCLAW_ACTIVE_CONFIG_PATH" "$EFFECTIVE_ROUTE_CONFIG_DIGEST" <<'PY'
 import hashlib
 import os
 import re
@@ -556,8 +580,8 @@ agent_id = sys.argv[3]
 workspace = os.path.realpath(sys.argv[4])
 base_home = os.path.realpath(os.path.expanduser(sys.argv[5]))
 state_override = sys.argv[6].strip()
-config_override = sys.argv[7].strip()
-profile = sys.argv[8].strip() or "default"
+profile = sys.argv[7].strip() or "default"
+config_path = os.path.realpath(os.path.abspath(sys.argv[8]))
 effective_route_config_digest = sys.argv[9]
 
 def resolve_openclaw_path(value):
@@ -572,19 +596,7 @@ if state_override:
 else:
     suffix = "" if profile.lower() == "default" else f"-{profile}"
     state_dir = os.path.join(base_home, f".openclaw{suffix}")
-    legacy_dir = os.path.join(base_home, ".clawdbot")
-    if not suffix and not os.path.exists(state_dir) and os.path.exists(legacy_dir):
-        state_dir = legacy_dir
     state_dir = os.path.realpath(state_dir)
-if config_override:
-    config_path = resolve_openclaw_path(config_override)
-else:
-    config_candidates = [
-        os.path.join(state_dir, "openclaw.json"),
-        os.path.join(state_dir, "clawdbot.json"),
-    ]
-    config_path = next((path for path in config_candidates if os.path.exists(path)), config_candidates[0])
-    config_path = os.path.realpath(config_path)
 host = slug(host_name, 64)
 agent = slug(agent_id, 48)
 workspace_name = slug(os.path.basename(workspace), 64)
@@ -815,9 +827,8 @@ PY
   fail_job_safely 'Could not derive the private notification-route proof.'
 }
 
-STORED_ROUTE_HASH=""
 if [ -e "$ROUTE_PROOF_FILE" ] || [ -L "$ROUTE_PROOF_FILE" ]; then
-  STORED_ROUTE_HASH="$(python3 - "$ROUTE_PROOF_FILE" <<'PY'
+  if ! python3 - "$ROUTE_PROOF_FILE" <<'PY'
 import os
 import stat
 import sys
@@ -834,36 +845,34 @@ try:
         value = handle.read().strip()
 except OSError:
     raise SystemExit(1)
-print(value)
 PY
-)" || {
+  then
     fail_job_safely 'Existing notification-route proof is unsafe or unreadable.'
-  }
+  fi
 fi
 
-if [ "$STORED_ROUTE_HASH" != "$ROUTE_HASH" ]; then
-  PROOF_DIR="$(dirname "$ROUTE_PROOF_FILE")"
-  mkdir -p "$PROOF_DIR" || {
-    fail_job_safely 'Could not prepare notification-route proof storage.'
-  }
-  PROOF_TMP="$(mktemp "$PROOF_DIR/.prometheus-learning-route.XXXXXX")" || {
-    fail_job_safely 'Could not prepare notification-route proof storage.'
-  }
-  if ! chmod 600 "$PROOF_TMP"; then
+PROOF_DIR="$(dirname "$ROUTE_PROOF_FILE")"
+mkdir -p "$PROOF_DIR" || {
+  fail_job_safely 'Could not prepare notification-route proof storage.'
+}
+PROOF_TMP="$(mktemp "$PROOF_DIR/.prometheus-learning-route.XXXXXX")" || {
+  fail_job_safely 'Could not prepare notification-route proof storage.'
+}
+if ! chmod 600 "$PROOF_TMP"; then
+  rm -f "$PROOF_TMP"
+  fail_job_safely 'Could not prepare notification-route proof storage.'
+fi
+PROBE_MESSAGE="Prometheus learning notifications are configured on this host. This verifies the route for the current controller configuration."
+PROBE_OUTPUT="$("$OPENCLAW_BIN" message send \
+  --channel "$NOTIFY_CHANNEL" \
+  --target "$NOTIFY_TO" \
+  --account "$NOTIFY_ACCOUNT" \
+  --message "$PROBE_MESSAGE" \
+  --json)" || {
     rm -f "$PROOF_TMP"
-    fail_job_safely 'Could not prepare notification-route proof storage.'
-  fi
-  PROBE_MESSAGE="Prometheus learning notifications are configured on this host. This is a one-time route verification."
-  PROBE_OUTPUT="$("$OPENCLAW_BIN" message send \
-    --channel "$NOTIFY_CHANNEL" \
-    --target "$NOTIFY_TO" \
-    --account "$NOTIFY_ACCOUNT" \
-    --message "$PROBE_MESSAGE" \
-    --json)" || {
-      rm -f "$PROOF_TMP"
-      fail_job_safely 'Live notification-route verification failed.'
-    }
-  if ! printf '%s' "$PROBE_OUTPUT" | python3 -c '
+    fail_job_safely 'Live notification-route verification failed.'
+  }
+if ! printf '%s' "$PROBE_OUTPUT" | python3 -c '
 import json
 import sys
 
@@ -909,12 +918,12 @@ def explicitly_failed(value):
 if explicitly_failed(payload) or not acknowledged(payload):
     raise SystemExit(1)
 '; then
-    rm -f "$PROOF_TMP"
-    fail_job_safely 'Notification provider returned no message acknowledgement.'
-  fi
+  rm -f "$PROOF_TMP"
+  fail_job_safely 'Notification provider returned no message acknowledgement.'
+fi
 
-  if ! printf '%s\n' "$ROUTE_HASH" > "$PROOF_TMP" ||
-     ! python3 - "$PROOF_TMP" "$ROUTE_PROOF_FILE" "$ROUTE_HASH" <<'PY'
+if ! printf '%s\n' "$ROUTE_HASH" > "$PROOF_TMP" ||
+   ! python3 - "$PROOF_TMP" "$ROUTE_PROOF_FILE" "$ROUTE_HASH" <<'PY'
 import os
 import stat
 import sys
@@ -937,14 +946,11 @@ try:
 except OSError:
     raise SystemExit(1)
 PY
-  then
-    rm -f "$PROOF_TMP"
-    fail_job_safely 'Could not persist and verify notification-route proof.'
-  fi
-  printf 'Notification route verified with a live one-time message.\n'
-else
-  printf 'Notification route already has a matching host-local live proof.\n'
+then
+  rm -f "$PROOF_TMP"
+  fail_job_safely 'Could not persist and verify notification-route proof.'
 fi
+printf 'Notification route verified with a live convergence message.\n'
 
 if ! "$OPENCLAW_BIN" cron enable "$JOB_ID" >/dev/null; then
   fail_job_safely 'Enable failed.'

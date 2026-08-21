@@ -44,6 +44,46 @@ if [ "${1:-}" = "agents" ] && [ "${2:-}" = "bindings" ]; then
   printf '%s\n' "${FAKE_OPENCLAW_BINDINGS:-[]}"
   exit 0
 fi
+if [ "${1:-}" = "config" ] && [ "${2:-}" = "file" ]; then
+  if [ "${FAKE_OPENCLAW_FAIL_CONFIG_FILE:-0}" -eq 1 ]; then
+    exit 9
+  fi
+  if [ -n "${FAKE_OPENCLAW_CONFIG_FILE_OUTPUT:-}" ]; then
+    printf '%s\n' "$FAKE_OPENCLAW_CONFIG_FILE_OUTPUT"
+    exit 0
+  fi
+  if [ -n "${FAKE_OPENCLAW_CONFIG_FILE:-}" ]; then
+    printf '%s\n' "$FAKE_OPENCLAW_CONFIG_FILE"
+    exit 0
+  fi
+  base_home="${OPENCLAW_HOME:-$HOME}"
+  profile="${OPENCLAW_PROFILE:-default}"
+  if [ -n "${OPENCLAW_CONFIG_PATH:-}" ]; then
+    config_path="$OPENCLAW_CONFIG_PATH"
+  else
+    if [ -n "${OPENCLAW_STATE_DIR:-}" ]; then
+      state_dir="$OPENCLAW_STATE_DIR"
+    elif [ "$profile" = "default" ]; then
+      state_dir="$base_home/.openclaw"
+    else
+      state_dir="$base_home/.openclaw-$profile"
+    fi
+    config_path="$state_dir/openclaw.json"
+    if [ -f "$state_dir/openclaw.json" ]; then
+      config_path="$state_dir/openclaw.json"
+    elif [ -f "$state_dir/clawdbot.json" ]; then
+      config_path="$state_dir/clawdbot.json"
+    elif [ -z "${OPENCLAW_STATE_DIR:-}" ] && [ "$profile" = "default" ] &&
+         [ -f "$base_home/.clawdbot/openclaw.json" ]; then
+      config_path="$base_home/.clawdbot/openclaw.json"
+    elif [ -z "${OPENCLAW_STATE_DIR:-}" ] && [ "$profile" = "default" ] &&
+         [ -f "$base_home/.clawdbot/clawdbot.json" ]; then
+      config_path="$base_home/.clawdbot/clawdbot.json"
+    fi
+  fi
+  printf '%s\n' "$config_path"
+  exit 0
+fi
 if [ "${1:-}" = "config" ] && [ "${2:-}" = "get" ]; then
   if [ -n "${FAKE_OPENCLAW_CHANNEL_CONFIG:-}" ]; then
     printf '%s\n' "$FAKE_OPENCLAW_CHANNEL_CONFIG"

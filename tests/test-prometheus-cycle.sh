@@ -44,6 +44,7 @@ check "clears stale explicit session keys" grep -qx -- '--clear-session-key' "$O
 check "binds the main agent by default" grep -qx 'main' "$OPENCLAW_ARGS_FILE"
 check "checks effective skill visibility" grep -qx 'skills' "$OPENCLAW_ARGS_FILE"
 check "checks skills for the exact agent" grep -qx -- '--agent' "$OPENCLAW_ARGS_FILE"
+check "queries the active config path from OpenClaw" grep -qx 'file' "$OPENCLAW_ARGS_FILE"
 check "creates disabled before alert setup" grep -qx -- '--disabled' "$OPENCLAW_ARGS_FILE"
 check "converges a persistent recurring job" grep -qx -- '--keep-after-run' "$OPENCLAW_ARGS_FILE"
 check "enables only after configuration" grep -qx 'enable' "$OPENCLAW_ARGS_FILE"
@@ -108,7 +109,8 @@ rm -f "$OPENCLAW_ARGS_FILE"
 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null
-check "matching route is not probed twice" bash -c "! grep -qx 'message' '$OPENCLAW_ARGS_FILE'"
+check "matching stored route is re-probed on installer convergence" \
+  test "$(grep -c '^message$' "$OPENCLAW_ARGS_FILE")" -eq 1
 
 rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
 FAKE_OPENCLAW_BINDINGS='[{"agentId":"main","match":{"channel":"imessage","accountId":"ops"},"description":"imessage account=ops"}]' \
@@ -249,14 +251,17 @@ check "distinct OpenClaw config paths get distinct watermarks" \
 
 LEGACY_CONFIG_HOME="$SB/legacy-config-home"
 mkdir -p "$LEGACY_CONFIG_HOME/.openclaw"
-printf '%s\n' '{}' > "$LEGACY_CONFIG_HOME/.openclaw/clawdbot.json"
+mkdir -p "$LEGACY_CONFIG_HOME/.clawdbot"
+printf '%s\n' '{}' > "$LEGACY_CONFIG_HOME/.clawdbot/clawdbot.json"
 OPENCLAW_ARGS_FILE="$SB/legacy-config-args" OPENCLAW_HOME="$LEGACY_CONFIG_HOME" \
+  FAKE_OPENCLAW_CONFIG_FILE_OUTPUT="$(printf 'Doctor notice\n%s' "$LEGACY_CONFIG_HOME/.clawdbot/clawdbot.json")" \
   OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null
 LEGACY_CONFIG_WATERMARK="$(grep -Eo 'notes/openclaw-[^ ]+-ingest\.md' "$SB/legacy-config-args" | head -1)"
 printf '%s\n' '{}' > "$LEGACY_CONFIG_HOME/.openclaw/openclaw.json"
 OPENCLAW_ARGS_FILE="$SB/canonical-config-args" OPENCLAW_HOME="$LEGACY_CONFIG_HOME" \
+  FAKE_OPENCLAW_CONFIG_FILE="$LEGACY_CONFIG_HOME/.openclaw/openclaw.json" \
   OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null
@@ -264,8 +269,23 @@ CANONICAL_CONFIG_WATERMARK="$(grep -Eo 'notes/openclaw-[^ ]+-ingest\.md' "$SB/ca
 check "active legacy config path gets its own controller watermark" \
   test -n "$LEGACY_CONFIG_WATERMARK" -a -n "$CANONICAL_CONFIG_WATERMARK" -a \
   "$LEGACY_CONFIG_WATERMARK" != "$CANONICAL_CONFIG_WATERMARK"
+check "diagnostic lines before the active config path are tolerated" \
+  grep -qx 'message' "$SB/legacy-config-args"
 check "legacy-to-canonical config migration requires a fresh route probe" \
   grep -qx 'message' "$SB/canonical-config-args"
+
+rm -f "$OPENCLAW_ARGS_FILE"
+if FAKE_OPENCLAW_CONFIG_FILE_OUTPUT='not-a-path' \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "invalid active config path fails closed"
+else
+  ok "invalid active config path fails closed"
+fi
+check "invalid active config path disables the stale declaration" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "invalid active config path never declares a replacement" \
+  bash -c "! grep -qx 'add' '$OPENCLAW_ARGS_FILE'"
 
 CONFIG_DIGEST_PATH="$SB/controller-config.json"
 # shellcheck disable=SC2016  # $include is an intentional literal OpenClaw config key

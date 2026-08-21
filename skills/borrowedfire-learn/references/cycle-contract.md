@@ -56,15 +56,16 @@ agent workspace, bind the private brain, and then declare the controller:
 ```
 
 The installer resolves Prometheus with the standard pointer rules and declares one idempotent
-OpenClaw job. It requires an explicit owner-notification destination and sends a one-time live
-route-verification message before enabling the job. It resolves the account from the selected
+OpenClaw job. It requires an explicit owner-notification destination and sends one live
+route-verification message on every installer convergence before enabling the job. Credential-only
+changes cannot be fingerprinted safely from OpenClaw's redacted configuration, so a cached route
+hash is never substituted for this live check. It resolves the account from the selected
 agent's sole channel-wide binding or the channel's runtime default when bindings are scoped or
 ambiguous, then pins that same account on the probe, job delivery, and failure alert. It also
 converges the recurring job as persistent, clearing stale one-shot deletion state. A private
-host-local route hash includes the full controller binding, active canonical-or-legacy config path,
-resolved redacted channel configuration, account bindings/status, and OpenClaw version, so
-included-file, environment-substitution, profile, state/config, runtime, binding, or default-account
-changes require a fresh proof. It does not pin a model/provider; private fleet policy remains
+host-local route hash records the full controller binding, OpenClaw-reported active config path,
+resolved redacted channel configuration, account bindings/status, and OpenClaw version as an audit
+identity. It does not pin a model/provider; private fleet policy remains
 authoritative. Before it mutates the scheduler, it also asks OpenClaw to prove that
 `borrowedfire-learn`, `remember`, `recall`, and `digest` are visible to the exact configured agent.
 Copy mode is the portable default for OpenClaw; a symlink install is accepted only when OpenClaw's
