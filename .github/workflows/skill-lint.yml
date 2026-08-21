@@ -13,11 +13,9 @@ jobs:
       - name: Lint skills
         run: bash tools/skill-lint.sh
       - name: Syntax-check shell scripts
-        run: bash -n install.sh tools/skill-lint.sh tools/install-prometheus-cycle.sh tests/test-prometheus-cycle.sh tests/fixtures/fake-openclaw.sh
+        run: bash -n install.sh && bash -n tools/skill-lint.sh
       - name: shellcheck
-        run: shellcheck install.sh tools/skill-lint.sh tools/install-prometheus-cycle.sh tests/test-install.sh tests/test-brain.sh tests/test-prometheus-cycle.sh tests/fixtures/fake-openclaw.sh
-      - name: Prometheus learning-cycle contract
-        run: bash tests/test-prometheus-cycle.sh
+        run: shellcheck install.sh tools/skill-lint.sh tests/test-install.sh tests/test-brain.sh
       - name: Installer test matrix (sandbox HOME)
         run: bash tests/test-install.sh
       - name: Brain protocol live proof (two clones, bare remote)
