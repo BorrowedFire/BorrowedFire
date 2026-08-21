@@ -27,8 +27,10 @@ The fleet worker must:
 5. use `remember` for writes and `digest` for restructuring;
 6. avoid product-repo, account, credential, deployment, release, store, skill, doctrine, and
    scheduler mutations;
-7. avoid routine notifications; notify the owner only for actionable conflicts, failures, or
-   prevention decisions.
+7. run with normal bootstrap context so the installed skill and doctrine remain visible;
+8. stay disabled until scheduler-level alerts cover pre-turn failures and skipped runs;
+9. avoid routine notifications; notify the owner for a material digest, actionable conflict,
+   failure, or prevention decision.
 
 The scheduler's own run history is the audit trail for successful no-op runs. Prometheus pages are
 the audit trail for material captures. Do not add “ran successfully” journal noise.
@@ -48,8 +50,9 @@ OpenClaw job. It does not pin a model/provider; private fleet policy remains aut
 Useful overrides:
 
 ```sh
-./tools/install-prometheus-cycle.sh --cron '35 3 * * *' --tz America/New_York
+./tools/install-prometheus-cycle.sh --agent main --cron '35 3 * * *' --tz America/New_York
 ./tools/install-prometheus-cycle.sh --brain /absolute/path/to/prometheus
+./tools/install-prometheus-cycle.sh --failure-channel imessage --failure-to '<owner-route>'
 ./tools/install-prometheus-cycle.sh --dry-run
 ```
 

@@ -73,8 +73,9 @@ host. It must not pretend to read another machine's private session history.
    durably committed. Never skip failed or ambiguous inputs by moving the mark past them.
 5. Run `digest` only when its cadence/backlog threshold is due. Its fleet lock decides whether
    this worker may restructure.
-6. Stay quiet on routine success or no-op. Surface only a push/sync failure, conflicting evidence,
-   an owner decision, or a concrete prevention follow-up.
+6. Stay quiet on routine success or no-op. A due digest that materially changes Prometheus sends
+   one concise summary; also surface a push/sync failure, conflicting evidence, an owner decision,
+   or a concrete prevention follow-up.
 
 ## What good learning looks like
 

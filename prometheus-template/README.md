@@ -29,6 +29,7 @@ On exactly one always-on OpenClaw host, install the unattended learning controll
 skills are installed:
 
 ```sh
+cd /path/to/BorrowedFire
 ./tools/install-prometheus-cycle.sh
 ```
 

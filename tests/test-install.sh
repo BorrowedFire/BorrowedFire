@@ -35,6 +35,7 @@ check "manifest has 16 entries"        test "$(wc -l < "$HOME/.claude/skills/.bo
 "$SRC/install.sh" --openclaw-workspace "$SB/openclaw-ws" >/dev/null 2>&1
 check "doctrine idempotent (1 block)"  test "$(grep -c 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md")" -eq 1
 check "still 16 manifest entries"      test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 16
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
 check "doctrine invokes learn"         grep -q 'run `learn` automatically' "$HOME/.claude/CLAUDE.md"
 
 # --- 3. legacy unowned dir warns, --adopt retires it ---

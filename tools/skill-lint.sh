@@ -82,6 +82,7 @@ fi
 if ! body "$LEARN_SKILL" | grep -qF 'No autonomous self-rewrite'; then
   err "learn: self-modification boundary is missing"
 fi
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
 if ! grep -qF 'run `learn` automatically' "$DOCTRINE"; then
   err "doctrine: automatic learning checkpoint is missing"
 fi

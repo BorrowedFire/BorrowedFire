@@ -89,7 +89,8 @@ OpenClaw host after installing its workspace skills:
 ```
 
 It declares one idempotent job at 02:35 America/New_York by default, does not pin a provider/model,
-and remains silent on routine success or a no-op. See
+binds the OpenClaw `main` agent unless overridden with `--agent`, enables only after scheduler-level
+failure alerts are configured, and remains silent on routine success or a no-op. See
 [`skills/learn/references/cycle-contract.md`](skills/learn/references/cycle-contract.md).
 
 ## Repo layout
