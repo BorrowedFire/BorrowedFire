@@ -204,8 +204,20 @@ install_skill() { # install_skill <skilldir> <manifest> <name>
 
   if [ -L "$tgt" ] || [ -e "$tgt" ]; then
     if [ "$owned" = "link" ] && [ -L "$tgt" ]; then
-      # ours, pointing elsewhere (e.g. the repo moved): repoint
-      act "repoint  $name" ln -sfn "$src" "$tgt"
+      # Ours, pointing elsewhere (e.g. the repo moved). Honor an explicit
+      # copy-mode conversion instead of preserving the stale install mode.
+      if [ "$COPY" -eq 1 ]; then
+        say "  convert  $name (moved link -> copy)"
+        if [ "$DRY" -eq 0 ]; then
+          if copy_skill "$src" "$tgt"; then
+            manifest_set "$mf" "$name" copy
+          else
+            echo "warning: convert of $name failed" >&2
+          fi
+        fi
+      else
+        act "repoint  $name" ln -sfn "$src" "$tgt"
+      fi
       return
     fi
     if [ "$owned" = "copy" ] && [ ! -L "$tgt" ] && [ -e "$tgt/.borrowedfire-copy" ]; then

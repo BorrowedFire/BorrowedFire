@@ -284,6 +284,19 @@ check "repointed learning link uses current checkout" \
 check "repointed stack retains automatic doctrine" \
   grep -q 'run `borrowedfire-learn` automatically' "$MOVED_HOME/.codex/AGENTS.md"
 
+MOVED_COPY_HOME="$SB/moved-copy-home"
+mkdir -p "$MOVED_COPY_HOME/.codex"
+HOME="$MOVED_COPY_HOME" "$SRC/install.sh" >/dev/null 2>&1
+unlink "$MOVED_COPY_HOME/.codex/skills/remember"
+ln -s "$SB/old-borrowedfire/skills/remember" "$MOVED_COPY_HOME/.codex/skills/remember"
+HOME="$MOVED_COPY_HOME" "$SRC/install.sh" --copy >/dev/null 2>&1
+check "copy mode converts a moved managed link" bash -c \
+  "test -d '$MOVED_COPY_HOME/.codex/skills/remember' && ! test -L '$MOVED_COPY_HOME/.codex/skills/remember'"
+check "moved-link conversion records copy ownership" \
+  grep -q '^remember copy$' "$MOVED_COPY_HOME/.codex/skills/.borrowedfire-manifest"
+check "moved-link conversion installs the exact current skill" \
+  diff -qr -x .borrowedfire-copy "$SRC/skills/remember" "$MOVED_COPY_HOME/.codex/skills/remember"
+
 # --- 8. uninstall: removes owned, leaves unowned, strips doctrine ---
 mkdir -p "$HOME/.claude/skills/my-own-skill"; echo mine > "$HOME/.claude/skills/my-own-skill/SKILL.md"
 "$SRC/install.sh" --uninstall >/dev/null 2>&1
