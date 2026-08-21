@@ -34,8 +34,9 @@ cd /path/to/BorrowedFire
 ```
 
 Every harness runs the lightweight `borrowedfire-learn` pass at substantive checkpoints through the shared
-doctrine. The controller supplies the nightly fleet pass and due-only `digest`; do not schedule a
-controller independently on every machine.
+doctrine. The controller supplies the nightly fleet pass and due-only `digest`; it resolves and pins
+one effective notification account for the configured agent. Do not schedule a controller
+independently on every machine.
 
 ## What's in the tree
 

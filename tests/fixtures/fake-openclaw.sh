@@ -27,12 +27,47 @@ fi
 if [ "${FAKE_OPENCLAW_FAIL_ADD:-0}" -eq 1 ] && [ "${1:-}" = "cron" ] && [ "${2:-}" = "add" ]; then
   exit 9
 fi
+if [ "${1:-}" = "--version" ]; then
+  printf '%s\n' "${FAKE_OPENCLAW_VERSION:-OpenClaw fixture-1}"
+  exit 0
+fi
 if [ "${1:-}" = "agents" ] && [ "${2:-}" = "list" ]; then
   if [ "${FAKE_OPENCLAW_UNKNOWN_AGENT:-0}" -eq 1 ]; then
     printf '[{"id":"different","workspace":"%s"}]\n' "${FAKE_OPENCLAW_WORKSPACE:?}"
   else
     printf '[{"id":"main","workspace":"%s"},{"id":"alternate","workspace":"%s"}]\n' \
       "${FAKE_OPENCLAW_WORKSPACE:?}" "${FAKE_OPENCLAW_ALT_WORKSPACE:-${FAKE_OPENCLAW_WORKSPACE:?}}"
+  fi
+  exit 0
+fi
+if [ "${1:-}" = "agents" ] && [ "${2:-}" = "bindings" ]; then
+  printf '%s\n' "${FAKE_OPENCLAW_BINDINGS:-[]}"
+  exit 0
+fi
+if [ "${1:-}" = "config" ] && [ "${2:-}" = "get" ]; then
+  if [ -n "${FAKE_OPENCLAW_CHANNEL_CONFIG:-}" ]; then
+    printf '%s\n' "$FAKE_OPENCLAW_CHANNEL_CONFIG"
+  elif [ -n "${OPENCLAW_CONFIG_PATH:-}" ] && [ -f "$OPENCLAW_CONFIG_PATH" ]; then
+    python3 - "$OPENCLAW_CONFIG_PATH" <<'PY'
+import json
+import sys
+
+try:
+    root = json.load(open(sys.argv[1], encoding="utf-8"))
+except (OSError, json.JSONDecodeError):
+    root = {}
+print(json.dumps(((root.get("channels") or {}).get("imessage") or {})))
+PY
+  else
+    printf '%s\n' '{}'
+  fi
+  exit 0
+fi
+if [ "${1:-}" = "channels" ] && [ "${2:-}" = "status" ]; then
+  if [ -n "${FAKE_OPENCLAW_CHANNEL_STATUS:-}" ]; then
+    printf '%s\n' "$FAKE_OPENCLAW_CHANNEL_STATUS"
+  else
+    printf '%s\n' '{"channelDefaultAccountId":{"imessage":"default"},"channelAccounts":{"imessage":[{"accountId":"default","configured":true,"enabled":true}]}}'
   fi
   exit 0
 fi
@@ -205,6 +240,7 @@ print(json.dumps({
         "mode": "none",
         "channel": last_value("--channel"),
         "to": "wrong-route" if mismatch else last_value("--to"),
+        "accountId": last_value("--account"),
         "threadId": None,
     },
     "failureAlert": {
@@ -214,6 +250,7 @@ print(json.dumps({
         "mode": "announce",
         "channel": last_value("--failure-alert-channel"),
         "to": last_value("--failure-alert-to"),
+        "accountId": last_value("--failure-alert-account-id"),
     },
     "payload": {
         "kind": "agentTurn",

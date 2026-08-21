@@ -309,6 +309,13 @@ if [ -z "$AGENT_ID" ] || [ -z "$NOTIFY_CHANNEL" ] || [ -z "$NOTIFY_TO" ]; then
   printf 'agent id, notification channel, and notification destination must not be blank.\n' >&2
   exit 1
 fi
+if ! printf '%s' "$NOTIFY_CHANNEL" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9_-]*$'; then
+  if [ "$DRY" -eq 0 ]; then
+    fail_declaration_safely 'Notification channel must be one concrete OpenClaw channel id.'
+  fi
+  printf 'notification channel must be one concrete OpenClaw channel id.\n' >&2
+  exit 1
+fi
 
 if [ "$DRY" -eq 1 ]; then
   printf 'would declare %s (%s) at %s [%s]\n' "$JOB_NAME" "$DECLARATION_KEY" "$CRON_EXPR" "$TIMEZONE"
@@ -372,6 +379,116 @@ if (
   fail_declaration_safely 'The requested agent cannot see the complete learning skill stack; use a copy install or configure trusted symlink targets and agent skill visibility.'
 fi
 
+AGENT_BINDINGS_OUTPUT="$("$OPENCLAW_BIN" agents bindings --agent "$AGENT_ID" --json)" ||
+  fail_declaration_safely 'Effective account bindings could not be inspected for the requested agent.'
+CHANNEL_CONFIG_OUTPUT="$("$OPENCLAW_BIN" config get "channels.$NOTIFY_CHANNEL" --json)" ||
+  fail_declaration_safely 'Effective notification-channel configuration could not be inspected.'
+CHANNEL_STATUS_OUTPUT="$("$OPENCLAW_BIN" channels status --json)" ||
+  fail_declaration_safely 'Effective notification-channel account status could not be inspected.'
+OPENCLAW_VERSION_OUTPUT="$("$OPENCLAW_BIN" --version)" ||
+  fail_declaration_safely 'OpenClaw runtime version could not be inspected.'
+EFFECTIVE_ROUTE_STATE="$(python3 - "$AGENT_ID" "$NOTIFY_CHANNEL" "$AGENT_BINDINGS_OUTPUT" \
+  "$CHANNEL_CONFIG_OUTPUT" "$CHANNEL_STATUS_OUTPUT" "$OPENCLAW_VERSION_OUTPUT" <<'PY'
+import hashlib
+import json
+import re
+import sys
+
+agent_id, channel_id, bindings_text, channel_config_text, status_text, version = sys.argv[1:]
+channel = channel_id.strip().lower()
+
+try:
+    bindings = json.loads(bindings_text)
+    channel_config = json.loads(channel_config_text)
+    status = json.loads(status_text)
+except (json.JSONDecodeError, TypeError):
+    raise SystemExit(1)
+if not isinstance(bindings, list) or not isinstance(channel_config, dict) or not isinstance(status, dict):
+    raise SystemExit(1)
+
+def normalize_account(value):
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower()
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", normalized):
+        return None
+    return normalized
+
+bound_account = None
+for binding in bindings:
+    if not isinstance(binding, dict) or binding.get("agentId") != agent_id:
+        continue
+    match = binding.get("match")
+    if not isinstance(match, dict) or str(match.get("channel", "")).strip().lower() != channel:
+        continue
+    candidate = match.get("accountId")
+    if candidate == "*" or not isinstance(candidate, str) or not candidate.strip():
+        continue
+    bound_account = normalize_account(candidate)
+    if not bound_account:
+        raise SystemExit(1)
+    break
+
+defaults = status.get("channelDefaultAccountId")
+accounts_by_channel = status.get("channelAccounts")
+if not isinstance(defaults, dict) or not isinstance(accounts_by_channel, dict):
+    raise SystemExit(1)
+
+default_account = None
+account_records = None
+for key, value in defaults.items():
+    if isinstance(key, str) and key.strip().lower() == channel:
+        default_account = normalize_account(value)
+        break
+for key, value in accounts_by_channel.items():
+    if isinstance(key, str) and key.strip().lower() == channel:
+        account_records = value
+        break
+if not default_account or not isinstance(account_records, list):
+    raise SystemExit(1)
+
+normalized_records = []
+for record in account_records:
+    if not isinstance(record, dict):
+        raise SystemExit(1)
+    account_id = normalize_account(record.get("accountId"))
+    if not account_id:
+        raise SystemExit(1)
+    normalized_records.append({
+        "accountId": account_id,
+        "configured": record.get("configured"),
+        "enabled": record.get("enabled"),
+    })
+
+account = bound_account or default_account
+matching_records = [record for record in normalized_records if record["accountId"] == account]
+if len(matching_records) != 1 or matching_records[0]["configured"] is not True or matching_records[0]["enabled"] is False:
+    raise SystemExit(1)
+
+effective = {
+    "agentId": agent_id,
+    "channel": channel,
+    "accountId": account,
+    "bindings": bindings,
+    "channelConfig": channel_config,
+    "channelDefaultAccountId": default_account,
+    "channelAccounts": normalized_records,
+    "openclawVersion": version.strip(),
+}
+encoded = json.dumps(effective, sort_keys=True, separators=(",", ":")).encode("utf-8")
+print(account)
+print(hashlib.sha256(encoded).hexdigest())
+PY
+)" || {
+  fail_declaration_safely 'A single configured notification account could not be resolved for the requested agent and channel.'
+}
+NOTIFY_ACCOUNT="${EFFECTIVE_ROUTE_STATE%%$'\n'*}"
+EFFECTIVE_ROUTE_CONFIG_DIGEST="${EFFECTIVE_ROUTE_STATE#*$'\n'}"
+if ! printf '%s' "$NOTIFY_ACCOUNT" | grep -Eq '^[a-z0-9][a-z0-9_-]{0,63}$' ||
+   ! printf '%s' "$EFFECTIVE_ROUTE_CONFIG_DIGEST" | grep -Eq '^[0-9a-f]{64}$'; then
+  fail_declaration_safely 'Effective notification account/configuration identity could not be derived.'
+fi
+
 resolve_host_name() {
   local value
   if value="$(hostname -f 2>/dev/null)" && [ -n "$value" ]; then
@@ -412,7 +529,7 @@ OPENCLAW_BASE_HOME="${OPENCLAW_HOME:-$HOME}"
 OPENCLAW_PROFILE_NAME="${OPENCLAW_PROFILE:-default}"
 CONTROLLER_BINDING="$(python3 - "$HOST_NAME" "$MACHINE_ID" "$AGENT_ID" "$AGENT_WORKSPACE" \
   "$OPENCLAW_BASE_HOME" "${OPENCLAW_STATE_DIR:-}" "${OPENCLAW_CONFIG_PATH:-}" \
-  "$OPENCLAW_PROFILE_NAME" <<'PY'
+  "$OPENCLAW_PROFILE_NAME" "$EFFECTIVE_ROUTE_CONFIG_DIGEST" <<'PY'
 import hashlib
 import os
 import re
@@ -433,6 +550,7 @@ base_home = os.path.realpath(os.path.expanduser(sys.argv[5]))
 state_override = sys.argv[6].strip()
 config_override = sys.argv[7].strip()
 profile = sys.argv[8].strip() or "default"
+effective_route_config_digest = sys.argv[9]
 
 def resolve_openclaw_path(value):
     if value == "~":
@@ -451,19 +569,12 @@ else:
         state_dir = legacy_dir
     state_dir = os.path.realpath(state_dir)
 config_path = resolve_openclaw_path(config_override) if config_override else os.path.join(state_dir, "openclaw.json")
-try:
-    with open(config_path, "rb") as handle:
-        config_digest = hashlib.sha256(handle.read()).hexdigest()
-except FileNotFoundError:
-    config_digest = "missing"
-except OSError:
-    raise SystemExit(1)
 host = slug(host_name, 64)
 agent = slug(agent_id, 48)
 workspace_name = slug(os.path.basename(workspace), 64)
 binding = "\0".join((host_name, machine_id, agent_id, workspace, state_dir, config_path, profile))
 binding_hash = hashlib.sha256(binding.encode("utf-8")).hexdigest()[:12]
-route_scope_hash = hashlib.sha256((binding + "\0" + config_digest).encode("utf-8")).hexdigest()
+route_scope_hash = hashlib.sha256((binding + "\0" + effective_route_config_digest).encode("utf-8")).hexdigest()
 basename = f"openclaw-{host}-{agent}-{workspace_name}-{binding_hash}-ingest.md"
 if len(basename.encode("utf-8")) > 240:
     raise SystemExit(1)
@@ -509,7 +620,8 @@ expected = {
     "name": sys.argv[7],
     "description": sys.argv[8],
     "message": sys.argv[9],
-    "enabled": sys.argv[10] == "true",
+    "account": sys.argv[10],
+    "enabled": sys.argv[11] == "true",
 }
 try:
     payload = json.load(sys.stdin)
@@ -536,7 +648,7 @@ checks = [
     isinstance(delivery, dict) and delivery.get("mode") == "none",
     isinstance(delivery, dict) and delivery.get("channel") == expected["channel"],
     isinstance(delivery, dict) and delivery.get("to") == expected["to"],
-    isinstance(delivery, dict) and not delivery.get("accountId"),
+    isinstance(delivery, dict) and delivery.get("accountId") == expected["account"],
     isinstance(delivery, dict) and delivery.get("threadId") is None,
     isinstance(failure, dict) and failure.get("after") == 2,
     isinstance(failure, dict) and failure.get("cooldownMs") == 43200000,
@@ -544,7 +656,7 @@ checks = [
     isinstance(failure, dict) and failure.get("mode") == "announce",
     isinstance(failure, dict) and failure.get("channel") == expected["channel"],
     isinstance(failure, dict) and failure.get("to") == expected["to"],
-    isinstance(failure, dict) and not failure.get("accountId"),
+    isinstance(failure, dict) and failure.get("accountId") == expected["account"],
     isinstance(schedule, dict) and schedule.get("expr") == expected["expr"],
     isinstance(schedule, dict) and schedule.get("tz") == expected["timezone"],
     isinstance(agent_payload, dict) and agent_payload.get("kind") == "agentTurn",
@@ -558,7 +670,7 @@ checks = [
 ]
 if not all(checks):
     raise SystemExit(1)
-' "$JOB_ID" "$AGENT_ID" "$CRON_EXPR" "$TIMEZONE" "$NOTIFY_CHANNEL" "$NOTIFY_TO" "$JOB_NAME" "$DESCRIPTION" "$MESSAGE" "$expected_enabled"
+' "$JOB_ID" "$AGENT_ID" "$CRON_EXPR" "$TIMEZONE" "$NOTIFY_CHANNEL" "$NOTIFY_TO" "$JOB_NAME" "$DESCRIPTION" "$MESSAGE" "$NOTIFY_ACCOUNT" "$expected_enabled"
 }
 
 ARGS=(
@@ -576,6 +688,7 @@ ARGS=(
   --no-deliver
   --channel "$NOTIFY_CHANNEL"
   --to "$NOTIFY_TO"
+  --account "$NOTIFY_ACCOUNT"
   --timeout-seconds 900
   --message "$MESSAGE"
   --json
@@ -642,6 +755,7 @@ CONVERGE_ARGS=(
   --no-deliver
   --channel "$NOTIFY_CHANNEL"
   --to "$NOTIFY_TO"
+  --account "$NOTIFY_ACCOUNT"
 )
 
 if ! "$OPENCLAW_BIN" "${CONVERGE_ARGS[@]}" >/dev/null; then
@@ -661,6 +775,7 @@ ALERT_ARGS=(
   --failure-alert-mode announce
   --failure-alert-channel "$NOTIFY_CHANNEL"
   --failure-alert-to "$NOTIFY_TO"
+  --failure-alert-account-id "$NOTIFY_ACCOUNT"
 )
 
 if ! "$OPENCLAW_BIN" "${ALERT_ARGS[@]}" >/dev/null; then
@@ -671,7 +786,7 @@ if ! verify_job_configuration false; then
   fail_job_safely 'Stored job does not match the requested safe configuration.'
 fi
 
-ROUTE_HASH="$(python3 - "$ROUTE_SCOPE_HASH" "$NOTIFY_CHANNEL" "$NOTIFY_TO" <<'PY'
+ROUTE_HASH="$(python3 - "$ROUTE_SCOPE_HASH" "$NOTIFY_CHANNEL" "$NOTIFY_TO" "$NOTIFY_ACCOUNT" <<'PY'
 import hashlib
 import sys
 
@@ -723,6 +838,7 @@ if [ "$STORED_ROUTE_HASH" != "$ROUTE_HASH" ]; then
   PROBE_OUTPUT="$("$OPENCLAW_BIN" message send \
     --channel "$NOTIFY_CHANNEL" \
     --target "$NOTIFY_TO" \
+    --account "$NOTIFY_ACCOUNT" \
     --message "$PROBE_MESSAGE" \
     --json)" || {
       rm -f "$PROOF_TMP"

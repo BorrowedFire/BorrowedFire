@@ -57,6 +57,10 @@ check "clears stale payload tool allowlists" grep -qx -- '--clear-tools' "$OPENC
 check "disables routine delivery" grep -qx -- '--no-deliver' "$OPENCLAW_ARGS_FILE"
 check "stores an explicit notification channel" grep -qx 'imessage' "$OPENCLAW_ARGS_FILE"
 check "stores an explicit notification destination" grep -qx 'owner-route' "$OPENCLAW_ARGS_FILE"
+check "pins the resolved account on job delivery and the live probe" \
+  test "$(grep -c '^--account$' "$OPENCLAW_ARGS_FILE")" -eq 3
+check "pins the resolved account on failure alerts" \
+  grep -qx -- '--failure-alert-account-id' "$OPENCLAW_ARGS_FILE"
 check "alerts after repeated failures" grep -qx -- '--failure-alert-after' "$OPENCLAW_ARGS_FILE"
 check "alerts on skipped runs" grep -qx -- '--failure-alert-include-skipped' "$OPENCLAW_ARGS_FILE"
 check "prompt requires namespaced learning mode" grep -q 'borrowedfire-learn skill in fleet mode' "$OPENCLAW_ARGS_FILE"
@@ -104,6 +108,16 @@ OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null
 check "matching route is not probed twice" bash -c "! grep -qx 'message' '$OPENCLAW_ARGS_FILE'"
+
+rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
+FAKE_OPENCLAW_BINDINGS='[{"agentId":"main","match":{"channel":"imessage","accountId":"ops"},"description":"imessage account=ops"}]' \
+  FAKE_OPENCLAW_CHANNEL_STATUS='{"channelDefaultAccountId":{"imessage":"default"},"channelAccounts":{"imessage":[{"accountId":"default","configured":true,"enabled":true},{"accountId":"ops","configured":true,"enabled":true}]}}' \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+check "selected agent binding pins one account across job, alert, and probe" \
+  test "$(grep -c '^ops$' "$OPENCLAW_ARGS_FILE")" -eq 4
+check "selected agent account route receives the live proof" grep -qx 'message' "$OPENCLAW_ARGS_FILE"
 
 PHYSICAL_SRC="$(cd "$SRC" && pwd -P)"
 ln -s "$PHYSICAL_SRC" "$SB/source-alias"
@@ -215,18 +229,24 @@ check "distinct OpenClaw config paths get distinct watermarks" \
   "$CONFIG_A_WATERMARK" != "$CONFIG_B_WATERMARK"
 
 CONFIG_DIGEST_PATH="$SB/controller-config.json"
-printf '%s\n' '{"channels":{"imessage":{"defaultAccount":"one"}}}' > "$CONFIG_DIGEST_PATH"
+printf '%s\n' '{"$include":"./channel-config.json"}' > "$CONFIG_DIGEST_PATH"
+CONFIG_ROOT_DIGEST="$(git hash-object "$CONFIG_DIGEST_PATH")"
 OPENCLAW_ARGS_FILE="$SB/config-digest-one-args" OPENCLAW_CONFIG_PATH="$CONFIG_DIGEST_PATH" \
+  FAKE_OPENCLAW_CHANNEL_CONFIG='{"defaultAccount":"one"}' \
+  FAKE_OPENCLAW_CHANNEL_STATUS='{"channelDefaultAccountId":{"imessage":"one"},"channelAccounts":{"imessage":[{"accountId":"one","configured":true,"enabled":true}]}}' \
   OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null
-printf '%s\n' '{"channels":{"imessage":{"defaultAccount":"two"}}}' > "$CONFIG_DIGEST_PATH"
 OPENCLAW_ARGS_FILE="$SB/config-digest-two-args" OPENCLAW_CONFIG_PATH="$CONFIG_DIGEST_PATH" \
+  FAKE_OPENCLAW_CHANNEL_CONFIG='{"defaultAccount":"two"}' \
+  FAKE_OPENCLAW_CHANNEL_STATUS='{"channelDefaultAccountId":{"imessage":"two"},"channelAccounts":{"imessage":[{"accountId":"two","configured":true,"enabled":true}]}}' \
   OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null
-check "OpenClaw config changes require a fresh route probe" \
+check "resolved include or environment config changes require a fresh route probe" \
   grep -qx 'message' "$SB/config-digest-two-args"
+check "effective-config proof does not depend on root config bytes changing" \
+  test "$(git hash-object "$CONFIG_DIGEST_PATH")" = "$CONFIG_ROOT_DIGEST"
 
 OPENCLAW_ARGS_FILE="$SB/profile-a-args" OPENCLAW_PROFILE="profile-a" \
   OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
