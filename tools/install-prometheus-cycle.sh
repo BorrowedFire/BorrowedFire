@@ -402,7 +402,11 @@ lines = [line for line in lines if line]
 if not lines:
     raise SystemExit(1)
 value = lines[-1]
-if value == "~":
+if value == "$OPENCLAW_HOME":
+    value = base_home
+elif value.startswith("$OPENCLAW_HOME/"):
+    value = os.path.join(base_home, value[len("$OPENCLAW_HOME/"):])
+elif value == "~":
     value = base_home
 elif value.startswith("~/"):
     value = os.path.join(base_home, value[2:])

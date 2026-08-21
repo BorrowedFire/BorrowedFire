@@ -254,7 +254,7 @@ mkdir -p "$LEGACY_CONFIG_HOME/.openclaw"
 mkdir -p "$LEGACY_CONFIG_HOME/.clawdbot"
 printf '%s\n' '{}' > "$LEGACY_CONFIG_HOME/.clawdbot/clawdbot.json"
 OPENCLAW_ARGS_FILE="$SB/legacy-config-args" OPENCLAW_HOME="$LEGACY_CONFIG_HOME" \
-  FAKE_OPENCLAW_CONFIG_FILE_OUTPUT="$(printf 'Doctor notice\n%s' "$LEGACY_CONFIG_HOME/.clawdbot/clawdbot.json")" \
+  FAKE_OPENCLAW_CONFIG_FILE_OUTPUT="$(printf '%s\n%s' 'Doctor notice' '$OPENCLAW_HOME/.clawdbot/clawdbot.json')" \
   OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null
@@ -271,6 +271,8 @@ check "active legacy config path gets its own controller watermark" \
   "$LEGACY_CONFIG_WATERMARK" != "$CANONICAL_CONFIG_WATERMARK"
 check "diagnostic lines before the active config path are tolerated" \
   grep -qx 'message' "$SB/legacy-config-args"
+check "OpenClaw home display prefix resolves to the effective home" \
+  test -n "$LEGACY_CONFIG_WATERMARK"
 check "legacy-to-canonical config migration requires a fresh route probe" \
   grep -qx 'message' "$SB/canonical-config-args"
 
