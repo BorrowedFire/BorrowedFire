@@ -557,7 +557,27 @@ def acknowledged(value):
         return any(acknowledged(item) for item in value)
     return False
 
-if not acknowledged(payload):
+def explicitly_failed(value):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            normalized = key.replace("_", "").lower()
+            if normalized in {"ok", "success", "delivered"} and item is False:
+                return True
+            if normalized in {"iserror", "failed"} and item is True:
+                return True
+            if normalized in {"error", "errors"} and item not in (None, "", [], {}):
+                return True
+            if normalized in {"status", "deliverystatus"} and isinstance(item, str):
+                if item.strip().lower().replace("-", "_") in {
+                    "error", "failed", "partial_failed", "rejected", "skipped", "suppressed"
+                }:
+                    return True
+        return any(explicitly_failed(item) for item in value.values())
+    if isinstance(value, list):
+        return any(explicitly_failed(item) for item in value)
+    return False
+
+if explicitly_failed(payload) or not acknowledged(payload):
     raise SystemExit(1)
 '; then
     rm -f "$PROOF_TMP"

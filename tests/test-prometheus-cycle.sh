@@ -273,6 +273,19 @@ check "missing acknowledgement disables the job" grep -qx 'disable' "$OPENCLAW_A
 check "missing acknowledgement never enables the job" bash -c "! grep -qx 'enable' '$OPENCLAW_ARGS_FILE'"
 
 rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
+if FAKE_OPENCLAW_MESSAGE_ERROR_WITH_ACK=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "explicit provider error with acknowledgement fails closed"
+else
+  ok "explicit provider error with acknowledgement fails closed"
+fi
+check "provider error with acknowledgement disables the job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "provider error with acknowledgement never enables the job" bash -c "! grep -qx 'enable' '$OPENCLAW_ARGS_FILE'"
+check "provider error with acknowledgement stores no route proof" \
+  test ! -e "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
+
+rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
 if FAKE_OPENCLAW_POISON_ROUTE_PROOF="$HOME/.config/borrowedfire/prometheus-learning-route.sha256" \
   OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
