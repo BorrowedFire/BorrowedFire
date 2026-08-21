@@ -253,6 +253,7 @@ LEGACY_CONFIG_HOME="$SB/legacy-config-home"
 mkdir -p "$LEGACY_CONFIG_HOME/.openclaw"
 mkdir -p "$LEGACY_CONFIG_HOME/.clawdbot"
 printf '%s\n' '{}' > "$LEGACY_CONFIG_HOME/.clawdbot/clawdbot.json"
+# shellcheck disable=SC2016  # The fixture must emit OpenClaw's literal display prefix.
 OPENCLAW_ARGS_FILE="$SB/legacy-config-args" OPENCLAW_HOME="$LEGACY_CONFIG_HOME" \
   FAKE_OPENCLAW_CONFIG_FILE_OUTPUT="$(printf '%s\n%s' 'Doctor notice' '$OPENCLAW_HOME/.clawdbot/clawdbot.json')" \
   OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \

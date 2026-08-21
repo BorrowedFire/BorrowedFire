@@ -390,6 +390,7 @@ OPENCLAW_VERSION_OUTPUT="$("$OPENCLAW_BIN" --version)" ||
 OPENCLAW_BASE_HOME="${OPENCLAW_HOME:-$HOME}"
 OPENCLAW_CONFIG_FILE_OUTPUT="$("$OPENCLAW_BIN" config file)" ||
   fail_declaration_safely 'Active OpenClaw config path could not be inspected.'
+# shellcheck disable=SC2016  # Python intentionally matches the literal $OPENCLAW_HOME display prefix.
 OPENCLAW_ACTIVE_CONFIG_PATH="$(printf '%s' "$OPENCLAW_CONFIG_FILE_OUTPUT" | python3 -c '
 import os
 import re
