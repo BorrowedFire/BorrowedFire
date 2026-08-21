@@ -14,7 +14,7 @@
 #   --openclaw-workspace  path to an OpenClaw workspace to install into
 set -u
 
-SRC="$(cd "$(dirname "$0")" && pwd)"
+SRC="$(cd "$(dirname "$0")" && pwd -P)"
 MANIFEST_NAME=".borrowedfire-manifest"
 MARK_BEGIN="<!-- BEGIN BORROWEDFIRE DOCTRINE -->"
 MARK_END="<!-- END BORROWEDFIRE DOCTRINE -->"

@@ -26,9 +26,13 @@ touch "$SB/prometheus/INDEX.md" "$SB/prometheus/config/fleet.md" "$SB/prometheus
 printf '%s\n' "$SB/prometheus" > "$HOME/.config/borrowedfire/brain"
 "$SRC/install.sh" --copy --openclaw-workspace "$FAKE_OPENCLAW_WORKSPACE" >/dev/null 2>&1
 
-OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+if OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
-  --notify-channel imessage --notify-to owner-route >/dev/null
+  --notify-channel imessage --notify-to owner-route >/dev/null; then
+  ok "baseline scheduler installation succeeds"
+else
+  fail "baseline scheduler installation succeeds"
+fi
 
 check "declares a cron job" grep -qx 'add' "$OPENCLAW_ARGS_FILE"
 check "uses stable declaration key" grep -qx 'borrowedfire.prometheus-learning.v1' "$OPENCLAW_ARGS_FILE"
@@ -61,6 +65,24 @@ OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null
 check "matching route is not probed twice" test "$(grep -c '^message$' "$OPENCLAW_ARGS_FILE")" -eq 1
+
+PHYSICAL_SRC="$(cd "$SRC" && pwd -P)"
+ln -s "$PHYSICAL_SRC" "$SB/source-alias"
+mkdir -p "$SB/openclaw-symlink-install"
+"$SB/source-alias/install.sh" --openclaw-workspace "$SB/openclaw-symlink-install" >/dev/null 2>&1
+check "symlink-invoked installer records canonical skill targets" \
+  test "$(readlink "$SB/openclaw-symlink-install/skills/borrowedfire-learn")" = \
+  "$PHYSICAL_SRC/skills/borrowedfire-learn"
+rm -f "$OPENCLAW_ARGS_FILE"
+if FAKE_OPENCLAW_WORKSPACE="$SB/openclaw-symlink-install" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SB/source-alias/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null; then
+  ok "symlink-invoked scheduler installation succeeds"
+else
+  fail "symlink-invoked scheduler installation succeeds"
+fi
+check "scheduler accepts a symlink-invoked installer deployment" grep -qx 'enable' "$OPENCLAW_ARGS_FILE"
 
 ROUTE_PROOF="$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
 rm -f "$ROUTE_PROOF"
@@ -174,6 +196,39 @@ fi
 check "stored session-key mismatch disables the job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
 check "stored session-key mismatch never enables the job" bash -c "! grep -qx 'enable' '$OPENCLAW_ARGS_FILE'"
 
+rm -f "$OPENCLAW_ARGS_FILE"
+if FAKE_OPENCLAW_POST_ENABLE_MISMATCH=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "post-enable configuration drift fails closed"
+else
+  ok "post-enable configuration drift fails closed"
+fi
+check "post-enable drift attempts enable" grep -qx 'enable' "$OPENCLAW_ARGS_FILE"
+check "post-enable drift is disabled" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+
+rm -f "$OPENCLAW_ARGS_FILE"
+if OUT="$(FAKE_OPENCLAW_POST_ENABLE_MISMATCH=1 FAKE_OPENCLAW_FAIL_DISABLE=1 \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route 2>&1)"; then
+  fail "unverifiable post-enable disable fails closed"
+else
+  ok "unverifiable post-enable disable fails closed"
+fi
+check "failed disable is not reported as safe" grep -q 'could not be proven disabled' <<<"$OUT"
+
+rm -f "$OPENCLAW_ARGS_FILE"
+if FAKE_OPENCLAW_FAIL_ENABLE_AFTER_COMMIT=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "ambiguous enable response fails closed"
+else
+  ok "ambiguous enable response fails closed"
+fi
+check "ambiguous enable is followed by disable" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "ambiguous enable verifies disabled state" grep -qx 'get' "$OPENCLAW_ARGS_FILE"
+
 rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
 if FAKE_OPENCLAW_FAIL_MESSAGE=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
@@ -222,13 +277,15 @@ check "disabled scheduler declares no job" bash -c "! grep -qx 'add' '$OPENCLAW_
 
 rm -f "$OPENCLAW_ARGS_FILE"
 if FAKE_OPENCLAW_UNKNOWN_AGENT=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
-  "$SRC/tools/install-prometheus-cycle.sh" --agent typo \
+  "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
-  fail "unknown agent fails closed"
+  fail "removed configured agent fails closed"
 else
-  ok "unknown agent fails closed"
+  ok "removed configured agent fails closed"
 fi
-check "unknown agent declares no job" bash -c "! grep -qx 'add' '$OPENCLAW_ARGS_FILE'"
+check "removed configured agent declares no job" bash -c "! grep -qx 'add' '$OPENCLAW_ARGS_FILE'"
+check "removed configured agent disables its stale job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "removed configured agent verifies the disabled job" grep -qx 'get' "$OPENCLAW_ARGS_FILE"
 
 if OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" >/dev/null 2>&1; then

@@ -165,8 +165,33 @@ JOB_NAME="Prometheus Learning Cycle"
 DECLARATION_KEY="borrowedfire.prometheus-learning.v1"
 DESCRIPTION="Nightly verified learning, status capture, and due-only consolidation in the shared Prometheus brain."
 
+job_enabled_state_is() {
+  local job_id="$1" expected="$2" verify_output
+  verify_output="$("$OPENCLAW_BIN" cron get "$job_id")" || return 1
+  printf '%s' "$verify_output" | python3 -c '
+import json
+import sys
+
+expected_id, expected_text = sys.argv[1:]
+try:
+    payload = json.load(sys.stdin)
+except (json.JSONDecodeError, OSError):
+    raise SystemExit(1)
+job = payload.get("job") if isinstance(payload, dict) and isinstance(payload.get("job"), dict) else payload
+expected = expected_text == "true"
+if not isinstance(job, dict) or job.get("id") != expected_id or job.get("enabled") is not expected:
+    raise SystemExit(1)
+' "$job_id" "$expected"
+}
+
+disable_job_and_verify() {
+  local job_id="$1"
+  "$OPENCLAW_BIN" cron disable "$job_id" >/dev/null 2>&1 || return 1
+  job_enabled_state_is "$job_id" false
+}
+
 disable_existing_job_for_agent() {
-  local list_output job_id verify_output
+  local list_output job_id
   list_output="$("$OPENCLAW_BIN" cron list --all --json)" || return 1
   job_id="$(printf '%s' "$list_output" | python3 -c '
 import json
@@ -195,21 +220,7 @@ if matches:
     print(job_id.strip())
 ' "$AGENT_ID" "$DECLARATION_KEY")" || return 1
   [ -n "$job_id" ] || return 0
-  "$OPENCLAW_BIN" cron disable "$job_id" >/dev/null 2>&1 || return 1
-  verify_output="$("$OPENCLAW_BIN" cron get "$job_id")" || return 1
-  printf '%s' "$verify_output" | python3 -c '
-import json
-import sys
-
-expected_id = sys.argv[1]
-try:
-    payload = json.load(sys.stdin)
-except (json.JSONDecodeError, OSError):
-    raise SystemExit(1)
-job = payload.get("job") if isinstance(payload, dict) and isinstance(payload.get("job"), dict) else payload
-if not isinstance(job, dict) or job.get("id") != expected_id or job.get("enabled") is not False:
-    raise SystemExit(1)
-' "$job_id"
+  disable_job_and_verify "$job_id"
 }
 
 fail_invalid_workspace() {
@@ -249,8 +260,7 @@ if len(matches) != 1 or not isinstance(matches[0].get("workspace"), str) or not 
     raise SystemExit(1)
 print(matches[0]["workspace"].strip())
 ' "$AGENT_ID")" || {
-  printf 'Requested OpenClaw agent is not configured with one concrete workspace; no job was declared.\n' >&2
-  exit 1
+  fail_invalid_workspace 'Requested OpenClaw agent is not configured with one concrete workspace.'
 }
 if [ ! -d "$AGENT_WORKSPACE" ]; then
   fail_invalid_workspace 'Requested OpenClaw agent workspace does not exist.'
@@ -290,6 +300,83 @@ PY
 
 MESSAGE="Run the installed borrowedfire-learn skill in fleet mode. The Prometheus root is $BRAIN. Follow the skill and its cycle-contract reference exactly. Use only $WATERMARK_FILE as this controller binding's high-water mark; ingest only verified durable deltas visible in this agent workspace since that mark; deduplicate before using remember; advance the mark only after durable commit/push; and invoke digest only when seven days have elapsed since its last completed run or inbox backlog exceeds 15. Never claim access to another host, agent, or workspace's private session history. Do not mutate product repositories, accounts, credentials, deployments, releases, stores, skills, doctrine, or scheduler configuration, except to delete one exact local-only .brain-outbox/<file> after its capture is committed and pushed to Prometheus; never delete the directory, another item, or a pending item. Do not announce routine success or a no-op. Use the configured message target only for one concise material-digest summary, an actionable owner decision, conflicting evidence, a sync/push failure, or a concrete prevention follow-up."
 TOOLS_ALLOW="read,edit,write,apply_patch,exec,process,message"
+
+fail_job_safely() {
+  local reason="$1"
+  if disable_job_and_verify "$JOB_ID"; then
+    printf '%s Prometheus learning job is verified disabled.\n' "$reason" >&2
+  else
+    printf '%s The job could not be proven disabled; inspect OpenClaw before re-enabling it.\n' "$reason" >&2
+  fi
+  exit 1
+}
+
+verify_job_configuration() {
+  local expected_enabled="$1" verify_output
+  verify_output="$("$OPENCLAW_BIN" cron get "$JOB_ID")" || return 1
+  printf '%s' "$verify_output" | python3 -c '
+import json
+import sys
+
+expected = {
+    "job_id": sys.argv[1],
+    "agent_id": sys.argv[2],
+    "expr": sys.argv[3],
+    "timezone": sys.argv[4],
+    "channel": sys.argv[5],
+    "to": sys.argv[6],
+    "name": sys.argv[7],
+    "description": sys.argv[8],
+    "message": sys.argv[9],
+    "tools": sys.argv[10].split(","),
+    "enabled": sys.argv[11] == "true",
+}
+try:
+    payload = json.load(sys.stdin)
+except (json.JSONDecodeError, OSError):
+    raise SystemExit(1)
+job = payload.get("job", payload) if isinstance(payload, dict) else None
+if not isinstance(job, dict):
+    raise SystemExit(1)
+delivery = job.get("delivery")
+failure = job.get("failureAlert")
+schedule = job.get("schedule")
+agent_payload = job.get("payload")
+checks = [
+    job.get("id") == expected["job_id"],
+    job.get("declarationKey") == "borrowedfire.prometheus-learning.v1",
+    job.get("name") == expected["name"],
+    job.get("displayName") == expected["name"],
+    job.get("description") == expected["description"],
+    job.get("enabled") is expected["enabled"],
+    job.get("agentId") == expected["agent_id"],
+    job.get("sessionTarget") == "isolated",
+    not job.get("sessionKey"),
+    job.get("wakeMode") == "now",
+    isinstance(delivery, dict) and delivery.get("mode") == "none",
+    isinstance(delivery, dict) and delivery.get("channel") == expected["channel"],
+    isinstance(delivery, dict) and delivery.get("to") == expected["to"],
+    isinstance(delivery, dict) and not delivery.get("accountId"),
+    isinstance(delivery, dict) and delivery.get("threadId") is None,
+    isinstance(failure, dict) and failure.get("after") == 2,
+    isinstance(failure, dict) and failure.get("cooldownMs") == 43200000,
+    isinstance(failure, dict) and failure.get("includeSkipped") is True,
+    isinstance(failure, dict) and failure.get("mode") == "announce",
+    isinstance(failure, dict) and failure.get("channel") == expected["channel"],
+    isinstance(failure, dict) and failure.get("to") == expected["to"],
+    isinstance(failure, dict) and not failure.get("accountId"),
+    isinstance(schedule, dict) and schedule.get("expr") == expected["expr"],
+    isinstance(schedule, dict) and schedule.get("tz") == expected["timezone"],
+    isinstance(agent_payload, dict) and agent_payload.get("kind") == "agentTurn",
+    isinstance(agent_payload, dict) and agent_payload.get("message") == expected["message"],
+    isinstance(agent_payload, dict) and agent_payload.get("timeoutSeconds") == 900,
+    isinstance(agent_payload, dict) and agent_payload.get("lightContext") is False,
+    isinstance(agent_payload, dict) and agent_payload.get("toolsAllow") == expected["tools"],
+]
+if not all(checks):
+    raise SystemExit(1)
+' "$JOB_ID" "$AGENT_ID" "$CRON_EXPR" "$TIMEZONE" "$NOTIFY_CHANNEL" "$NOTIFY_TO" "$JOB_NAME" "$DESCRIPTION" "$MESSAGE" "$TOOLS_ALLOW" "$expected_enabled"
+}
 
 ARGS=(
   cron add
@@ -370,15 +457,11 @@ CONVERGE_ARGS=(
 )
 
 if ! "$OPENCLAW_BIN" "${CONVERGE_ARGS[@]}" >/dev/null; then
-  "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
-  printf 'Agent/workspace job convergence failed; Prometheus learning job is disabled.\n' >&2
-  exit 1
+  fail_job_safely 'Agent/workspace job convergence failed.'
 fi
 
 if ! "$OPENCLAW_BIN" cron edit "$JOB_ID" --no-failure-alert >/dev/null; then
-  "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
-  printf 'Old failure-alert policy could not be cleared; Prometheus learning job is disabled.\n' >&2
-  exit 1
+  fail_job_safely 'Old failure-alert policy could not be cleared.'
 fi
 
 ALERT_ARGS=(
@@ -393,80 +476,11 @@ ALERT_ARGS=(
 )
 
 if ! "$OPENCLAW_BIN" "${ALERT_ARGS[@]}" >/dev/null; then
-  "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
-  printf 'Failure-alert setup failed; Prometheus learning job is disabled.\n' >&2
-  exit 1
+  fail_job_safely 'Failure-alert setup failed.'
 fi
 
-VERIFY_OUTPUT="$("$OPENCLAW_BIN" cron get "$JOB_ID")" || {
-  "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
-  printf 'Job verification failed; Prometheus learning job is disabled.\n' >&2
-  exit 1
-}
-if ! printf '%s' "$VERIFY_OUTPUT" | python3 -c '
-import json
-import sys
-
-expected = {
-    "job_id": sys.argv[1],
-    "agent_id": sys.argv[2],
-    "expr": sys.argv[3],
-    "timezone": sys.argv[4],
-    "channel": sys.argv[5],
-    "to": sys.argv[6],
-    "name": sys.argv[7],
-    "description": sys.argv[8],
-    "message": sys.argv[9],
-    "tools": sys.argv[10].split(","),
-}
-try:
-    payload = json.load(sys.stdin)
-except (json.JSONDecodeError, OSError):
-    raise SystemExit(1)
-job = payload.get("job", payload) if isinstance(payload, dict) else None
-if not isinstance(job, dict):
-    raise SystemExit(1)
-delivery = job.get("delivery")
-failure = job.get("failureAlert")
-schedule = job.get("schedule")
-agent_payload = job.get("payload")
-checks = [
-    job.get("id") == expected["job_id"],
-    job.get("declarationKey") == "borrowedfire.prometheus-learning.v1",
-    job.get("name") == expected["name"],
-    job.get("displayName") == expected["name"],
-    job.get("description") == expected["description"],
-    job.get("enabled") is False,
-    job.get("agentId") == expected["agent_id"],
-    job.get("sessionTarget") == "isolated",
-    not job.get("sessionKey"),
-    job.get("wakeMode") == "now",
-    isinstance(delivery, dict) and delivery.get("mode") == "none",
-    isinstance(delivery, dict) and delivery.get("channel") == expected["channel"],
-    isinstance(delivery, dict) and delivery.get("to") == expected["to"],
-    isinstance(delivery, dict) and not delivery.get("accountId"),
-    isinstance(delivery, dict) and delivery.get("threadId") is None,
-    isinstance(failure, dict) and failure.get("after") == 2,
-    isinstance(failure, dict) and failure.get("cooldownMs") == 43200000,
-    isinstance(failure, dict) and failure.get("includeSkipped") is True,
-    isinstance(failure, dict) and failure.get("mode") == "announce",
-    isinstance(failure, dict) and failure.get("channel") == expected["channel"],
-    isinstance(failure, dict) and failure.get("to") == expected["to"],
-    isinstance(failure, dict) and not failure.get("accountId"),
-    isinstance(schedule, dict) and schedule.get("expr") == expected["expr"],
-    isinstance(schedule, dict) and schedule.get("tz") == expected["timezone"],
-    isinstance(agent_payload, dict) and agent_payload.get("kind") == "agentTurn",
-    isinstance(agent_payload, dict) and agent_payload.get("message") == expected["message"],
-    isinstance(agent_payload, dict) and agent_payload.get("timeoutSeconds") == 900,
-    isinstance(agent_payload, dict) and agent_payload.get("lightContext") is False,
-    isinstance(agent_payload, dict) and agent_payload.get("toolsAllow") == expected["tools"],
-]
-if not all(checks):
-    raise SystemExit(1)
-' "$JOB_ID" "$AGENT_ID" "$CRON_EXPR" "$TIMEZONE" "$NOTIFY_CHANNEL" "$NOTIFY_TO" "$JOB_NAME" "$DESCRIPTION" "$MESSAGE" "$TOOLS_ALLOW"; then
-  "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
-  printf 'Stored job does not match the requested safe configuration; Prometheus learning job is disabled.\n' >&2
-  exit 1
+if ! verify_job_configuration false; then
+  fail_job_safely 'Stored job does not match the requested safe configuration.'
 fi
 
 ROUTE_HASH="$(python3 - "$NOTIFY_CHANNEL" "$NOTIFY_TO" <<'PY'
@@ -476,9 +490,7 @@ import sys
 print(hashlib.sha256((sys.argv[1] + "\0" + sys.argv[2]).encode("utf-8")).hexdigest())
 PY
 )" || {
-  "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
-  printf 'Could not derive the private notification-route proof; Prometheus learning job is disabled.\n' >&2
-  exit 1
+  fail_job_safely 'Could not derive the private notification-route proof.'
 }
 
 STORED_ROUTE_HASH=""
@@ -503,29 +515,21 @@ except OSError:
 print(value)
 PY
 )" || {
-    "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
-    printf 'Existing notification-route proof is unsafe or unreadable; Prometheus learning job is disabled.\n' >&2
-    exit 1
+    fail_job_safely 'Existing notification-route proof is unsafe or unreadable.'
   }
 fi
 
 if [ "$STORED_ROUTE_HASH" != "$ROUTE_HASH" ]; then
   PROOF_DIR="$(dirname "$ROUTE_PROOF_FILE")"
   mkdir -p "$PROOF_DIR" || {
-    "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
-    printf 'Could not prepare notification-route proof storage; Prometheus learning job is disabled.\n' >&2
-    exit 1
+    fail_job_safely 'Could not prepare notification-route proof storage.'
   }
   PROOF_TMP="$(mktemp "$PROOF_DIR/.prometheus-learning-route.XXXXXX")" || {
-    "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
-    printf 'Could not prepare notification-route proof storage; Prometheus learning job is disabled.\n' >&2
-    exit 1
+    fail_job_safely 'Could not prepare notification-route proof storage.'
   }
   if ! chmod 600 "$PROOF_TMP"; then
     rm -f "$PROOF_TMP"
-    "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
-    printf 'Could not prepare notification-route proof storage; Prometheus learning job is disabled.\n' >&2
-    exit 1
+    fail_job_safely 'Could not prepare notification-route proof storage.'
   fi
   PROBE_MESSAGE="Prometheus learning notifications are configured on this host. This is a one-time route verification."
   PROBE_OUTPUT="$("$OPENCLAW_BIN" message send \
@@ -534,9 +538,7 @@ if [ "$STORED_ROUTE_HASH" != "$ROUTE_HASH" ]; then
     --message "$PROBE_MESSAGE" \
     --json)" || {
       rm -f "$PROOF_TMP"
-      "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
-      printf 'Live notification-route verification failed; Prometheus learning job is disabled.\n' >&2
-      exit 1
+      fail_job_safely 'Live notification-route verification failed.'
     }
   if ! printf '%s' "$PROBE_OUTPUT" | python3 -c '
 import json
@@ -562,9 +564,7 @@ if not acknowledged(payload):
     raise SystemExit(1)
 '; then
     rm -f "$PROOF_TMP"
-    "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
-    printf 'Notification provider returned no message acknowledgement; Prometheus learning job is disabled.\n' >&2
-    exit 1
+    fail_job_safely 'Notification provider returned no message acknowledgement.'
   fi
 
   if ! printf '%s\n' "$ROUTE_HASH" > "$PROOF_TMP" ||
@@ -593,9 +593,7 @@ except OSError:
 PY
   then
     rm -f "$PROOF_TMP"
-    "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
-    printf 'Could not persist and verify notification-route proof; Prometheus learning job is disabled.\n' >&2
-    exit 1
+    fail_job_safely 'Could not persist and verify notification-route proof.'
   fi
   printf 'Notification route verified with a live one-time message.\n'
 else
@@ -603,8 +601,9 @@ else
 fi
 
 if ! "$OPENCLAW_BIN" cron enable "$JOB_ID" >/dev/null; then
-  "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
-  printf 'Enable failed; Prometheus learning job is disabled.\n' >&2
-  exit 1
+  fail_job_safely 'Enable failed.'
+fi
+if ! verify_job_configuration true; then
+  fail_job_safely 'Enabled job does not match the requested safe configuration.'
 fi
 printf 'Prometheus learning job enabled after exact configuration and route verification.\n'
