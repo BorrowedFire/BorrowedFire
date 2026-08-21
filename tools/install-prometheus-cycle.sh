@@ -138,6 +138,9 @@ fi
 JOB_NAME="Prometheus Learning Cycle"
 DECLARATION_KEY="borrowedfire.prometheus-learning.v1"
 DESCRIPTION="Nightly verified learning, status capture, and due-only consolidation in the shared Prometheus brain."
+PROBE_NAME="Prometheus Learning Route Verification"
+PROBE_DECLARATION_KEY="borrowedfire.prometheus-learning.route-proof.v1"
+PROBE_DESCRIPTION="One-shot disabled declaration used only to prove the configured owner-notification route through the OpenClaw gateway."
 
 job_enabled_state_is() {
   local job_id="$1" expected="$2" verify_output
@@ -165,7 +168,7 @@ disable_job_and_verify() {
 }
 
 read_declaration_inventory() {
-  local destination="$1" list_output
+  local destination="$1" declaration_key="${2:-$DECLARATION_KEY}" list_output
   list_output="$("$OPENCLAW_BIN" cron list --all --json)" || return 1
   printf '%s' "$list_output" | python3 -c '
 import json
@@ -205,13 +208,13 @@ for job in matches:
     ):
         raise SystemExit(1)
     print(f"{job_id}\t{agent_id}")
-' "$DECLARATION_KEY" > "$destination"
+' "$declaration_key" > "$destination"
 }
 
 disable_existing_declaration() {
-  local inventory job_id _agent_id failed=0
+  local declaration_key="${1:-$DECLARATION_KEY}" inventory job_id _agent_id failed=0
   inventory="$(mktemp)" || return 1
-  if ! read_declaration_inventory "$inventory"; then
+  if ! read_declaration_inventory "$inventory" "$declaration_key"; then
     rm -f "$inventory"
     return 1
   fi
@@ -240,9 +243,9 @@ declaration_is_absent_or_single_for_agent() {
 }
 
 remove_existing_declarations() {
-  local inventory job_id _agent_id failed=0 remaining
+  local declaration_key="${1:-$DECLARATION_KEY}" inventory job_id _agent_id failed=0 remaining
   inventory="$(mktemp)" || return 1
-  if ! read_declaration_inventory "$inventory"; then
+  if ! read_declaration_inventory "$inventory" "$declaration_key"; then
     rm -f "$inventory"
     return 1
   fi
@@ -256,7 +259,7 @@ remove_existing_declarations() {
   rm -f "$inventory"
   [ "$failed" -eq 0 ] || return 1
   remaining="$(mktemp)" || return 1
-  if ! read_declaration_inventory "$remaining"; then
+  if ! read_declaration_inventory "$remaining" "$declaration_key"; then
     rm -f "$remaining"
     return 1
   fi
@@ -265,6 +268,20 @@ remove_existing_declarations() {
     return 1
   fi
   rm -f "$remaining"
+}
+
+declaration_is_absent() {
+  local declaration_key="$1" inventory
+  inventory="$(mktemp)" || return 1
+  if ! read_declaration_inventory "$inventory" "$declaration_key"; then
+    rm -f "$inventory"
+    return 1
+  fi
+  if [ -s "$inventory" ]; then
+    rm -f "$inventory"
+    return 1
+  fi
+  rm -f "$inventory"
 }
 
 fail_declaration_safely() {
@@ -636,6 +653,101 @@ fail_job_safely() {
   exit 1
 }
 
+PROBE_JOB_ID=""
+PROOF_TMP=""
+
+fail_route_probe_safely() {
+  local reason="$1" probe_safe=0 learning_safe=0
+  if [ -n "$PROOF_TMP" ]; then
+    rm -f "$PROOF_TMP"
+  fi
+
+  if [ -n "$PROBE_JOB_ID" ]; then
+    if disable_job_and_verify "$PROBE_JOB_ID"; then
+      probe_safe=1
+    fi
+    if "$OPENCLAW_BIN" cron rm "$PROBE_JOB_ID" >/dev/null 2>&1 &&
+       declaration_is_absent "$PROBE_DECLARATION_KEY"; then
+      probe_safe=1
+    fi
+  elif disable_existing_declaration "$PROBE_DECLARATION_KEY"; then
+    probe_safe=1
+  fi
+  if disable_job_and_verify "$JOB_ID"; then
+    learning_safe=1
+  fi
+
+  if [ "$probe_safe" -eq 1 ] && [ "$learning_safe" -eq 1 ]; then
+    printf '%s Temporary route-proof jobs and the Prometheus learning job are verified disabled or absent.\n' "$reason" >&2
+  elif [ "$learning_safe" -eq 1 ]; then
+    printf '%s The Prometheus learning job is verified disabled, but the temporary route-proof job could not be proven safe; inspect OpenClaw before retrying.\n' "$reason" >&2
+  else
+    printf '%s The Prometheus learning job could not be proven disabled; inspect OpenClaw before retrying.\n' "$reason" >&2
+  fi
+  exit 1
+}
+
+verify_probe_configuration() {
+  local verify_output
+  verify_output="$("$OPENCLAW_BIN" cron get "$PROBE_JOB_ID")" || return 1
+  printf '%s' "$verify_output" | python3 -c '
+import json
+import re
+import sys
+
+expected = {
+    "job_id": sys.argv[1],
+    "agent_id": sys.argv[2],
+    "channel": sys.argv[3],
+    "to": sys.argv[4],
+    "account": sys.argv[5],
+    "name": sys.argv[6],
+    "description": sys.argv[7],
+    "argv": json.loads(sys.argv[8]),
+}
+try:
+    payload = json.load(sys.stdin)
+except (json.JSONDecodeError, OSError):
+    raise SystemExit(1)
+job = payload.get("job", payload) if isinstance(payload, dict) else None
+if not isinstance(job, dict):
+    raise SystemExit(1)
+delivery = job.get("delivery")
+schedule = job.get("schedule")
+command = job.get("payload")
+failure = job.get("failureAlert")
+checks = [
+    job.get("id") == expected["job_id"],
+    job.get("declarationKey") == "borrowedfire.prometheus-learning.route-proof.v1",
+    job.get("name") == expected["name"],
+    job.get("displayName") == expected["name"],
+    job.get("description") == expected["description"],
+    job.get("enabled") is False,
+    job.get("deleteAfterRun") is False,
+    job.get("agentId") == expected["agent_id"],
+    job.get("sessionTarget") == "isolated",
+    not job.get("sessionKey"),
+    job.get("wakeMode") == "now",
+    isinstance(schedule, dict) and schedule.get("kind") == "at",
+    isinstance(schedule, dict) and isinstance(schedule.get("at"), str) and bool(schedule["at"].strip()),
+    isinstance(delivery, dict) and delivery.get("mode") == "announce",
+    isinstance(delivery, dict) and delivery.get("channel") == expected["channel"],
+    isinstance(delivery, dict) and delivery.get("to") == expected["to"],
+    isinstance(delivery, dict) and delivery.get("accountId") == expected["account"],
+    isinstance(delivery, dict) and delivery.get("threadId") is None,
+    isinstance(delivery, dict) and delivery.get("bestEffort") is not True,
+    failure in (None, False, {}),
+    isinstance(command, dict) and command.get("kind") == "command",
+    isinstance(command, dict) and command.get("argv") == expected["argv"],
+    isinstance(command, dict) and command.get("timeoutSeconds") == 30,
+    isinstance(command, dict) and command.get("outputMaxBytes") == 4096,
+]
+if not all(checks):
+    raise SystemExit(1)
+' "$PROBE_JOB_ID" "$AGENT_ID" "$NOTIFY_CHANNEL" "$NOTIFY_TO" "$NOTIFY_ACCOUNT" \
+    "$PROBE_NAME" "$PROBE_DESCRIPTION" "$PROBE_COMMAND_JSON"
+}
+
 verify_job_configuration() {
   local expected_enabled="$1" verify_output
   verify_output="$("$OPENCLAW_BIN" cron get "$JOB_ID")" || return 1
@@ -868,64 +980,112 @@ if ! chmod 600 "$PROOF_TMP"; then
   fail_job_safely 'Could not prepare notification-route proof storage.'
 fi
 PROBE_MESSAGE="Prometheus learning notifications are configured on this host. This verifies the route for the current controller configuration."
-PROBE_OUTPUT="$("$OPENCLAW_BIN" message send \
-  --channel "$NOTIFY_CHANNEL" \
-  --target "$NOTIFY_TO" \
-  --account "$NOTIFY_ACCOUNT" \
-  --message "$PROBE_MESSAGE" \
-  --json)" || {
-    rm -f "$PROOF_TMP"
-    fail_job_safely 'Live notification-route verification failed.'
-  }
-if ! printf '%s' "$PROBE_OUTPUT" | python3 -c '
+PROBE_COMMAND_JSON="$(python3 - "$PROBE_MESSAGE" <<'PY'
 import json
+import sys
+
+print(json.dumps(["printf", "%s\\n", sys.argv[1]], separators=(",", ":")))
+PY
+)" || {
+  fail_route_probe_safely 'Could not construct the temporary notification-route probe.'
+}
+
+if ! remove_existing_declarations "$PROBE_DECLARATION_KEY"; then
+  fail_route_probe_safely 'A stale temporary notification-route declaration could not be removed safely.'
+fi
+
+PROBE_ARGS=(
+  cron add
+  --name "$PROBE_NAME"
+  --display-name "$PROBE_NAME"
+  --description "$PROBE_DESCRIPTION"
+  --declaration-key "$PROBE_DECLARATION_KEY"
+  --disabled
+  --keep-after-run
+  --agent "$AGENT_ID"
+  --at +1h
+  --session isolated
+  --wake now
+  --command-argv "$PROBE_COMMAND_JSON"
+  --timeout-seconds 30
+  --output-max-bytes 4096
+  --announce
+  --channel "$NOTIFY_CHANNEL"
+  --to "$NOTIFY_TO"
+  --account "$NOTIFY_ACCOUNT"
+  --json
+)
+
+PROBE_CREATE_OUTPUT="$("$OPENCLAW_BIN" "${PROBE_ARGS[@]}")" || {
+  fail_route_probe_safely 'OpenClaw could not create the disabled temporary notification-route probe.'
+}
+PROBE_JOB_ID="$(printf '%s' "$PROBE_CREATE_OUTPUT" | python3 -c '
+import json
+import re
 import sys
 
 try:
     payload = json.load(sys.stdin)
 except (json.JSONDecodeError, OSError):
     raise SystemExit(1)
+job = payload.get("job") if isinstance(payload, dict) else None
+job_id = payload.get("id") if isinstance(payload, dict) else None
+if not job_id and isinstance(job, dict):
+    job_id = job.get("id")
+if not isinstance(job_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]*", job_id):
+    raise SystemExit(1)
+print(job_id)
+')" || {
+  PROBE_JOB_ID=""
+  fail_route_probe_safely 'OpenClaw returned no parseable temporary route-probe job id.'
+}
 
-def acknowledged(value):
-    placeholders = {"ok", "unknown", "sent", "success", "true", "none", "null"}
-    if isinstance(value, dict):
-        for key, item in value.items():
-            normalized = key.replace("_", "").lower()
-            if normalized in {"messageid", "sentmessageid"} and isinstance(item, str):
-                message_id = item.strip()
-                if message_id and message_id.lower() not in placeholders:
-                    return True
-        return any(acknowledged(item) for item in value.values())
-    if isinstance(value, list):
-        return any(acknowledged(item) for item in value)
-    return False
+if ! verify_probe_configuration; then
+  fail_route_probe_safely 'Stored temporary route probe does not match the requested safe configuration.'
+fi
 
-def explicitly_failed(value):
-    if isinstance(value, dict):
-        for key, item in value.items():
-            normalized = key.replace("_", "").lower()
-            if normalized in {"ok", "success", "delivered"} and item is False:
-                return True
-            if normalized in {"iserror", "failed"} and item is True:
-                return True
-            if normalized in {"error", "errors"} and item not in (None, "", [], {}):
-                return True
-            if normalized in {"status", "deliverystatus"} and isinstance(item, str):
-                if item.strip().lower().replace("-", "_") in {
-                    "error", "failed", "partial_failed", "rejected", "skipped", "suppressed"
-                }:
-                    return True
-        return any(explicitly_failed(item) for item in value.values())
-    if isinstance(value, list):
-        return any(explicitly_failed(item) for item in value)
-    return False
+PROBE_OUTPUT="$("$OPENCLAW_BIN" cron run "$PROBE_JOB_ID" \
+  --wait --wait-timeout 2m --poll-interval 1s)" || {
+    fail_route_probe_safely 'Live notification-route verification through the OpenClaw gateway failed.'
+  }
+if ! printf '%s' "$PROBE_OUTPUT" | python3 -c '
+import json
+import re
+import sys
 
-if explicitly_failed(payload) or not acknowledged(payload):
+try:
+    payload = json.load(sys.stdin)
+except (json.JSONDecodeError, OSError):
+    raise SystemExit(1)
+run = payload.get("run") if isinstance(payload, dict) else None
+run_id = payload.get("runId") if isinstance(payload, dict) else None
+if not run_id and isinstance(run, dict):
+    run_id = run.get("runId")
+placeholders = {"ok", "unknown", "none", "null", "pending", "queued"}
+if (
+    not isinstance(payload, dict)
+    or payload.get("ok") is not True
+    or payload.get("completed") is not True
+    or payload.get("status") != "ok"
+    or not isinstance(run, dict)
+    or run.get("status") != "ok"
+    or run.get("deliveryStatus") != "delivered"
+    or not isinstance(run_id, str)
+    or not run_id.strip()
+    or run_id.strip().lower() in placeholders
+    or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]*", run_id.strip())
+):
     raise SystemExit(1)
 '; then
-  rm -f "$PROOF_TMP"
-  fail_job_safely 'Notification provider returned no message acknowledgement.'
+  fail_route_probe_safely 'OpenClaw returned no completed delivered run record for the temporary route probe.'
 fi
+
+if ! disable_job_and_verify "$PROBE_JOB_ID" ||
+   ! "$OPENCLAW_BIN" cron rm "$PROBE_JOB_ID" >/dev/null 2>&1 ||
+   ! declaration_is_absent "$PROBE_DECLARATION_KEY"; then
+  fail_route_probe_safely 'The temporary notification-route probe could not be removed after delivery.'
+fi
+PROBE_JOB_ID=""
 
 if ! printf '%s\n' "$ROUTE_HASH" > "$PROOF_TMP" ||
    ! python3 - "$PROOF_TMP" "$ROUTE_PROOF_FILE" "$ROUTE_HASH" <<'PY'
@@ -952,10 +1112,10 @@ except OSError:
     raise SystemExit(1)
 PY
 then
-  rm -f "$PROOF_TMP"
-  fail_job_safely 'Could not persist and verify notification-route proof.'
+  fail_route_probe_safely 'Could not persist and verify notification-route proof.'
 fi
-printf 'Notification route verified with a live convergence message.\n'
+PROOF_TMP=""
+printf 'Notification route verified through the OpenClaw gateway.\n'
 
 if ! "$OPENCLAW_BIN" cron enable "$JOB_ID" >/dev/null; then
   fail_job_safely 'Enable failed.'

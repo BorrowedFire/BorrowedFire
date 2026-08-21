@@ -95,9 +95,12 @@ verifies the complete learning stack is visible to that exact agent, migrates th
 the agent changes, resolves and pins that agent's effective channel account across the probe, job,
 and failure alert (using the runtime default when scoped or multiple inbound bindings are
 ambiguous), clears stale one-shot deletion state, and enables only after a live route probe on each
-explicit installer convergence plus scheduler-level failure-alert verification. Redacted OpenClaw
-configuration cannot safely identify credential-only changes, so the installer never substitutes a
-cached route hash for that live check. The nightly job remains silent on routine success or a no-op. See
+explicit installer convergence plus scheduler-level failure-alert verification. The probe is a
+disabled, transient command job that is force-run through the OpenClaw Gateway, requires a completed
+`delivered` run record, and is removed before the learning job is enabled. This proves the route in
+the scheduler's real privacy and credential context. Redacted OpenClaw configuration cannot safely
+identify credential-only changes, so the installer never substitutes a cached route hash for that
+live check. The nightly job remains silent on routine success or a no-op. See
 [`skills/borrowedfire-learn/references/cycle-contract.md`](skills/borrowedfire-learn/references/cycle-contract.md).
 
 ## Repo layout

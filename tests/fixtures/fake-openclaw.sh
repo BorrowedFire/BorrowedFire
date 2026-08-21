@@ -135,24 +135,6 @@ print(json.dumps({"agentId": sys.argv[1], "workspaceDir": sys.argv[2], "modelVis
 PY
   exit 0
 fi
-if [ "${1:-}" = "message" ] && [ "${2:-}" = "send" ]; then
-  if [ "${FAKE_OPENCLAW_FAIL_MESSAGE:-0}" -eq 1 ]; then
-    exit 10
-  fi
-  if [ "${FAKE_OPENCLAW_MESSAGE_NO_ACK:-0}" -eq 1 ]; then
-    printf '{"channel":"imessage","ok":true}\n'
-  elif [ "${FAKE_OPENCLAW_MESSAGE_PLACEHOLDER_ACK:-0}" -eq 1 ]; then
-    printf '%s\n' '{"action":"send","channel":"imessage","messageId":"ok","payload":{"messageId":"ok","ok":true}}'
-  elif [ "${FAKE_OPENCLAW_MESSAGE_ERROR_WITH_ACK:-0}" -eq 1 ]; then
-    printf '%s\n' '{"action":"send","channel":"imessage","messageId":"generated-on-error","payload":{"ok":false,"error":"provider rejected route","messageId":"generated-on-error"}}'
-  else
-    if [ -n "${FAKE_OPENCLAW_POISON_ROUTE_PROOF:-}" ]; then
-      mkdir "${FAKE_OPENCLAW_POISON_ROUTE_PROOF}"
-    fi
-    printf '{"channel":"imessage","result":{"messageId":"fixture-message"}}\n'
-  fi
-  exit 0
-fi
 if [ "${1:-}" = "cron" ] && [ "${2:-}" = "status" ]; then
   if [ "${FAKE_OPENCLAW_SCHEDULER_DISABLED:-0}" -eq 1 ]; then
     printf '{"enabled":false}\n'
@@ -190,6 +172,18 @@ jobs = [
         "enabled": True,
     }
 ]
+probe_adds = [
+    call for call in calls
+    if call[:2] == ["cron", "add"]
+    and "borrowedfire.prometheus-learning.route-proof.v1" in call
+]
+if probe_adds:
+    jobs.append({
+        "id": "route-probe-job",
+        "declarationKey": "borrowedfire.prometheus-learning.route-proof.v1",
+        "agentId": "main",
+        "enabled": False,
+    })
 if sys.argv[2] == "1":
     jobs.append({
         "id": "duplicate-job",
@@ -207,6 +201,24 @@ print(json.dumps({
     "nextOffset": None,
 }))
 PY
+  fi
+  exit 0
+fi
+if [ "${1:-}" = "cron" ] && [ "${2:-}" = "run" ]; then
+  if [ "${FAKE_OPENCLAW_FAIL_PROBE_RUN:-0}" -eq 1 ]; then
+    exit 10
+  fi
+  if [ -n "${FAKE_OPENCLAW_POISON_ROUTE_PROOF:-}" ]; then
+    mkdir "${FAKE_OPENCLAW_POISON_ROUTE_PROOF}"
+  fi
+  if [ "${FAKE_OPENCLAW_PROBE_INCOMPLETE:-0}" -eq 1 ]; then
+    printf '%s\n' '{"ok":true,"enqueued":true,"runId":"fixture-run-1","completed":false,"status":"pending"}'
+  elif [ "${FAKE_OPENCLAW_PROBE_NOT_DELIVERED:-0}" -eq 1 ]; then
+    printf '%s\n' '{"ok":true,"enqueued":true,"runId":"fixture-run-1","completed":true,"status":"ok","run":{"runId":"fixture-run-1","status":"ok","deliveryStatus":"not-delivered"}}'
+  elif [ "${FAKE_OPENCLAW_PROBE_ERROR:-0}" -eq 1 ]; then
+    printf '%s\n' '{"ok":true,"enqueued":true,"runId":"fixture-run-1","completed":true,"status":"error","run":{"runId":"fixture-run-1","status":"error","deliveryStatus":"unknown"}}'
+  else
+    printf '%s\n' '{"ok":true,"enqueued":true,"runId":"fixture-run-1","completed":true,"status":"ok","run":{"runId":"fixture-run-1","status":"ok","deliveryStatus":"delivered"}}'
   fi
   exit 0
 fi
@@ -232,8 +244,22 @@ for line in lines:
 if current:
     calls.append(current)
 
+requested_id = sys.argv[4]
+probe_key = "borrowedfire.prometheus-learning.route-proof.v1"
+is_probe = requested_id == "route-probe-job"
+
+def is_relevant(call):
+    if call[:2] == ["cron", "add"]:
+        probe_add = probe_key in call
+        return probe_add if is_probe else not probe_add
+    if call[:2] in (["cron", "edit"], ["cron", "enable"], ["cron", "disable"]):
+        return len(call) >= 3 and call[2] == requested_id
+    return False
+
+relevant_calls = [call for call in calls if is_relevant(call)]
+relevant_lines = [value for call in relevant_calls for value in call]
 enabled = False
-for call in calls:
+for call in relevant_calls:
     if call[:2] == ["cron", "add"] and "--disabled" in call:
         enabled = False
     elif call[:2] == ["cron", "enable"]:
@@ -246,7 +272,7 @@ mismatch = sys.argv[2] == "1" or (enabled and sys.argv[3] == "1")
 def last_value(flag):
     values = [
         call[index + 1]
-        for call in calls
+        for call in relevant_calls
         if call[:2] in (["cron", "add"], ["cron", "edit"])
         for index, value in enumerate(call[:-1])
         if value == flag
@@ -255,13 +281,13 @@ def last_value(flag):
 
 if os.environ.get("FAKE_OPENCLAW_RESTRICTED_TOOLS") == "1":
     tools_allow = ["read"]
-elif "--clear-tools" in lines:
+elif "--clear-tools" in relevant_lines:
     tools_allow = None if os.environ.get("FAKE_OPENCLAW_LEGACY_CLEAR_TOOLS") == "1" else ["*"]
 else:
     tools_allow = last_value("--tools").replace(",", " ").split()
 
 delete_after_run = os.environ.get("FAKE_OPENCLAW_STALE_DELETE_AFTER_RUN") == "1"
-for call in calls:
+for call in relevant_calls:
     if call[:2] not in (["cron", "add"], ["cron", "edit"]):
         continue
     if "--delete-after-run" in call:
@@ -269,8 +295,43 @@ for call in calls:
     if "--keep-after-run" in call:
         delete_after_run = False
 
+if is_probe:
+    print(json.dumps({
+        "id": requested_id,
+        "declarationKey": probe_key,
+        "name": last_value("--name"),
+        "displayName": last_value("--display-name"),
+        "description": last_value("--description"),
+        "enabled": enabled,
+        "deleteAfterRun": delete_after_run,
+        "agentId": last_value("--agent"),
+        "sessionTarget": "isolated",
+        "sessionKey": None,
+        "wakeMode": last_value("--wake"),
+        "schedule": {
+            "kind": "at",
+            "at": "2099-01-01T00:00:00.000Z",
+        },
+        "delivery": {
+            "mode": "announce",
+            "channel": last_value("--channel"),
+            "to": last_value("--to"),
+            "accountId": last_value("--account"),
+            "threadId": None,
+            "bestEffort": False,
+        },
+        "failureAlert": None,
+        "payload": {
+            "kind": "command",
+            "argv": json.loads(last_value("--command-argv")),
+            "timeoutSeconds": int(last_value("--timeout-seconds")),
+            "outputMaxBytes": int(last_value("--output-max-bytes")),
+        },
+    }))
+    raise SystemExit(0)
+
 print(json.dumps({
-    "id": sys.argv[4],
+    "id": requested_id,
     "declarationKey": "borrowedfire.prometheus-learning.v1",
     "name": last_value("--name"),
     "displayName": last_value("--display-name"),
@@ -279,7 +340,7 @@ print(json.dumps({
     "deleteAfterRun": delete_after_run,
     "agentId": last_value("--agent"),
     "sessionTarget": "isolated",
-    "sessionKey": "stale-session" if sys.argv[2] == "session" or "--clear-session-key" not in lines else None,
+    "sessionKey": "stale-session" if sys.argv[2] == "session" or "--clear-session-key" not in relevant_lines else None,
     "wakeMode": last_value("--wake"),
     "schedule": {
         "kind": "cron",
@@ -315,6 +376,11 @@ PY
 fi
 if [ "${FAKE_OPENCLAW_ADD_NO_ID:-0}" -eq 1 ] && [ "${1:-}" = "cron" ] && [ "${2:-}" = "add" ]; then
   printf '{"job":{"declarationKey":"borrowedfire.prometheus-learning.v1"}}\n'
+  exit 0
+fi
+if [ "${1:-}" = "cron" ] && [ "${2:-}" = "add" ] &&
+   printf '%s\n' "$@" | grep -qx 'borrowedfire.prometheus-learning.route-proof.v1'; then
+  printf '{"id":"route-probe-job","declarationKey":"borrowedfire.prometheus-learning.route-proof.v1"}\n'
   exit 0
 fi
 printf '{"id":"fixture-job","declarationKey":"borrowedfire.prometheus-learning.v1"}\n'

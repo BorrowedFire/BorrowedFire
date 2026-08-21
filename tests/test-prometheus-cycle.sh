@@ -19,6 +19,27 @@ check() {
   if "$@" >/dev/null 2>&1; then ok "$desc"; else fail "$desc"; fi
 }
 
+recorded_call_count() {
+  python3 - "$OPENCLAW_ARGS_FILE" "$@" <<'PY'
+import sys
+
+lines = open(sys.argv[1], encoding="utf-8").read().splitlines()
+expected = sys.argv[2:]
+calls = []
+current = []
+for line in lines:
+    if line == "CALL":
+        if current:
+            calls.append(current)
+        current = []
+    else:
+        current.append(line)
+if current:
+    calls.append(current)
+print(sum(call == expected for call in calls))
+PY
+}
+
 mkdir -p "$HOME/.config/borrowedfire" "$SB/prometheus/config" "$SB/prometheus/projects" \
   "$FAKE_OPENCLAW_WORKSPACE"
 git init -q "$SB/prometheus"
@@ -73,7 +94,11 @@ check "prompt preserves product mutation boundary" grep -q 'Do not mutate produc
 check "prompt narrows outbox cleanup" grep -q 'exact local-only .brain-outbox/<file>' "$OPENCLAW_ARGS_FILE"
 check "prompt permits material digest summary" grep -q 'material-digest summary' "$OPENCLAW_ARGS_FILE"
 check "prompt names resolved brain" grep -q "$SB/prometheus" "$OPENCLAW_ARGS_FILE"
-check "live route probe sent once" test "$(grep -c '^message$' "$OPENCLAW_ARGS_FILE")" -eq 1
+check "gateway route probe ran once" test "$(recorded_call_count cron run route-probe-job --wait --wait-timeout 2m --poll-interval 1s)" -eq 1
+check "gateway route probe uses a disabled transient declaration" \
+  grep -qx 'borrowedfire.prometheus-learning.route-proof.v1' "$OPENCLAW_ARGS_FILE"
+check "gateway route probe uses a command payload" grep -qx -- '--command-argv' "$OPENCLAW_ARGS_FILE"
+check "gateway route probe is removed after delivery" test "$(recorded_call_count cron rm route-probe-job)" -eq 1
 check "route proof persisted privately" test "$(stat -c '%a' "$HOME/.config/borrowedfire/prometheus-learning-route.sha256" 2>/dev/null || stat -f '%Lp' "$HOME/.config/borrowedfire/prometheus-learning-route.sha256" 2>/dev/null)" = 600
 
 rm -f "$OPENCLAW_ARGS_FILE"
@@ -110,7 +135,7 @@ OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null
 check "matching stored route is re-probed on installer convergence" \
-  test "$(grep -c '^message$' "$OPENCLAW_ARGS_FILE")" -eq 1
+  test "$(recorded_call_count cron run route-probe-job --wait --wait-timeout 2m --poll-interval 1s)" -eq 1
 
 rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
 FAKE_OPENCLAW_BINDINGS='[{"agentId":"main","match":{"channel":"imessage","accountId":"ops"},"description":"imessage account=ops"}]' \
@@ -120,7 +145,7 @@ FAKE_OPENCLAW_BINDINGS='[{"agentId":"main","match":{"channel":"imessage","accoun
   --notify-channel imessage --notify-to owner-route >/dev/null
 check "selected agent binding pins one account across job, alert, and probe" \
   test "$(grep -c '^ops$' "$OPENCLAW_ARGS_FILE")" -eq 4
-check "selected agent account route receives the live proof" grep -qx 'message' "$OPENCLAW_ARGS_FILE"
+check "selected agent account route receives the live proof" grep -qx 'run' "$OPENCLAW_ARGS_FILE"
 
 rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
 FAKE_OPENCLAW_BINDINGS='[{"agentId":"main","match":{"channel":"imessage","accountId":"ops"},"description":"imessage account=ops"},{"agentId":"main","match":{"channel":"imessage","accountId":"audit","peer":{"kind":"direct","id":"owner-route"}},"description":"imessage account=audit peer=direct:owner-route"}]' \
@@ -170,7 +195,7 @@ else
   ok "unsafe route-proof target fails closed"
 fi
 check "unsafe route-proof target disables the job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
-check "unsafe route-proof target is rejected before live probe" bash -c "! grep -qx 'message' '$OPENCLAW_ARGS_FILE'"
+check "unsafe route-proof target is rejected before live probe" bash -c "! grep -qx 'run' '$OPENCLAW_ARGS_FILE'"
 rmdir "$ROUTE_PROOF"
 
 mkdir -p "$SB/openclaw-alt"
@@ -191,11 +216,11 @@ FAKE_OPENCLAW_DUPLICATE_DECLARATIONS=1 \
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null
 check "duplicate declarations are both disabled" \
-  test "$(grep -c '^disable$' "$OPENCLAW_ARGS_FILE")" -eq 2
+  test "$(recorded_call_count cron disable duplicate-job)" -eq 1
 check "duplicate declarations are both removed" \
-  test "$(grep -c '^rm$' "$OPENCLAW_ARGS_FILE")" -eq 2
+  test "$(recorded_call_count cron rm duplicate-job)" -eq 1
 check "duplicate declaration cleanup converges one replacement" \
-  test "$(grep -c '^add$' "$OPENCLAW_ARGS_FILE")" -eq 1
+  test "$(grep -c '^borrowedfire.prometheus-learning.v1$' "$OPENCLAW_ARGS_FILE")" -eq 1
 
 mkdir -p "$SB/host-one-bin" "$SB/host-two-bin"
 # shellcheck disable=SC2016  # write a literal fixture script that expands its own argument
@@ -271,11 +296,11 @@ check "active legacy config path gets its own controller watermark" \
   test -n "$LEGACY_CONFIG_WATERMARK" -a -n "$CANONICAL_CONFIG_WATERMARK" -a \
   "$LEGACY_CONFIG_WATERMARK" != "$CANONICAL_CONFIG_WATERMARK"
 check "diagnostic lines before the active config path are tolerated" \
-  grep -qx 'message' "$SB/legacy-config-args"
+  grep -qx 'run' "$SB/legacy-config-args"
 check "OpenClaw home display prefix resolves to the effective home" \
   test -n "$LEGACY_CONFIG_WATERMARK"
 check "legacy-to-canonical config migration requires a fresh route probe" \
-  grep -qx 'message' "$SB/canonical-config-args"
+  grep -qx 'run' "$SB/canonical-config-args"
 
 rm -f "$OPENCLAW_ARGS_FILE"
 if FAKE_OPENCLAW_CONFIG_FILE_OUTPUT='not-a-path' \
@@ -307,7 +332,7 @@ OPENCLAW_ARGS_FILE="$SB/config-digest-two-args" OPENCLAW_CONFIG_PATH="$CONFIG_DI
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null
 check "resolved include or environment config changes require a fresh route probe" \
-  grep -qx 'message' "$SB/config-digest-two-args"
+  grep -qx 'run' "$SB/config-digest-two-args"
 check "effective-config proof does not depend on root config bytes changing" \
   test "$(git hash-object "$CONFIG_DIGEST_PATH")" = "$CONFIG_ROOT_DIGEST"
 
@@ -325,9 +350,9 @@ check "distinct OpenClaw profiles get distinct watermarks" \
   test -n "$PROFILE_A_WATERMARK" -a -n "$PROFILE_B_WATERMARK" -a \
   "$PROFILE_A_WATERMARK" != "$PROFILE_B_WATERMARK"
 check "distinct OpenClaw profiles require independent route probes" \
-  grep -qx 'message' "$SB/profile-a-args"
+  grep -qx 'run' "$SB/profile-a-args"
 check "second OpenClaw profile does not reuse the first route proof" \
-  grep -qx 'message' "$SB/profile-b-args"
+  grep -qx 'run' "$SB/profile-b-args"
 
 mkdir -p "$SB/machine-fallback-bin"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 1' > "$SB/machine-fallback-bin/ioreg"
@@ -486,51 +511,61 @@ check "ambiguous enable is followed by disable" grep -qx 'disable' "$OPENCLAW_AR
 check "ambiguous enable verifies disabled state" grep -qx 'get' "$OPENCLAW_ARGS_FILE"
 
 rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
-if FAKE_OPENCLAW_FAIL_MESSAGE=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+if FAKE_OPENCLAW_FAIL_PROBE_RUN=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
-  fail "live route failure fails closed"
+  fail "gateway route-run failure fails closed"
 else
-  ok "live route failure fails closed"
+  ok "gateway route-run failure fails closed"
 fi
-check "route failure disables the job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
-check "route failure never enables the job" bash -c "! grep -qx 'enable' '$OPENCLAW_ARGS_FILE'"
+check "route-run failure disables the learning job" \
+  test "$(recorded_call_count cron disable fixture-job)" -ge 1
+check "route-run failure disables the temporary probe" \
+  test "$(recorded_call_count cron disable route-probe-job)" -ge 1
+check "route-run failure never enables the job" \
+  test "$(recorded_call_count cron enable fixture-job)" -eq 0
 
 rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
-if FAKE_OPENCLAW_MESSAGE_NO_ACK=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+if FAKE_OPENCLAW_PROBE_INCOMPLETE=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
-  fail "missing provider acknowledgement fails closed"
+  fail "incomplete gateway route run fails closed"
 else
-  ok "missing provider acknowledgement fails closed"
+  ok "incomplete gateway route run fails closed"
 fi
-check "missing acknowledgement disables the job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
-check "missing acknowledgement never enables the job" bash -c "! grep -qx 'enable' '$OPENCLAW_ARGS_FILE'"
-
-rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
-if FAKE_OPENCLAW_MESSAGE_PLACEHOLDER_ACK=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
-  "$SRC/tools/install-prometheus-cycle.sh" \
-  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
-  fail "placeholder provider acknowledgement fails closed"
-else
-  ok "placeholder provider acknowledgement fails closed"
-fi
-check "placeholder acknowledgement disables the job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
-check "placeholder acknowledgement never enables the job" bash -c "! grep -qx 'enable' '$OPENCLAW_ARGS_FILE'"
-check "placeholder acknowledgement stores no route proof" \
+check "incomplete route run disables the learning job" \
+  test "$(recorded_call_count cron disable fixture-job)" -ge 1
+check "incomplete route run stores no route proof" \
   test ! -e "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
 
 rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
-if FAKE_OPENCLAW_MESSAGE_ERROR_WITH_ACK=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+if FAKE_OPENCLAW_PROBE_NOT_DELIVERED=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
-  fail "explicit provider error with acknowledgement fails closed"
+  fail "non-delivered gateway route run fails closed"
 else
-  ok "explicit provider error with acknowledgement fails closed"
+  ok "non-delivered gateway route run fails closed"
 fi
-check "provider error with acknowledgement disables the job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
-check "provider error with acknowledgement never enables the job" bash -c "! grep -qx 'enable' '$OPENCLAW_ARGS_FILE'"
-check "provider error with acknowledgement stores no route proof" \
+check "non-delivered route run disables the learning job" \
+  test "$(recorded_call_count cron disable fixture-job)" -ge 1
+check "non-delivered route run never enables the job" \
+  test "$(recorded_call_count cron enable fixture-job)" -eq 0
+check "non-delivered route run stores no route proof" \
+  test ! -e "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
+
+rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
+if FAKE_OPENCLAW_PROBE_ERROR=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "errored gateway route run fails closed"
+else
+  ok "errored gateway route run fails closed"
+fi
+check "errored route run disables the learning job" \
+  test "$(recorded_call_count cron disable fixture-job)" -ge 1
+check "errored route run never enables the job" \
+  test "$(recorded_call_count cron enable fixture-job)" -eq 0
+check "errored route run stores no route proof" \
   test ! -e "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
 
 rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
@@ -542,7 +577,7 @@ if FAKE_OPENCLAW_POISON_ROUTE_PROOF="$HOME/.config/borrowedfire/prometheus-learn
 else
   ok "post-probe route-proof persistence failure fails closed"
 fi
-check "post-probe persistence failure sent the probe" grep -qx 'message' "$OPENCLAW_ARGS_FILE"
+check "post-probe persistence failure ran the gateway probe" grep -qx 'run' "$OPENCLAW_ARGS_FILE"
 check "post-probe persistence failure disables the job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
 check "post-probe persistence failure never enables the job" bash -c "! grep -qx 'enable' '$OPENCLAW_ARGS_FILE'"
 rmdir "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
