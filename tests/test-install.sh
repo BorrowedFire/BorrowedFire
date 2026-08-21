@@ -23,15 +23,22 @@ check "claude: closeout linked"        test -L "$HOME/.claude/skills/session-clo
 check "codex: closeout linked"         test -L "$HOME/.codex/skills/session-closeout"
 check "qwen: maintainer linked"        test -L "$HOME/.qwen/skills/maintainer"
 check "openclaw: digest linked"        test -L "$SB/openclaw-ws/skills/digest"
+check "claude: learning linked"        test -L "$HOME/.claude/skills/borrowedfire-learn"
+check "codex: learning linked"         test -L "$HOME/.codex/skills/borrowedfire-learn"
+check "openclaw: learning linked"      test -L "$SB/openclaw-ws/skills/borrowedfire-learn"
 check "claude: manifest written"       grep -q '^remember link$' "$HOME/.claude/skills/.borrowedfire-manifest"
 check "claude: doctrine block present" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md"
 check "openclaw: doctrine in AGENTS.md" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$SB/openclaw-ws/AGENTS.md"
-check "manifest has 15 entries"        test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 15
+check "manifest has 16 entries"        test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 16
 
-# --- 2. idempotence: re-run, doctrine block appears exactly once ---
+# --- 2. idempotence: re-run, doctrine is byte-identical and appears exactly once ---
+cp "$HOME/.claude/CLAUDE.md" "$SB/claude-doctrine-before"
 "$SRC/install.sh" --openclaw-workspace "$SB/openclaw-ws" >/dev/null 2>&1
+check "doctrine idempotent (byte-identical)" cmp -s "$SB/claude-doctrine-before" "$HOME/.claude/CLAUDE.md"
 check "doctrine idempotent (1 block)"  test "$(grep -c 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md")" -eq 1
-check "still 15 manifest entries"      test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 15
+check "still 16 manifest entries"      test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 16
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+check "doctrine invokes namespaced learning" grep -q 'run `borrowedfire-learn` automatically' "$HOME/.claude/CLAUDE.md"
 
 # --- 3. legacy unowned dir warns, --adopt retires it ---
 mkdir -p "$HOME/.codex/skills/takeoff"; echo x > "$HOME/.codex/skills/takeoff/SKILL.md"
@@ -70,9 +77,232 @@ check "copy mode: manifest says copy"  grep -q '^ship copy$' "$HOME/.qwen/skills
 check "copy: references included"      test -f "$HOME/.qwen/skills/remember/references/brain-schema.md"
 
 # --- 7. brain pointer ---
-mkdir -p "$HOME/prometheus/.git"
+mkdir -p "$HOME/prometheus/config" "$HOME/prometheus/projects"
+git init -q "$HOME/prometheus"
+printf '%s\n' 'journal/*.md merge=union' 'inbox/*.md merge=union' \
+  'projects/*.md merge=union' > "$HOME/prometheus/.gitattributes"
+touch "$HOME/prometheus/INDEX.md" "$HOME/prometheus/config/fleet.md"
 "$SRC/install.sh" >/dev/null 2>&1
-check "brain pointer auto-written"     grep -q "$HOME/prometheus" "$HOME/.config/borrowedfire/brain"
+check "schema-valid brain without helper template is accepted" \
+  grep -q "$HOME/prometheus" "$HOME/.config/borrowedfire/brain"
+check "explicit brain pointer is owner-private" \
+  test "$(stat -c '%a' "$HOME/.config/borrowedfire/brain" 2>/dev/null || stat -f '%Lp' "$HOME/.config/borrowedfire/brain" 2>/dev/null)" = 600
+
+INVALID_BRAIN_HOME="$SB/invalid-explicit-brain-home"
+mkdir -p "$INVALID_BRAIN_HOME/.codex" "$INVALID_BRAIN_HOME/.config/borrowedfire"
+printf '%s\n' "$HOME/prometheus" > "$INVALID_BRAIN_HOME/.config/borrowedfire/brain"
+if HOME="$INVALID_BRAIN_HOME" "$SRC/install.sh" --brain "$SB/not-a-brain" >/dev/null 2>&1; then
+  fail "invalid explicit brain fails before install"
+else
+  ok "invalid explicit brain fails before install"
+fi
+check "invalid explicit brain leaves prior pointer intact" \
+  grep -qxF "$HOME/prometheus" "$INVALID_BRAIN_HOME/.config/borrowedfire/brain"
+check "invalid explicit brain installs no skills" test ! -e "$INVALID_BRAIN_HOME/.codex/skills"
+check "invalid explicit brain installs no doctrine" test ! -e "$INVALID_BRAIN_HOME/.codex/AGENTS.md"
+
+PARTIAL_HOME="$SB/partial-install-home"
+mkdir -p "$PARTIAL_HOME/.codex/skills/borrowedfire-learn" "$PARTIAL_HOME/.config/borrowedfire"
+echo foreign > "$PARTIAL_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
+printf '%s\n' "$SB/old-brain" > "$PARTIAL_HOME/.config/borrowedfire/brain"
+CANONICAL_TEST_BRAIN="$(cd "$HOME/prometheus" && pwd -P)"
+if HOME="$PARTIAL_HOME" "$SRC/install.sh" --brain "$CANONICAL_TEST_BRAIN" >/dev/null 2>&1; then
+  fail "partial harness failure remains nonzero after brain switch"
+else
+  ok "partial harness failure remains nonzero after brain switch"
+fi
+check "valid requested brain is bound before partial harness failure" \
+  grep -qxF "$CANONICAL_TEST_BRAIN" "$PARTIAL_HOME/.config/borrowedfire/brain"
+check "partial harness failure never retains stale automatic doctrine" bash -c \
+  "! grep -q 'run \`borrowedfire-learn\` automatically' '$PARTIAL_HOME/.codex/AGENTS.md'"
+
+NESTED_HOME="$SB/nested-brain-home"
+mkdir -p "$NESTED_HOME/.codex" "$NESTED_HOME/prometheus/config" "$NESTED_HOME/prometheus/projects"
+git init -q "$NESTED_HOME"
+printf '%s\n' 'journal/*.md merge=union' 'inbox/*.md merge=union' \
+  'projects/*.md merge=union' > "$NESTED_HOME/prometheus/.gitattributes"
+touch "$NESTED_HOME/prometheus/INDEX.md" "$NESTED_HOME/prometheus/config/fleet.md" \
+  "$NESTED_HOME/prometheus/projects/_template.md"
+HOME="$NESTED_HOME" "$SRC/install.sh" >/dev/null 2>&1
+check "nested automatic brain root is rejected" test ! -e "$NESTED_HOME/.config/borrowedfire/brain"
+
+# --- 7b. an unmanaged automatic-learning collision fails closed before doctrine install ---
+COLLISION_HOME="$SB/collision-home"
+mkdir -p "$COLLISION_HOME/.codex/skills/borrowedfire-learn"
+echo foreign > "$COLLISION_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
+if HOME="$COLLISION_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
+  fail "unmanaged learning collision fails closed"
+else
+  ok "unmanaged learning collision fails closed"
+fi
+check "foreign learning skill remains intact" grep -q foreign "$COLLISION_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
+check "collision harness gets no learning doctrine" bash -c "! grep -q 'run \`borrowedfire-learn\` automatically' '$COLLISION_HOME/.codex/AGENTS.md'"
+check "collision harness retains safety doctrine" grep -q '^\*\*Safety\.\*\*' "$COLLISION_HOME/.codex/AGENTS.md"
+check "collision harness retains memory doctrine" grep -q '^\*\*Memory\.\*\*' "$COLLISION_HOME/.codex/AGENTS.md"
+
+STALE_HOME="$SB/stale-owned-home"
+mkdir -p "$STALE_HOME/.codex/skills/borrowedfire-learn"
+echo foreign > "$STALE_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
+echo 'borrowedfire-learn link' > "$STALE_HOME/.codex/skills/.borrowedfire-manifest"
+if HOME="$STALE_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
+  fail "stale ownership shape fails closed"
+else
+  ok "stale ownership shape fails closed"
+fi
+check "stale ownership does not install doctrine" bash -c "! grep -q 'run \`borrowedfire-learn\` automatically' '$STALE_HOME/.codex/AGENTS.md'"
+check "stale ownership retains safety doctrine" grep -q '^\*\*Safety\.\*\*' "$STALE_HOME/.codex/AGENTS.md"
+
+REPLACED_HOME="$SB/replaced-owned-home"
+mkdir -p "$REPLACED_HOME/.codex"
+HOME="$REPLACED_HOME" "$SRC/install.sh" >/dev/null 2>&1
+unlink "$REPLACED_HOME/.codex/skills/borrowedfire-learn"
+mkdir "$REPLACED_HOME/.codex/skills/borrowedfire-learn"
+echo foreign > "$REPLACED_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
+if HOME="$REPLACED_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
+  fail "replaced managed learning skill fails closed"
+else
+  ok "replaced managed learning skill fails closed"
+fi
+check "stale automatic learning trigger is removed" bash -c "! grep -q 'run \`borrowedfire-learn\` automatically' '$REPLACED_HOME/.codex/AGENTS.md'"
+check "replaced learning skill retains safety doctrine" grep -q '^\*\*Safety\.\*\*' "$REPLACED_HOME/.codex/AGENTS.md"
+if HOME="$REPLACED_HOME" "$SRC/install.sh" --dry-run >/dev/null 2>&1; then
+  fail "collision dry-run reports failure"
+else
+  ok "collision dry-run reports failure"
+fi
+
+READ_ONLY_HOME="$SB/read-only-context-home"
+mkdir -p "$READ_ONLY_HOME/.codex"
+HOME="$READ_ONLY_HOME" "$SRC/install.sh" >/dev/null 2>&1
+unlink "$READ_ONLY_HOME/.codex/skills/borrowedfire-learn"
+mkdir "$READ_ONLY_HOME/.codex/skills/borrowedfire-learn"
+echo foreign > "$READ_ONLY_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
+chmod 444 "$READ_ONLY_HOME/.codex/AGENTS.md"
+if HOME="$READ_ONLY_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
+  fail "read-only stale doctrine collision fails closed"
+else
+  ok "read-only stale doctrine collision fails closed"
+fi
+check "read-only context gets atomic safe doctrine replacement" \
+  grep -q 'Automatic learning is disabled' "$READ_ONLY_HOME/.codex/AGENTS.md"
+check "read-only context no longer invokes automatic learning" bash -c \
+  "! grep -q 'run \`borrowedfire-learn\` automatically' '$READ_ONLY_HOME/.codex/AGENTS.md'"
+
+SYMLINK_HOME="$SB/symlink-context-home"
+mkdir -p "$SYMLINK_HOME/.codex" "$SYMLINK_HOME/shared"
+printf '%s\n' 'shared owner context' > "$SYMLINK_HOME/shared/AGENTS.md"
+ln -s ../shared/AGENTS.md "$SYMLINK_HOME/.codex/AGENTS.md"
+HOME="$SYMLINK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+check "symlinked context remains a symlink" test -L "$SYMLINK_HOME/.codex/AGENTS.md"
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+check "symlinked context target receives doctrine" \
+  grep -q 'run `borrowedfire-learn` automatically' "$SYMLINK_HOME/shared/AGENTS.md"
+HOME="$SYMLINK_HOME" "$SRC/install.sh" --uninstall >/dev/null 2>&1
+check "symlinked context survives uninstall" test -L "$SYMLINK_HOME/.codex/AGENTS.md"
+check "symlinked context target retains owner content" \
+  grep -q '^shared owner context$' "$SYMLINK_HOME/shared/AGENTS.md"
+check "symlinked context target loses doctrine on uninstall" bash -c \
+  "! grep -q 'BORROWEDFIRE DOCTRINE' '$SYMLINK_HOME/shared/AGENTS.md'"
+
+STALE_COPY_HOME="$SB/stale-copy-home"
+STALE_COPY_SOURCE="$SB/stale-copy-source"
+mkdir -p "$STALE_COPY_HOME/.codex"
+HOME="$STALE_COPY_HOME" "$SRC/install.sh" --copy >/dev/null 2>&1
+cp -R "$SRC" "$STALE_COPY_SOURCE"
+printf '%s\n' '<!-- copied-learning-contract-v2 -->' >> \
+  "$STALE_COPY_SOURCE/skills/borrowedfire-learn/SKILL.md"
+mkdir -p "$SB/failing-copy-bin"
+# shellcheck disable=SC2016  # write a fixture that expands its own argv
+printf '%s\n' '#!/usr/bin/env bash' \
+  'if [ "${1:-}" = "-rf" ]; then exit 77; fi' \
+  'exec /bin/rm "$@"' > "$SB/failing-copy-bin/rm"
+chmod +x "$SB/failing-copy-bin/rm"
+if HOME="$STALE_COPY_HOME" PATH="$SB/failing-copy-bin:$PATH" \
+  "$STALE_COPY_SOURCE/install.sh" --copy >/dev/null 2>&1; then
+  fail "stale copied learning dependency fails closed"
+else
+  ok "stale copied learning dependency fails closed"
+fi
+check "failed copy refresh leaves prior skill intact" bash -c \
+  "! grep -q 'copied-learning-contract-v2' '$STALE_COPY_HOME/.codex/skills/borrowedfire-learn/SKILL.md'"
+check "stale copied learning dependency disables automatic doctrine" bash -c \
+  "! grep -q 'run \`borrowedfire-learn\` automatically' '$STALE_COPY_HOME/.codex/AGENTS.md'"
+check "stale copied learning dependency retains safety doctrine" \
+  grep -q '^\*\*Safety\.\*\*' "$STALE_COPY_HOME/.codex/AGENTS.md"
+
+UNINSTALL_FAILURE_HOME="$SB/uninstall-failure-home"
+mkdir -p "$UNINSTALL_FAILURE_HOME/.codex"
+HOME="$UNINSTALL_FAILURE_HOME" "$SRC/install.sh" >/dev/null 2>&1
+mkdir -p "$SB/failing-doctrine-bin"
+# shellcheck disable=SC2016  # write a fixture that expands its own argv
+printf '%s\n' '#!/usr/bin/env bash' \
+  'case "${1:-}" in */.borrowedfire-doctrine.XXXXXX) exit 77 ;; esac' \
+  'exec /usr/bin/mktemp "$@"' > "$SB/failing-doctrine-bin/mktemp"
+chmod +x "$SB/failing-doctrine-bin/mktemp"
+if HOME="$UNINSTALL_FAILURE_HOME" PATH="$SB/failing-doctrine-bin:$PATH" \
+  "$SRC/install.sh" --uninstall >/dev/null 2>&1; then
+  fail "failed doctrine rewrite fails uninstall"
+else
+  ok "failed doctrine rewrite fails uninstall"
+fi
+check "failed doctrine removal leaves learning skill installed" \
+  test -e "$UNINSTALL_FAILURE_HOME/.codex/skills/borrowedfire-learn"
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+check "failed doctrine removal leaves matching automatic doctrine" \
+  grep -q 'run `borrowedfire-learn` automatically' "$UNINSTALL_FAILURE_HOME/.codex/AGENTS.md"
+
+for dependency in remember recall digest; do
+  DEPENDENCY_HOME="$SB/foreign-$dependency-home"
+  mkdir -p "$DEPENDENCY_HOME/.codex/skills/$dependency"
+  echo foreign > "$DEPENDENCY_HOME/.codex/skills/$dependency/SKILL.md"
+  if HOME="$DEPENDENCY_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
+    fail "unmanaged $dependency dependency fails closed"
+  else
+    ok "unmanaged $dependency dependency fails closed"
+  fi
+  check "unmanaged $dependency suppresses doctrine" bash -c \
+    "! grep -q 'run \`borrowedfire-learn\` automatically' '$DEPENDENCY_HOME/.codex/AGENTS.md'"
+  check "unmanaged $dependency retains safety doctrine" grep -q '^\*\*Safety\.\*\*' \
+    "$DEPENDENCY_HOME/.codex/AGENTS.md"
+done
+
+MOVED_HOME="$SB/moved-learning-home"
+mkdir -p "$MOVED_HOME/.codex"
+HOME="$MOVED_HOME" "$SRC/install.sh" >/dev/null 2>&1
+for dependency in borrowedfire-learn remember recall digest; do
+  unlink "$MOVED_HOME/.codex/skills/$dependency"
+  ln -s "$SB/old-borrowedfire/skills/$dependency" "$MOVED_HOME/.codex/skills/$dependency"
+done
+if HOME="$MOVED_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
+  ok "moved-checkout learning links are repointed"
+else
+  fail "moved-checkout learning links are repointed"
+fi
+check "repointed learning link uses current checkout" \
+  test "$(readlink "$MOVED_HOME/.codex/skills/borrowedfire-learn")" = "$SRC/skills/borrowedfire-learn"
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+check "repointed stack retains automatic doctrine" \
+  grep -q 'run `borrowedfire-learn` automatically' "$MOVED_HOME/.codex/AGENTS.md"
+
+MOVED_COPY_HOME="$SB/moved-copy-home"
+mkdir -p "$MOVED_COPY_HOME/.codex"
+HOME="$MOVED_COPY_HOME" "$SRC/install.sh" >/dev/null 2>&1
+unlink "$MOVED_COPY_HOME/.codex/skills/remember"
+ln -s "$SB/old-borrowedfire/skills/remember" "$MOVED_COPY_HOME/.codex/skills/remember"
+if HOME="$MOVED_COPY_HOME" "$SRC/install.sh" --copy >/dev/null 2>&1; then
+  ok "copy mode converges after a managed checkout moves"
+else
+  fail "copy mode converges after a managed checkout moves"
+fi
+check "copy mode converts a moved managed link" bash -c \
+  "test -d '$MOVED_COPY_HOME/.codex/skills/remember' && ! test -L '$MOVED_COPY_HOME/.codex/skills/remember'"
+check "moved-link conversion records copy ownership" \
+  grep -q '^remember copy$' "$MOVED_COPY_HOME/.codex/skills/.borrowedfire-manifest"
+check "moved-link conversion installs the exact current skill" \
+  diff -qr -x .borrowedfire-copy "$SRC/skills/remember" "$MOVED_COPY_HOME/.codex/skills/remember"
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+check "moved-link conversion retains automatic doctrine" \
+  grep -q 'run `borrowedfire-learn` automatically' "$MOVED_COPY_HOME/.codex/AGENTS.md"
 
 # --- 8. uninstall: removes owned, leaves unowned, strips doctrine ---
 mkdir -p "$HOME/.claude/skills/my-own-skill"; echo mine > "$HOME/.claude/skills/my-own-skill/SKILL.md"
@@ -164,8 +394,14 @@ check "CODEX_HOME: doctrine written"   grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$S
 # --- 9g. pre-existing correct symlink gets recorded (Codex P2 round 6) ---
 rm -rf "$HOME/.claude/skills"; mkdir -p "$HOME/.claude/skills"
 ln -s "$SRC/skills/recall" "$HOME/.claude/skills/recall"   # manual pre-installer link, no manifest
-"$SRC/install.sh" >/dev/null 2>&1
+if "$SRC/install.sh" >/dev/null 2>&1; then
+  ok "adopted-link: automatic stack remains valid"
+else
+  fail "adopted-link: automatic stack remains valid"
+fi
 check "adopted-link: in manifest"      grep -q '^recall link$' "$HOME/.claude/skills/.borrowedfire-manifest"
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+check "adopted-link: doctrine retained" grep -q 'run `borrowedfire-learn` automatically' "$HOME/.claude/CLAUDE.md"
 "$SRC/install.sh" --uninstall >/dev/null 2>&1
 check "adopted-link: uninstallable"    test ! -L "$HOME/.claude/skills/recall"
 

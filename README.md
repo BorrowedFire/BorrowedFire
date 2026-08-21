@@ -7,7 +7,8 @@ private, git-authoritative markdown brain (in the lineage of
 Borrowed Fire is the system; Prometheus, the one who borrowed the fire, is its memory.
 
 - **Memory** compounds: every agent captures decisions, people, meetings, and hard-won lessons
-  into the brain; every agent reads them back before it works.
+  into the brain; every agent reads them back before it works. `borrowedfire-learn` runs automatically at
+  substantive checkpoints, and one always-on host performs a bounded nightly consolidation pass.
 - **Development** is orchestrated: a control-plane skill works the queue across all registered
   repos, delegating to a review-gated landing loop, with humans only answering decision-ready
   briefs.
@@ -39,6 +40,7 @@ deleted).
 
 | Skill | What it does |
 |---|---|
+| [borrowedfire-learn](skills/borrowedfire-learn/SKILL.md) | Automatic learning pass: extract verified durable deltas from completed work, dedupe, connect them to prevention, and capture through Prometheus; includes a safe scheduled fleet mode. |
 | [remember](skills/remember/SKILL.md) | Capture decisions, people, meetings, lessons, ideas into the brain — typed pages, wikilink graph, fleet-safe git sync. Owns the [schema](skills/remember/references/brain-schema.md). |
 | [recall](skills/recall/SKILL.md) | Answer from the brain with page citations and honest gaps; preflight lessons before any repo work. |
 | [digest](skills/digest/SKILL.md) | The dream cycle: promote inbox, ingest outboxes, dedupe entities, repair the graph, distill lessons, refresh the index. Locked, safe to schedule. |
@@ -71,7 +73,7 @@ brain projects/ registry ─────────────┘        │
                                                │
                           store-release ◀──────┘ (mobile)   changelog / signal (words)
 
-every skill ──▶ remember (lessons, decisions) ──▶ digest (consolidate) ──▶ recall (next run knows)
+completed work ──▶ borrowedfire-learn (verify + dedupe) ──▶ remember ──▶ digest ──▶ recall
 ```
 
 The shared rules every agent follows — brain sync protocol, capture triggers, safety rails, tier
@@ -79,15 +81,37 @@ routing — live in [`doctrine/DOCTRINE.md`](doctrine/DOCTRINE.md), installed in
 context file. The high-risk denylist (always owner-gated) is defined once in
 [`skills/land/references/denylist.md`](skills/land/references/denylist.md).
 
+For genuinely unattended improvement, install the nightly controller on exactly one always-on
+OpenClaw host after installing its workspace skills:
+
+```sh
+./install.sh --copy --brain /absolute/path/to/prometheus --openclaw-workspace /absolute/path/to/openclaw-workspace
+./tools/install-prometheus-cycle.sh --notify-channel <channel> --notify-to <owner-route>
+```
+
+It declares one idempotent job at 03:35 America/New_York by default, does not pin a provider/model,
+binds the OpenClaw `main` agent unless overridden with `--agent`, requires a concrete owner route,
+verifies the complete learning stack is visible to that exact agent, migrates the declaration when
+the agent changes, resolves and pins that agent's effective channel account across the probe, job,
+and failure alert (using the runtime default when scoped or multiple inbound bindings are
+ambiguous), clears stale one-shot deletion state, and enables only after a live route probe on each
+explicit installer convergence plus scheduler-level failure-alert verification. The probe is a
+disabled, transient command job that is force-run through the OpenClaw Gateway, requires a completed
+`delivered` run record, and is removed before the learning job is enabled. This proves the route in
+the scheduler's real privacy and credential context. Redacted OpenClaw configuration cannot safely
+identify credential-only changes, so the installer never substitutes a cached route hash for that
+live check. The nightly job remains silent on routine success or a no-op. See
+[`skills/borrowedfire-learn/references/cycle-contract.md`](skills/borrowedfire-learn/references/cycle-contract.md).
+
 ## Repo layout
 
 ```
-skills/            15 SKILL.md skills (+ agents/openai.yaml metadata, references/)
+skills/            16 SKILL.md skills (+ agents/openai.yaml metadata, references/)
 doctrine/          the managed context block install.sh distributes
 prometheus-template/  starting tree for your private brain repo
 install.sh         manifest-owned cross-harness installer
-tools/skill-lint.sh   lint (also install.sh's preflight; runs in CI)
-tests/             installer sandbox matrix + brain-protocol live proof (run in CI)
+tools/skill-lint.sh   lint (also install.sh's local preflight)
+tests/             local installer sandbox matrix + brain-protocol live proof
 ```
 
 Skills are plain markdown — readable by any agent that can read files, portable to any harness

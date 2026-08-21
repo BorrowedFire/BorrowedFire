@@ -68,11 +68,51 @@ for dir in "$SKILLS_DIR"/*/; do
   fi
 done
 
-# 7. memory trio installs together
-for m in remember recall digest; do
-  [ -d "$SKILLS_DIR/$m" ] || err "memory trio incomplete: missing '$m'"
+# 7. memory system installs together
+for m in remember recall digest borrowedfire-learn; do
+  [ -d "$SKILLS_DIR/$m" ] || err "memory system incomplete: missing '$m'"
 done
 [ -f "$SKILLS_DIR/remember/references/brain-schema.md" ] || err "missing remember/references/brain-schema.md (recall + digest depend on it)"
+
+LEARN_SKILL="$SKILLS_DIR/borrowedfire-learn/SKILL.md"
+DOCTRINE="$ROOT/doctrine/DOCTRINE.md"
+SAFE_DOCTRINE="$ROOT/doctrine/DOCTRINE_NO_LEARNING.md"
+if ! body "$LEARN_SKILL" | grep -qF 'Run without a user prompt'; then
+  err "borrowedfire-learn: automatic checkpoint invocation is missing"
+fi
+if ! body "$LEARN_SKILL" | grep -qF 'No autonomous self-rewrite'; then
+  err "borrowedfire-learn: self-modification boundary is missing"
+fi
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+if ! grep -qF 'run `borrowedfire-learn` automatically' "$DOCTRINE"; then
+  err "doctrine: automatic learning checkpoint is missing"
+fi
+# shellcheck disable=SC2016  # backticks are intentional literal contract text
+if grep -qF 'run `borrowedfire-learn` automatically' "$SAFE_DOCTRINE"; then
+  err "safe doctrine: automatic learning checkpoint must be disabled"
+fi
+# shellcheck disable=SC2016  # backticks are intentional literal contract text
+if ! grep -qF '**Safety.** The `land` denylist is always owner-gated' "$SAFE_DOCTRINE" ||
+   ! grep -qF '**Memory.** Prometheus is the private git-backed brain.' "$SAFE_DOCTRINE"; then
+  err "safe doctrine: non-learning memory and safety contracts are missing"
+fi
+if ! body "$LEARN_SKILL" | grep -qF 'notes/openclaw-<host>-<agent>-<workspace>-<binding-hash>-ingest.md'; then
+  err "borrowedfire-learn: host-scoped watermark contract is missing"
+fi
+if ! body "$LEARN_SKILL" | grep -qF 'effective OpenClaw' ||
+   ! body "$LEARN_SKILL" | grep -qF 'do not backfill pre-existing session notes'; then
+  err "borrowedfire-learn: controller identity and prospective bootstrap contracts are missing"
+fi
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+if ! body "$LEARN_SKILL" | grep -qF 'exact local-only `.brain-outbox/<file>`'; then
+  err "borrowedfire-learn: narrow outbox cleanup contract is missing"
+fi
+if ! body "$LEARN_SKILL" | grep -qF 'keep the pending capture in output only'; then
+  err "borrowedfire-learn: unavailable-brain fallback must remain output-only without repo-write authority"
+fi
+if ! body "$LEARN_SKILL" | grep -qF 'fleet mode never creates a fallback outbox in a product repository'; then
+  err "borrowedfire-learn: fleet mode must not write a product-repo fallback outbox"
+fi
 
 # 8. workflow contracts that must survive review-loop edits
 LAND_SKILL="$SKILLS_DIR/land/SKILL.md"
