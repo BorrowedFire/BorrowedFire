@@ -62,7 +62,7 @@ check "prompt narrows outbox cleanup" grep -q 'exact local-only .brain-outbox/<f
 check "prompt permits material digest summary" grep -q 'material-digest summary' "$OPENCLAW_ARGS_FILE"
 check "prompt names resolved brain" grep -q "$SB/prometheus" "$OPENCLAW_ARGS_FILE"
 check "live route probe sent once" test "$(grep -c '^message$' "$OPENCLAW_ARGS_FILE")" -eq 1
-check "route proof persisted privately" test "$(stat -f '%Lp' "$HOME/.config/borrowedfire/prometheus-learning-route.sha256" 2>/dev/null || stat -c '%a' "$HOME/.config/borrowedfire/prometheus-learning-route.sha256")" = 600
+check "route proof persisted privately" test "$(stat -c '%a' "$HOME/.config/borrowedfire/prometheus-learning-route.sha256" 2>/dev/null || stat -f '%Lp' "$HOME/.config/borrowedfire/prometheus-learning-route.sha256" 2>/dev/null)" = 600
 
 rm -f "$OPENCLAW_ARGS_FILE"
 FAKE_OPENCLAW_LEGACY_CLEAR_TOOLS=1 \
@@ -129,6 +129,30 @@ FAKE_OPENCLAW_ALT_WORKSPACE="$SB/openclaw-alt" \
   --notify-channel imessage --notify-to owner-route >/dev/null
 check "configured alternate agent converges" grep -qx 'alternate' "$OPENCLAW_ARGS_FILE"
 check "alternate workspace gets a distinct watermark" grep -Eq 'notes/openclaw-.+-alternate-openclaw-alt-[0-9a-f]{12}-ingest.md' "$OPENCLAW_ARGS_FILE"
+
+mkdir -p "$SB/host-one-bin" "$SB/host-two-bin"
+# shellcheck disable=SC2016  # write a literal fixture script that expands its own argument
+printf '%s\n' '#!/usr/bin/env bash' \
+  'if [ "${1:-}" = "-f" ]; then printf "%s\\n" controller-one.example; else printf "%s\\n" shared; fi' \
+  > "$SB/host-one-bin/hostname"
+# shellcheck disable=SC2016  # write a literal fixture script that expands its own argument
+printf '%s\n' '#!/usr/bin/env bash' \
+  'if [ "${1:-}" = "-f" ]; then printf "%s\\n" controller-two.example; else printf "%s\\n" shared; fi' \
+  > "$SB/host-two-bin/hostname"
+chmod +x "$SB/host-one-bin/hostname" "$SB/host-two-bin/hostname"
+rm -f "$OPENCLAW_ARGS_FILE"
+PATH="$SB/host-one-bin:$PATH" OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+HOST_ONE_WATERMARK="$(grep -Eo 'notes/openclaw-[^ ]+-ingest\.md' "$OPENCLAW_ARGS_FILE" | head -1)"
+rm -f "$OPENCLAW_ARGS_FILE"
+PATH="$SB/host-two-bin:$PATH" OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+HOST_TWO_WATERMARK="$(grep -Eo 'notes/openclaw-[^ ]+-ingest\.md' "$OPENCLAW_ARGS_FILE" | head -1)"
+check "same-short-name controllers get distinct watermarks" \
+  test -n "$HOST_ONE_WATERMARK" -a -n "$HOST_TWO_WATERMARK" -a \
+  "$HOST_ONE_WATERMARK" != "$HOST_TWO_WATERMARK"
 
 FOREIGN_WORKSPACE="$SB/openclaw-foreign"
 mkdir -p "$FOREIGN_WORKSPACE/skills/borrowedfire-learn"
@@ -308,6 +332,41 @@ else
   ok "disabled scheduler fails closed"
 fi
 check "disabled scheduler declares no job" bash -c "! grep -qx 'add' '$OPENCLAW_ARGS_FILE'"
+check "disabled scheduler disables the stale declaration" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "disabled scheduler verifies the stale declaration" grep -qx 'get' "$OPENCLAW_ARGS_FILE"
+
+rm -f "$OPENCLAW_ARGS_FILE"
+if FAKE_OPENCLAW_FAIL_STATUS=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "unreadable scheduler status fails closed"
+else
+  ok "unreadable scheduler status fails closed"
+fi
+check "unreadable scheduler status disables the stale declaration" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "unreadable scheduler status verifies the stale declaration" grep -qx 'get' "$OPENCLAW_ARGS_FILE"
+
+rm -f "$OPENCLAW_ARGS_FILE"
+if FAKE_OPENCLAW_FAIL_ADD=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "failed declaration convergence fails closed"
+else
+  ok "failed declaration convergence fails closed"
+fi
+check "failed declaration convergence disables the stale declaration" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "failed declaration convergence verifies the stale declaration" grep -qx 'get' "$OPENCLAW_ARGS_FILE"
+
+rm -f "$OPENCLAW_ARGS_FILE"
+if FAKE_OPENCLAW_ADD_NO_ID=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "unparseable declaration response fails closed"
+else
+  ok "unparseable declaration response fails closed"
+fi
+check "unparseable declaration response disables the stale declaration" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "unparseable declaration response verifies the stale declaration" grep -qx 'get' "$OPENCLAW_ARGS_FILE"
 
 rm -f "$OPENCLAW_ARGS_FILE"
 if FAKE_OPENCLAW_UNKNOWN_AGENT=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \

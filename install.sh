@@ -262,6 +262,17 @@ resolve_context_target() { # resolve_context_target <path>
   printf '%s/%s\n' "$target_dir" "$(basename "$target")"
 }
 
+file_mode() { # file_mode <path>
+  local target="$1" mode
+  if mode="$(stat -c '%a' "$target" 2>/dev/null)"; then
+    printf '%s\n' "$mode"
+  elif mode="$(stat -f '%Lp' "$target" 2>/dev/null)"; then
+    printf '%s\n' "$mode"
+  else
+    return 1
+  fi
+}
+
 write_doctrine() { # write_doctrine <context-file> <doctrine-source> <description>
   local cf="$1" source="$2" description="$3" target tmp mode source_lines
   if [ "$DRY" -eq 1 ]; then say "  doctrine $cf ($description)"; return; fi
@@ -282,7 +293,7 @@ write_doctrine() { # write_doctrine <context-file> <doctrine-source> <descriptio
     rm -f "$tmp"
     return 1
   fi
-  mode="$(stat -f '%Lp' "$target" 2>/dev/null || stat -c '%a' "$target" 2>/dev/null)" || {
+  mode="$(file_mode "$target")" || {
     rm -f "$tmp"
     return 1
   }
@@ -307,15 +318,26 @@ update_safe_doctrine() { # update_safe_doctrine <context-file>
 }
 
 remove_doctrine() { # remove_doctrine <context-file>
-  local cf="$1" tmp
+  local cf="$1" target tmp mode
   [ -f "$cf" ] || return 0
   if [ "$DRY" -eq 1 ]; then say "  doctrine $cf (would remove block)"; return; fi
-  tmp="$(mktemp)"
-  awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
+  target="$(resolve_context_target "$cf")" || return 1
+  tmp="$(mktemp "$(dirname "$target")/.borrowedfire-doctrine.XXXXXX")" || return 1
+  mode="$(file_mode "$target")" || {
+    rm -f "$tmp"
+    return 1
+  }
+  if ! awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
     index($0, b) {inblock=1; next}
     index($0, e) {inblock=0; next}
     !inblock {print}
-  ' "$cf" > "$tmp" && mv "$tmp" "$cf"
+  ' "$target" > "$tmp" || ! chmod "$mode" "$tmp" || ! mv -f "$tmp" "$target"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  if grep -qF "$MARK_BEGIN" "$target" || grep -qF "$MARK_END" "$target"; then
+    return 1
+  fi
   say "  doctrine $cf (block removed)"
 }
 

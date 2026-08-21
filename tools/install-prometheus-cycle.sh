@@ -222,7 +222,7 @@ if matches:
   disable_job_and_verify "$job_id"
 }
 
-fail_invalid_workspace() {
+fail_declaration_safely() {
   local reason="$1"
   if disable_existing_declaration; then
     printf '%s Any existing declaration-key learning job is verified disabled or absent.\n' "$reason" >&2
@@ -240,7 +240,7 @@ if [ "$DRY" -eq 1 ]; then
 fi
 
 AGENTS_OUTPUT="$("$OPENCLAW_BIN" agents list --json)" ||
-  fail_invalid_workspace 'Configured OpenClaw agents could not be inspected.'
+  fail_declaration_safely 'Configured OpenClaw agents could not be inspected.'
 AGENT_WORKSPACE="$(printf '%s' "$AGENTS_OUTPUT" | python3 -c '
 import json
 import sys
@@ -257,21 +257,54 @@ if len(matches) != 1 or not isinstance(matches[0].get("workspace"), str) or not 
     raise SystemExit(1)
 print(matches[0]["workspace"].strip())
 ' "$AGENT_ID")" || {
-  fail_invalid_workspace 'Requested OpenClaw agent is not configured with one concrete workspace.'
+  fail_declaration_safely 'Requested OpenClaw agent is not configured with one concrete workspace.'
 }
 if [ ! -d "$AGENT_WORKSPACE" ]; then
-  fail_invalid_workspace 'Requested OpenClaw agent workspace does not exist.'
+  fail_declaration_safely 'Requested OpenClaw agent workspace does not exist.'
 fi
 AGENT_WORKSPACE="$(cd "$AGENT_WORKSPACE" && pwd -P)"
 if ! managed_learning_stack_matches "$AGENT_WORKSPACE"; then
-  fail_invalid_workspace 'Requested OpenClaw workspace lacks the exact installer-managed learning stack and doctrine from this checkout.'
+  fail_declaration_safely 'Requested OpenClaw workspace lacks the exact installer-managed learning stack and doctrine from this checkout.'
 fi
 
-HOST_ID="$(hostname -s)" || {
-  printf 'Host identity could not be resolved; no job was declared.\n' >&2
-  exit 1
+resolve_host_name() {
+  local value
+  if value="$(hostname -f 2>/dev/null)" && [ -n "$value" ]; then
+    printf '%s\n' "$value"
+  elif value="$(hostname 2>/dev/null)" && [ -n "$value" ]; then
+    printf '%s\n' "$value"
+  else
+    return 1
+  fi
 }
-WATERMARK_FILE="$(python3 - "$HOST_ID" "$AGENT_ID" "$AGENT_WORKSPACE" <<'PY'
+
+resolve_machine_identity() {
+  local value="" identity_file
+  for identity_file in /etc/machine-id /var/lib/dbus/machine-id /sys/class/dmi/id/product_uuid; do
+    if [ -r "$identity_file" ]; then
+      IFS= read -r value < "$identity_file" || value=""
+      [ -n "$value" ] && break
+    fi
+  done
+  if [ -z "$value" ] && command -v ioreg >/dev/null 2>&1; then
+    value="$(ioreg -rd1 -c IOPlatformExpertDevice 2>/dev/null | awk -F'"' '/IOPlatformUUID/ {print $(NF-1); exit}')" || return 1
+  fi
+  if [ -z "$value" ] && command -v sysctl >/dev/null 2>&1; then
+    value="$(sysctl -n kern.uuid 2>/dev/null)" || return 1
+  fi
+  if [ -z "$value" ] && command -v hostid >/dev/null 2>&1; then
+    value="$(hostid 2>/dev/null)" || return 1
+  fi
+  [ -n "$value" ] || return 1
+  printf '%s\n' "$value"
+}
+
+HOST_NAME="$(resolve_host_name)" ||
+  fail_declaration_safely 'Stable host name could not be resolved; no job was declared.'
+MACHINE_ID="$(resolve_machine_identity)" ||
+  fail_declaration_safely 'Stable machine identity could not be resolved; no job was declared.'
+CONTROLLER_ROOT="${OPENCLAW_HOME:-$HOME/.openclaw}"
+WATERMARK_FILE="$(python3 - "$HOST_NAME" "$MACHINE_ID" "$AGENT_ID" "$AGENT_WORKSPACE" "$CONTROLLER_ROOT" <<'PY'
 import hashlib
 import os
 import re
@@ -283,16 +316,20 @@ def slug(value):
         raise SystemExit(1)
     return normalized
 
-host = slug(sys.argv[1])
-agent = slug(sys.argv[2])
-workspace = os.path.realpath(sys.argv[3])
+host_name = sys.argv[1]
+machine_id = sys.argv[2]
+agent_id = sys.argv[3]
+workspace = os.path.realpath(sys.argv[4])
+controller_root = os.path.realpath(sys.argv[5])
+host = slug(host_name)
+agent = slug(agent_id)
 workspace_name = slug(os.path.basename(workspace))
-workspace_hash = hashlib.sha256(workspace.encode("utf-8")).hexdigest()[:12]
-print(f"notes/openclaw-{host}-{agent}-{workspace_name}-{workspace_hash}-ingest.md")
+binding = "\0".join((host_name, machine_id, agent_id, workspace, controller_root))
+binding_hash = hashlib.sha256(binding.encode("utf-8")).hexdigest()[:12]
+print(f"notes/openclaw-{host}-{agent}-{workspace_name}-{binding_hash}-ingest.md")
 PY
 )" || {
-  printf 'Host/agent/workspace watermark identity could not be derived; no job was declared.\n' >&2
-  exit 1
+  fail_declaration_safely 'Host/machine/agent/workspace watermark identity could not be derived; no job was declared.'
 }
 
 MESSAGE="Run the installed borrowedfire-learn skill in fleet mode. The Prometheus root is $BRAIN. Follow the skill and its cycle-contract reference exactly. Use only $WATERMARK_FILE as this controller binding's high-water mark; ingest only verified durable deltas visible in this agent workspace since that mark; deduplicate before using remember; advance the mark only after durable commit/push; and invoke digest only when seven days have elapsed since its last completed run or inbox backlog exceeds 15. Never claim access to another host, agent, or workspace's private session history. Do not mutate product repositories, accounts, credentials, deployments, releases, stores, skills, doctrine, or scheduler configuration, except to delete one exact local-only .brain-outbox/<file> after its capture is committed and pushed to Prometheus; never delete the directory, another item, or a pending item. Do not announce routine success or a no-op. Use the configured message target only for one concise material-digest summary, an actionable owner decision, conflicting evidence, a sync/push failure, or a concrete prevention follow-up."
@@ -396,7 +433,8 @@ ARGS=(
   --json
 )
 
-STATUS_OUTPUT="$("$OPENCLAW_BIN" cron status --json)" || exit $?
+STATUS_OUTPUT="$("$OPENCLAW_BIN" cron status --json)" ||
+  fail_declaration_safely 'OpenClaw scheduler status could not be inspected; no job was declared.'
 if ! printf '%s' "$STATUS_OUTPUT" | python3 -c '
 import json
 import sys
@@ -408,11 +446,11 @@ except (json.JSONDecodeError, OSError):
 if not isinstance(payload, dict) or payload.get("enabled") is not True:
     raise SystemExit(1)
 '; then
-  printf 'OpenClaw scheduler is disabled or its status could not be verified; no job was declared.\n' >&2
-  exit 1
+  fail_declaration_safely 'OpenClaw scheduler is disabled or its status could not be verified; no job was declared.'
 fi
 
-CREATE_OUTPUT="$("$OPENCLAW_BIN" "${ARGS[@]}")" || exit $?
+CREATE_OUTPUT="$("$OPENCLAW_BIN" "${ARGS[@]}")" ||
+  fail_declaration_safely 'OpenClaw could not create or converge the disabled learning declaration.'
 JOB_ID="$(printf '%s' "$CREATE_OUTPUT" | python3 -c '
 import json
 import sys
@@ -430,8 +468,7 @@ if not isinstance(job_id, str) or not job_id.strip():
     raise SystemExit(1)
 print(job_id)
 ')" || {
-  printf 'OpenClaw returned no parseable job id; the declaration remains disabled.\n' >&2
-  exit 1
+  fail_declaration_safely 'OpenClaw returned no parseable job id after declaration convergence.'
 }
 
 CONVERGE_ARGS=(

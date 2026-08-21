@@ -73,10 +73,11 @@ host. It must not pretend to read another machine's private session history.
 1. Resolve Prometheus and sync it using the schema protocol. If it is unavailable, stop and report
    the failure; fleet mode never creates a fallback outbox in a product repository.
 2. Derive a controller-binding watermark. For OpenClaw use
-   `notes/openclaw-<host>-<agent>-<workspace>-<workspace-hash>-ingest.md`, where the hash comes from
-   the canonical workspace path. Lowercase text components, replace non-alphanumeric runs with
-   `-`, and refuse a blank component. Other harnesses must include an equivalent host plus
-   workspace/session-source identity. Read only that binding's high-water mark.
+   `notes/openclaw-<host>-<agent>-<workspace>-<binding-hash>-ingest.md`, where the hash covers the
+   stable full host/machine identity, agent, canonical workspace path, and controller root.
+   Lowercase text components, replace non-alphanumeric runs with `-`, and refuse a blank component.
+   Other harnesses must include an equivalent host plus workspace/session-source identity. Read
+   only that binding's high-water mark.
 3. Inspect only new harness-local notes, pending `.brain-outbox/` captures in explicitly
    registered/accessible repos, and project-status evidence created since that mark. An outbox
    source file may be removed only after its exact capture is durably committed and pushed.

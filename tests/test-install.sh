@@ -167,6 +167,12 @@ check "symlinked context remains a symlink" test -L "$SYMLINK_HOME/.codex/AGENTS
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
 check "symlinked context target receives doctrine" \
   grep -q 'run `borrowedfire-learn` automatically' "$SYMLINK_HOME/shared/AGENTS.md"
+HOME="$SYMLINK_HOME" "$SRC/install.sh" --uninstall >/dev/null 2>&1
+check "symlinked context survives uninstall" test -L "$SYMLINK_HOME/.codex/AGENTS.md"
+check "symlinked context target retains owner content" \
+  grep -q '^shared owner context$' "$SYMLINK_HOME/shared/AGENTS.md"
+check "symlinked context target loses doctrine on uninstall" bash -c \
+  "! grep -q 'BORROWEDFIRE DOCTRINE' '$SYMLINK_HOME/shared/AGENTS.md'"
 
 for dependency in remember recall digest; do
   DEPENDENCY_HOME="$SB/foreign-$dependency-home"

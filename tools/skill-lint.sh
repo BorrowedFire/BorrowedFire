@@ -96,7 +96,7 @@ if ! grep -qF '**Safety.** The `land` denylist is always owner-gated' "$SAFE_DOC
    ! grep -qF '**Memory.** Prometheus is the private git-backed brain.' "$SAFE_DOCTRINE"; then
   err "safe doctrine: non-learning memory and safety contracts are missing"
 fi
-if ! body "$LEARN_SKILL" | grep -qF 'notes/openclaw-<host>-<agent>-<workspace>-<workspace-hash>-ingest.md'; then
+if ! body "$LEARN_SKILL" | grep -qF 'notes/openclaw-<host>-<agent>-<workspace>-<binding-hash>-ingest.md'; then
   err "borrowedfire-learn: host-scoped watermark contract is missing"
 fi
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase

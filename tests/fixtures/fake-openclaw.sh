@@ -18,6 +18,12 @@ fi
 if [ "${FAKE_OPENCLAW_FAIL_DISABLE:-0}" -eq 1 ] && [ "${1:-}" = "cron" ] && [ "${2:-}" = "disable" ]; then
   exit 9
 fi
+if [ "${FAKE_OPENCLAW_FAIL_STATUS:-0}" -eq 1 ] && [ "${1:-}" = "cron" ] && [ "${2:-}" = "status" ]; then
+  exit 9
+fi
+if [ "${FAKE_OPENCLAW_FAIL_ADD:-0}" -eq 1 ] && [ "${1:-}" = "cron" ] && [ "${2:-}" = "add" ]; then
+  exit 9
+fi
 if [ "${1:-}" = "agents" ] && [ "${2:-}" = "list" ]; then
   if [ "${FAKE_OPENCLAW_UNKNOWN_AGENT:-0}" -eq 1 ]; then
     printf '[{"id":"different","workspace":"%s"}]\n' "${FAKE_OPENCLAW_WORKSPACE:?}"
@@ -144,6 +150,10 @@ print(json.dumps({
     },
 }))
 PY
+  exit 0
+fi
+if [ "${FAKE_OPENCLAW_ADD_NO_ID:-0}" -eq 1 ] && [ "${1:-}" = "cron" ] && [ "${2:-}" = "add" ]; then
+  printf '{"job":{"declarationKey":"borrowedfire.prometheus-learning.v1"}}\n'
   exit 0
 fi
 printf '{"id":"fixture-job","declarationKey":"borrowedfire.prometheus-learning.v1"}\n'

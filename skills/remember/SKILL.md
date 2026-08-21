@@ -68,9 +68,9 @@ daily notes) should run `remember` as a nightly batch: scan notes since the last
 the durable items (decisions, people, lessons — not chit-chat) into the brain, and record the
 high-water mark whose filename includes the harness, host, agent, and canonical workspace identity
 (`last_ingested:` in frontmatter). Lowercase and sanitize text identifiers; hash the canonical
-workspace path when needed to distinguish same-named workspaces. Two controller bindings never
-share a watermark. Push-based: each machine pushes its own memory; `digest` never reads other
-machines' workspaces.
+workspace together with stable full host/machine, agent, and controller-root identity so separate
+controllers cannot collide. Two controller bindings never share a watermark. Push-based: each
+machine pushes its own memory; `digest` never reads other machines' workspaces.
 
 ## Related
 
