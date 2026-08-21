@@ -204,6 +204,14 @@ except (json.JSONDecodeError, OSError):
 jobs = payload if isinstance(payload, list) else payload.get("jobs") if isinstance(payload, dict) else None
 if not isinstance(jobs, list):
     raise SystemExit(1)
+if isinstance(payload, dict):
+    has_more = payload.get("hasMore")
+    if has_more not in (None, False):
+        raise SystemExit(1)
+    total = payload.get("total")
+    offset = payload.get("offset", 0)
+    if isinstance(total, int) and isinstance(offset, int) and total > offset + len(jobs):
+        raise SystemExit(1)
 matches = [
     job for job in jobs
     if isinstance(job, dict)
@@ -302,8 +310,11 @@ HOST_NAME="$(resolve_host_name)" ||
   fail_declaration_safely 'Stable host name could not be resolved; no job was declared.'
 MACHINE_ID="$(resolve_machine_identity)" ||
   fail_declaration_safely 'Stable machine identity could not be resolved; no job was declared.'
-CONTROLLER_ROOT="${OPENCLAW_HOME:-$HOME/.openclaw}"
-WATERMARK_FILE="$(python3 - "$HOST_NAME" "$MACHINE_ID" "$AGENT_ID" "$AGENT_WORKSPACE" "$CONTROLLER_ROOT" <<'PY'
+OPENCLAW_BASE_HOME="${OPENCLAW_HOME:-$HOME}"
+OPENCLAW_PROFILE_NAME="${OPENCLAW_PROFILE:-default}"
+WATERMARK_FILE="$(python3 - "$HOST_NAME" "$MACHINE_ID" "$AGENT_ID" "$AGENT_WORKSPACE" \
+  "$OPENCLAW_BASE_HOME" "${OPENCLAW_STATE_DIR:-}" "${OPENCLAW_CONFIG_PATH:-}" \
+  "$OPENCLAW_PROFILE_NAME" <<'PY'
 import hashlib
 import os
 import re
@@ -320,11 +331,32 @@ host_name = sys.argv[1]
 machine_id = sys.argv[2]
 agent_id = sys.argv[3]
 workspace = os.path.realpath(sys.argv[4])
-controller_root = os.path.realpath(sys.argv[5])
+base_home = os.path.realpath(os.path.expanduser(sys.argv[5]))
+state_override = sys.argv[6].strip()
+config_override = sys.argv[7].strip()
+profile = sys.argv[8].strip() or "default"
+
+def resolve_openclaw_path(value):
+    if value == "~":
+        value = base_home
+    elif value.startswith("~/"):
+        value = os.path.join(base_home, value[2:])
+    return os.path.realpath(os.path.abspath(value))
+
+if state_override:
+    state_dir = resolve_openclaw_path(state_override)
+else:
+    suffix = "" if profile.lower() == "default" else f"-{profile}"
+    state_dir = os.path.join(base_home, f".openclaw{suffix}")
+    legacy_dir = os.path.join(base_home, ".clawdbot")
+    if not suffix and not os.path.exists(state_dir) and os.path.exists(legacy_dir):
+        state_dir = legacy_dir
+    state_dir = os.path.realpath(state_dir)
+config_path = resolve_openclaw_path(config_override) if config_override else os.path.join(state_dir, "openclaw.json")
 host = slug(host_name, 64)
 agent = slug(agent_id, 48)
 workspace_name = slug(os.path.basename(workspace), 64)
-binding = "\0".join((host_name, machine_id, agent_id, workspace, controller_root))
+binding = "\0".join((host_name, machine_id, agent_id, workspace, state_dir, config_path, profile))
 binding_hash = hashlib.sha256(binding.encode("utf-8")).hexdigest()[:12]
 basename = f"openclaw-{host}-{agent}-{workspace_name}-{binding_hash}-ingest.md"
 if len(basename.encode("utf-8")) > 240:
@@ -332,7 +364,7 @@ if len(basename.encode("utf-8")) > 240:
 print(f"notes/{basename}")
 PY
 )" || {
-  fail_declaration_safely 'Host/machine/agent/workspace watermark identity could not be derived; no job was declared.'
+  fail_declaration_safely 'Host/machine/agent/workspace/controller watermark identity could not be derived; no job was declared.'
 }
 
 MESSAGE="Run the installed borrowedfire-learn skill in fleet mode. The Prometheus root is $BRAIN. Follow the skill and its cycle-contract reference exactly. Use only $WATERMARK_FILE as this controller binding's high-water mark; ingest only verified durable deltas visible in this agent workspace since that mark; deduplicate before using remember; advance the mark only after durable commit/push; and invoke digest only when seven days have elapsed since its last completed run or inbox backlog exceeds 15. Never claim access to another host, agent, or workspace's private session history. Do not mutate product repositories, accounts, credentials, deployments, releases, stores, skills, doctrine, or scheduler configuration, except to delete one exact local-only .brain-outbox/<file> after its capture is committed and pushed to Prometheus; never delete the directory, another item, or a pending item. Do not announce routine success or a no-op. Use the configured message target only for one concise material-digest summary, an actionable owner decision, conflicting evidence, a sync/push failure, or a concrete prevention follow-up."

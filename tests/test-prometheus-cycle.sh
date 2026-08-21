@@ -8,7 +8,7 @@ export HOME="$SB/home"
 export XDG_CONFIG_HOME="$HOME/.config"
 export OPENCLAW_ARGS_FILE="$SB/openclaw-args"
 export FAKE_OPENCLAW_WORKSPACE="$SB/openclaw-workspace"
-unset PROMETHEUS_DIR OPENCLAW_HOME
+unset PROMETHEUS_DIR OPENCLAW_HOME OPENCLAW_STATE_DIR OPENCLAW_CONFIG_PATH OPENCLAW_PROFILE
 PASS=0
 FAIL=0
 
@@ -155,6 +155,48 @@ HOST_TWO_WATERMARK="$(grep -Eo 'notes/openclaw-[^ ]+-ingest\.md' "$OPENCLAW_ARGS
 check "same-short-name controllers get distinct watermarks" \
   test -n "$HOST_ONE_WATERMARK" -a -n "$HOST_TWO_WATERMARK" -a \
   "$HOST_ONE_WATERMARK" != "$HOST_TWO_WATERMARK"
+
+OPENCLAW_ARGS_FILE="$SB/state-a-args" OPENCLAW_STATE_DIR="$SB/controller-state-a" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+OPENCLAW_ARGS_FILE="$SB/state-b-args" OPENCLAW_STATE_DIR="$SB/controller-state-b" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+STATE_A_WATERMARK="$(grep -Eo 'notes/openclaw-[^ ]+-ingest\.md' "$SB/state-a-args" | head -1)"
+STATE_B_WATERMARK="$(grep -Eo 'notes/openclaw-[^ ]+-ingest\.md' "$SB/state-b-args" | head -1)"
+check "distinct OpenClaw state roots get distinct watermarks" \
+  test -n "$STATE_A_WATERMARK" -a -n "$STATE_B_WATERMARK" -a \
+  "$STATE_A_WATERMARK" != "$STATE_B_WATERMARK"
+
+OPENCLAW_ARGS_FILE="$SB/config-a-args" OPENCLAW_CONFIG_PATH="$SB/config-a.json" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+OPENCLAW_ARGS_FILE="$SB/config-b-args" OPENCLAW_CONFIG_PATH="$SB/config-b.json" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+CONFIG_A_WATERMARK="$(grep -Eo 'notes/openclaw-[^ ]+-ingest\.md' "$SB/config-a-args" | head -1)"
+CONFIG_B_WATERMARK="$(grep -Eo 'notes/openclaw-[^ ]+-ingest\.md' "$SB/config-b-args" | head -1)"
+check "distinct OpenClaw config paths get distinct watermarks" \
+  test -n "$CONFIG_A_WATERMARK" -a -n "$CONFIG_B_WATERMARK" -a \
+  "$CONFIG_A_WATERMARK" != "$CONFIG_B_WATERMARK"
+
+OPENCLAW_ARGS_FILE="$SB/profile-a-args" OPENCLAW_PROFILE="profile-a" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+OPENCLAW_ARGS_FILE="$SB/profile-b-args" OPENCLAW_PROFILE="profile-b" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+PROFILE_A_WATERMARK="$(grep -Eo 'notes/openclaw-[^ ]+-ingest\.md' "$SB/profile-a-args" | head -1)"
+PROFILE_B_WATERMARK="$(grep -Eo 'notes/openclaw-[^ ]+-ingest\.md' "$SB/profile-b-args" | head -1)"
+check "distinct OpenClaw profiles get distinct watermarks" \
+  test -n "$PROFILE_A_WATERMARK" -a -n "$PROFILE_B_WATERMARK" -a \
+  "$PROFILE_A_WATERMARK" != "$PROFILE_B_WATERMARK"
 
 mkdir -p "$SB/machine-fallback-bin"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 1' > "$SB/machine-fallback-bin/ioreg"
@@ -427,6 +469,20 @@ else
   ok "unreadable agent configuration fails closed"
 fi
 check "unreadable agent configuration disables the declaration" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+
+rm -f "$OPENCLAW_ARGS_FILE"
+if OUT="$(FAKE_OPENCLAW_FAIL_AGENTS_LIST=1 FAKE_OPENCLAW_LIST_TRUNCATED=1 \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route 2>&1)"; then
+  fail "truncated cleanup listing fails closed"
+else
+  ok "truncated cleanup listing fails closed"
+fi
+check "truncated cleanup never claims the hidden declaration is absent" \
+  grep -q 'could not be proven disabled' <<<"$OUT"
+check "truncated cleanup does not disable an unrelated visible job" \
+  bash -c "! grep -qx 'disable' '$OPENCLAW_ARGS_FILE'"
 
 INVALID_ALT_WORKSPACE="$SB/openclaw-invalid-alternate"
 mkdir -p "$INVALID_ALT_WORKSPACE"

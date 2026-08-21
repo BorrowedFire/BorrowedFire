@@ -22,8 +22,9 @@ The fleet worker must:
 
 1. resolve and sync the private Prometheus git repo;
 2. scope the high-water mark to harness, stable full host/machine identity, agent, canonical
-   workspace, and controller root, with text components sanitized and the complete binding hashed;
-   never claim visibility into another controller binding;
+   workspace, and the effective OpenClaw state/config/profile identity, with text components
+   sanitized and the complete binding hashed; never claim visibility into another controller
+   binding;
 3. retain only verified durable deltas and deduplicate before capture;
 4. leave ambiguous items pending rather than advancing past them;
 5. use `remember` for writes and `digest` for restructuring;

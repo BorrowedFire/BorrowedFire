@@ -114,9 +114,16 @@ skill_is_managed() { # skill_is_managed <skilldir> <manifest> <name>
   src="$SRC/skills/$name"
   case "$mode" in
     link) [ -L "$tgt" ] && [ "$(readlink "$tgt")" = "$src" ] ;;
-    copy) [ -d "$tgt" ] && [ ! -L "$tgt" ] && [ -e "$tgt/.borrowedfire-copy" ] ;;
+    copy) [ -d "$tgt" ] && [ ! -L "$tgt" ] && [ -e "$tgt/.borrowedfire-copy" ] &&
+      copied_skill_matches "$src" "$tgt" ;;
     *) return 1 ;;
   esac
+}
+
+copied_skill_matches() { # copied_skill_matches <source> <target>
+  # The ownership marker alone proves provenance, not currency. Automatic
+  # doctrine may run only when every copied learning dependency is byte-current.
+  diff -qr -x .borrowedfire-copy "$1" "$2" >/dev/null 2>&1
 }
 
 skill_has_unmanaged_collision() { # skill_has_unmanaged_collision <skilldir> <manifest> <name>
@@ -356,6 +363,13 @@ for row in "${HARNESSES[@]}"; do
   done
 
   if [ "$UNINSTALL" -eq 1 ]; then
+    # Remove the automatic invocation before its skills. If the context cannot
+    # be updated, leave the runnable stack intact and fail the uninstall.
+    if ! remove_doctrine "$cf"; then
+      echo "error: $label doctrine could not be removed; owned skills were left installed" >&2
+      INSTALL_ERRORS=$((INSTALL_ERRORS + 1))
+      continue
+    fi
     if [ -f "$mf" ]; then
       snap="$(mktemp)"; cp "$mf" "$snap"   # snapshot: remove_entry rewrites the manifest
       while IFS=' ' read -r name _mode; do
@@ -364,7 +378,6 @@ for row in "${HARNESSES[@]}"; do
       rm -f "$snap"
       [ "$DRY" -eq 1 ] || rm -f "$mf"
     fi
-    remove_doctrine "$cf"
     continue
   fi
 
@@ -422,7 +435,7 @@ for row in "${HARNESSES[@]}"; do
 done
 
 if [ "$INSTALL_ERRORS" -gt 0 ]; then
-  echo "install failed closed: the automatic-learning stack is not fully installer-owned in $INSTALL_ERRORS harness(es)" >&2
+  echo "operation failed closed: the automatic-learning stack is not safe in $INSTALL_ERRORS harness(es)" >&2
   exit 1
 fi
 

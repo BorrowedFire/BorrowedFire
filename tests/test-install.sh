@@ -174,6 +174,53 @@ check "symlinked context target retains owner content" \
 check "symlinked context target loses doctrine on uninstall" bash -c \
   "! grep -q 'BORROWEDFIRE DOCTRINE' '$SYMLINK_HOME/shared/AGENTS.md'"
 
+STALE_COPY_HOME="$SB/stale-copy-home"
+STALE_COPY_SOURCE="$SB/stale-copy-source"
+mkdir -p "$STALE_COPY_HOME/.codex"
+HOME="$STALE_COPY_HOME" "$SRC/install.sh" --copy >/dev/null 2>&1
+cp -R "$SRC" "$STALE_COPY_SOURCE"
+printf '%s\n' '<!-- copied-learning-contract-v2 -->' >> \
+  "$STALE_COPY_SOURCE/skills/borrowedfire-learn/SKILL.md"
+mkdir -p "$SB/failing-copy-bin"
+# shellcheck disable=SC2016  # write a fixture that expands its own argv
+printf '%s\n' '#!/usr/bin/env bash' \
+  'if [ "${1:-}" = "-rf" ]; then exit 77; fi' \
+  'exec /bin/rm "$@"' > "$SB/failing-copy-bin/rm"
+chmod +x "$SB/failing-copy-bin/rm"
+if HOME="$STALE_COPY_HOME" PATH="$SB/failing-copy-bin:$PATH" \
+  "$STALE_COPY_SOURCE/install.sh" --copy >/dev/null 2>&1; then
+  fail "stale copied learning dependency fails closed"
+else
+  ok "stale copied learning dependency fails closed"
+fi
+check "failed copy refresh leaves prior skill intact" bash -c \
+  "! grep -q 'copied-learning-contract-v2' '$STALE_COPY_HOME/.codex/skills/borrowedfire-learn/SKILL.md'"
+check "stale copied learning dependency disables automatic doctrine" bash -c \
+  "! grep -q 'run \`borrowedfire-learn\` automatically' '$STALE_COPY_HOME/.codex/AGENTS.md'"
+check "stale copied learning dependency retains safety doctrine" \
+  grep -q '^\*\*Safety\.\*\*' "$STALE_COPY_HOME/.codex/AGENTS.md"
+
+UNINSTALL_FAILURE_HOME="$SB/uninstall-failure-home"
+mkdir -p "$UNINSTALL_FAILURE_HOME/.codex"
+HOME="$UNINSTALL_FAILURE_HOME" "$SRC/install.sh" >/dev/null 2>&1
+mkdir -p "$SB/failing-doctrine-bin"
+# shellcheck disable=SC2016  # write a fixture that expands its own argv
+printf '%s\n' '#!/usr/bin/env bash' \
+  'case "${1:-}" in */.borrowedfire-doctrine.XXXXXX) exit 77 ;; esac' \
+  'exec /usr/bin/mktemp "$@"' > "$SB/failing-doctrine-bin/mktemp"
+chmod +x "$SB/failing-doctrine-bin/mktemp"
+if HOME="$UNINSTALL_FAILURE_HOME" PATH="$SB/failing-doctrine-bin:$PATH" \
+  "$SRC/install.sh" --uninstall >/dev/null 2>&1; then
+  fail "failed doctrine rewrite fails uninstall"
+else
+  ok "failed doctrine rewrite fails uninstall"
+fi
+check "failed doctrine removal leaves learning skill installed" \
+  test -e "$UNINSTALL_FAILURE_HOME/.codex/skills/borrowedfire-learn"
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+check "failed doctrine removal leaves matching automatic doctrine" \
+  grep -q 'run `borrowedfire-learn` automatically' "$UNINSTALL_FAILURE_HOME/.codex/AGENTS.md"
+
 for dependency in remember recall digest; do
   DEPENDENCY_HOME="$SB/foreign-$dependency-home"
   mkdir -p "$DEPENDENCY_HOME/.codex/skills/$dependency"

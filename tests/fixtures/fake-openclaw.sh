@@ -58,7 +58,11 @@ if [ "${1:-}" = "cron" ] && [ "${2:-}" = "status" ]; then
   exit 0
 fi
 if [ "${1:-}" = "cron" ] && [ "${2:-}" = "list" ]; then
-  printf '{"jobs":[{"id":"fixture-job","declarationKey":"borrowedfire.prometheus-learning.v1","agentId":"main","enabled":true}]}\n'
+  if [ "${FAKE_OPENCLAW_LIST_TRUNCATED:-0}" -eq 1 ]; then
+    printf '{"jobs":[{"id":"other-job","declarationKey":"other.declaration","enabled":true}],"total":201,"offset":0,"limit":200,"hasMore":true,"nextOffset":200}\n'
+  else
+    printf '{"jobs":[{"id":"fixture-job","declarationKey":"borrowedfire.prometheus-learning.v1","agentId":"main","enabled":true}],"total":1,"offset":0,"limit":1,"hasMore":false,"nextOffset":null}\n'
+  fi
   exit 0
 fi
 if [ "${1:-}" = "cron" ] && [ "${2:-}" = "get" ]; then
