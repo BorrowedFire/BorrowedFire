@@ -366,7 +366,10 @@ checks = [
     isinstance(agent_payload, dict) and agent_payload.get("message") == expected["message"],
     isinstance(agent_payload, dict) and agent_payload.get("timeoutSeconds") == 900,
     isinstance(agent_payload, dict) and agent_payload.get("lightContext") is False,
-    isinstance(agent_payload, dict) and agent_payload.get("toolsAllow") is None,
+    isinstance(agent_payload, dict) and (
+        agent_payload.get("toolsAllow") is None
+        or agent_payload.get("toolsAllow") == ["*"]
+    ),
 ]
 if not all(checks):
     raise SystemExit(1)

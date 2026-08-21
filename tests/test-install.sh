@@ -158,6 +158,16 @@ check "read-only context gets atomic safe doctrine replacement" \
 check "read-only context no longer invokes automatic learning" bash -c \
   "! grep -q 'run \`borrowedfire-learn\` automatically' '$READ_ONLY_HOME/.codex/AGENTS.md'"
 
+SYMLINK_HOME="$SB/symlink-context-home"
+mkdir -p "$SYMLINK_HOME/.codex" "$SYMLINK_HOME/shared"
+printf '%s\n' 'shared owner context' > "$SYMLINK_HOME/shared/AGENTS.md"
+ln -s ../shared/AGENTS.md "$SYMLINK_HOME/.codex/AGENTS.md"
+HOME="$SYMLINK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+check "symlinked context remains a symlink" test -L "$SYMLINK_HOME/.codex/AGENTS.md"
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+check "symlinked context target receives doctrine" \
+  grep -q 'run `borrowedfire-learn` automatically' "$SYMLINK_HOME/shared/AGENTS.md"
+
 for dependency in remember recall digest; do
   DEPENDENCY_HOME="$SB/foreign-$dependency-home"
   mkdir -p "$DEPENDENCY_HOME/.codex/skills/$dependency"

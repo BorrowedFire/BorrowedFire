@@ -64,10 +64,28 @@ check "prompt names resolved brain" grep -q "$SB/prometheus" "$OPENCLAW_ARGS_FIL
 check "live route probe sent once" test "$(grep -c '^message$' "$OPENCLAW_ARGS_FILE")" -eq 1
 check "route proof persisted privately" test "$(stat -f '%Lp' "$HOME/.config/borrowedfire/prometheus-learning-route.sha256" 2>/dev/null || stat -c '%a' "$HOME/.config/borrowedfire/prometheus-learning-route.sha256")" = 600
 
+rm -f "$OPENCLAW_ARGS_FILE"
+FAKE_OPENCLAW_LEGACY_CLEAR_TOOLS=1 \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+check "legacy null clear-tools representation converges" grep -qx 'enable' "$OPENCLAW_ARGS_FILE"
+
+rm -f "$OPENCLAW_ARGS_FILE"
+if FAKE_OPENCLAW_RESTRICTED_TOOLS=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "restrictive payload tool allowlist fails closed"
+else
+  ok "restrictive payload tool allowlist fails closed"
+fi
+check "restrictive payload tool allowlist disables the job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+
+rm -f "$OPENCLAW_ARGS_FILE"
 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null
-check "matching route is not probed twice" test "$(grep -c '^message$' "$OPENCLAW_ARGS_FILE")" -eq 1
+check "matching route is not probed twice" bash -c "! grep -qx 'message' '$OPENCLAW_ARGS_FILE'"
 
 PHYSICAL_SRC="$(cd "$SRC" && pwd -P)"
 ln -s "$PHYSICAL_SRC" "$SB/source-alias"

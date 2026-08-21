@@ -58,6 +58,7 @@ if [ "${1:-}" = "cron" ] && [ "${2:-}" = "get" ]; then
   [ "${FAKE_OPENCLAW_STALE_SESSION_KEY:-0}" -eq 0 ] || get_mismatch="session"
   python3 - "$OPENCLAW_ARGS_FILE" "$get_mismatch" "${FAKE_OPENCLAW_POST_ENABLE_MISMATCH:-0}" <<'PY'
 import json
+import os
 import sys
 
 lines = open(sys.argv[1], encoding="utf-8").read().splitlines()
@@ -95,6 +96,13 @@ def last_value(flag):
     ]
     return values[-1] if values else ""
 
+if os.environ.get("FAKE_OPENCLAW_RESTRICTED_TOOLS") == "1":
+    tools_allow = ["read"]
+elif "--clear-tools" in lines:
+    tools_allow = None if os.environ.get("FAKE_OPENCLAW_LEGACY_CLEAR_TOOLS") == "1" else ["*"]
+else:
+    tools_allow = last_value("--tools").replace(",", " ").split()
+
 print(json.dumps({
     "id": "fixture-job",
     "declarationKey": "borrowedfire.prometheus-learning.v1",
@@ -130,7 +138,7 @@ print(json.dumps({
         "message": last_value("--message"),
         "timeoutSeconds": 900,
         "lightContext": False,
-        "toolsAllow": None if "--clear-tools" in lines else last_value("--tools").replace(",", " ").split(),
+        "toolsAllow": tools_allow,
     },
 }))
 PY

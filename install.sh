@@ -247,18 +247,34 @@ remove_entry() { # remove_entry <skilldir> <manifest> <name> <why>
   [ "$DRY" -eq 1 ] || manifest_del "$2" "$3"
 }
 
+resolve_context_target() { # resolve_context_target <path>
+  local target="$1" link hops=0 target_dir
+  while [ -L "$target" ]; do
+    hops=$((hops + 1))
+    [ "$hops" -le 40 ] || return 1
+    link="$(readlink "$target")" || return 1
+    case "$link" in
+      /*) target="$link" ;;
+      *) target="$(dirname "$target")/$link" ;;
+    esac
+  done
+  target_dir="$(cd "$(dirname "$target")" && pwd -P)" || return 1
+  printf '%s/%s\n' "$target_dir" "$(basename "$target")"
+}
+
 write_doctrine() { # write_doctrine <context-file> <doctrine-source> <description>
-  local cf="$1" source="$2" description="$3" tmp mode source_lines
+  local cf="$1" source="$2" description="$3" target tmp mode source_lines
   if [ "$DRY" -eq 1 ]; then say "  doctrine $cf ($description)"; return; fi
   mkdir -p "$(dirname "$cf")" || return 1
   touch "$cf" || return 1
-  tmp="$(mktemp "$(dirname "$cf")/.borrowedfire-doctrine.XXXXXX")" || return 1
+  target="$(resolve_context_target "$cf")" || return 1
+  tmp="$(mktemp "$(dirname "$target")/.borrowedfire-doctrine.XXXXXX")" || return 1
   if ! awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
     index($0, b) {inblock=1; next}
     index($0, e) {inblock=0; next}
     !inblock && /^[[:space:]]*$/ {blanks=blanks $0 ORS; next}
     !inblock {printf "%s%s\n", blanks, $0; blanks=""}
-  ' "$cf" > "$tmp"; then
+  ' "$target" > "$tmp"; then
     rm -f "$tmp"
     return 1
   fi
@@ -266,11 +282,11 @@ write_doctrine() { # write_doctrine <context-file> <doctrine-source> <descriptio
     rm -f "$tmp"
     return 1
   fi
-  mode="$(stat -f '%Lp' "$cf" 2>/dev/null || stat -c '%a' "$cf" 2>/dev/null)" || {
+  mode="$(stat -f '%Lp' "$target" 2>/dev/null || stat -c '%a' "$target" 2>/dev/null)" || {
     rm -f "$tmp"
     return 1
   }
-  if ! chmod "$mode" "$tmp" || ! mv -f "$tmp" "$cf"; then
+  if ! chmod "$mode" "$tmp" || ! mv -f "$tmp" "$target"; then
     rm -f "$tmp"
     return 1
   fi
