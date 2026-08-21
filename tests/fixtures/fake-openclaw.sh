@@ -25,6 +25,9 @@ if [ "${1:-}" = "message" ] && [ "${2:-}" = "send" ]; then
   if [ "${FAKE_OPENCLAW_MESSAGE_NO_ACK:-0}" -eq 1 ]; then
     printf '{"channel":"imessage","ok":true}\n'
   else
+    if [ -n "${FAKE_OPENCLAW_POISON_ROUTE_PROOF:-}" ]; then
+      mkdir "${FAKE_OPENCLAW_POISON_ROUTE_PROOF}"
+    fi
     printf '{"channel":"imessage","result":{"messageId":"fixture-message"}}\n'
   fi
   exit 0
@@ -38,7 +41,9 @@ if [ "${1:-}" = "cron" ] && [ "${2:-}" = "status" ]; then
   exit 0
 fi
 if [ "${1:-}" = "cron" ] && [ "${2:-}" = "get" ]; then
-  python3 - "$OPENCLAW_ARGS_FILE" "${FAKE_OPENCLAW_GET_MISMATCH:-0}" <<'PY'
+  get_mismatch="${FAKE_OPENCLAW_GET_MISMATCH:-0}"
+  [ "${FAKE_OPENCLAW_STALE_SESSION_KEY:-0}" -eq 0 ] || get_mismatch="session"
+  python3 - "$OPENCLAW_ARGS_FILE" "$get_mismatch" <<'PY'
 import json
 import sys
 
@@ -58,6 +63,7 @@ print(json.dumps({
     "enabled": False,
     "agentId": last_value("--agent"),
     "sessionTarget": "isolated",
+    "sessionKey": "stale-session" if sys.argv[2] == "session" or "--clear-session-key" not in lines else None,
     "wakeMode": last_value("--wake"),
     "schedule": {
         "kind": "cron",

@@ -31,8 +31,10 @@ through the existing memory protocol. A clean no-op is a successful result.
   record a bounded follow-up.
 - **No autonomous self-rewrite.** A recurring pattern may justify a proposed skill/doctrine/test
   change, but that change follows the normal branch, review, and landing workflow.
-- **Never store secrets or private brain content in a product repo.** Use `remember`'s degradation
-  ladder if Prometheus is unavailable.
+- **Never store secrets or private brain content in a product repo.** If Prometheus is unavailable,
+  use `remember`'s repo-local degradation/outbox path only when the active task already authorized
+  writes to that exact repository. Otherwise keep the pending capture in output only, report that
+  it was not persisted, and do not create or modify a product-repo outbox.
 
 ## Session mode
 
@@ -68,7 +70,8 @@ Run this sequence once at each meaningful terminal checkpoint:
 An always-on harness runs the same quality bar over durable notes and outboxes visible on its own
 host. It must not pretend to read another machine's private session history.
 
-1. Resolve Prometheus and sync it using the schema protocol.
+1. Resolve Prometheus and sync it using the schema protocol. If it is unavailable, stop and report
+   the failure; fleet mode never creates a fallback outbox in a product repository.
 2. Derive a controller-binding watermark. For OpenClaw use
    `notes/openclaw-<host>-<agent>-<workspace>-<workspace-hash>-ingest.md`, where the hash comes from
    the canonical workspace path. Lowercase text components, replace non-alphanumeric runs with

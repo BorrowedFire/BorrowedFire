@@ -18,14 +18,13 @@ check() {
 }
 
 mkdir -p "$HOME/.config/borrowedfire" "$SB/prometheus/config" "$SB/prometheus/projects" \
-  "$FAKE_OPENCLAW_WORKSPACE/skills/borrowedfire-learn"
+  "$FAKE_OPENCLAW_WORKSPACE"
 git init -q "$SB/prometheus"
 printf '%s\n' 'journal/*.md merge=union' 'inbox/*.md merge=union' \
   'projects/*.md merge=union' > "$SB/prometheus/.gitattributes"
 touch "$SB/prometheus/INDEX.md" "$SB/prometheus/config/fleet.md" "$SB/prometheus/projects/_template.md"
-printf '%s\n' '---' 'name: borrowedfire-learn' '---' > \
-  "$FAKE_OPENCLAW_WORKSPACE/skills/borrowedfire-learn/SKILL.md"
 printf '%s\n' "$SB/prometheus" > "$HOME/.config/borrowedfire/brain"
+"$SRC/install.sh" --copy --openclaw-workspace "$FAKE_OPENCLAW_WORKSPACE" >/dev/null 2>&1
 
 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
@@ -35,6 +34,7 @@ check "declares a cron job" grep -qx 'add' "$OPENCLAW_ARGS_FILE"
 check "uses stable declaration key" grep -qx 'borrowedfire.prometheus-learning.v1' "$OPENCLAW_ARGS_FILE"
 check "uses DST-safe nightly default" grep -qx '35 3 \* \* \*' "$OPENCLAW_ARGS_FILE"
 check "uses isolated session" grep -qx 'isolated' "$OPENCLAW_ARGS_FILE"
+check "clears stale explicit session keys" grep -qx -- '--clear-session-key' "$OPENCLAW_ARGS_FILE"
 check "binds the main agent by default" grep -qx 'main' "$OPENCLAW_ARGS_FILE"
 check "creates disabled before alert setup" grep -qx -- '--disabled' "$OPENCLAW_ARGS_FILE"
 check "enables only after configuration" grep -qx 'enable' "$OPENCLAW_ARGS_FILE"
@@ -62,8 +62,23 @@ OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null
 check "matching route is not probed twice" test "$(grep -c '^message$' "$OPENCLAW_ARGS_FILE")" -eq 1
 
-mkdir -p "$SB/openclaw-alt/skills/borrowedfire-learn"
-printf '%s\n' '---' 'name: borrowedfire-learn' '---' > "$SB/openclaw-alt/skills/borrowedfire-learn/SKILL.md"
+ROUTE_PROOF="$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
+rm -f "$ROUTE_PROOF"
+mkdir "$ROUTE_PROOF"
+rm -f "$OPENCLAW_ARGS_FILE"
+if OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "unsafe route-proof target fails closed"
+else
+  ok "unsafe route-proof target fails closed"
+fi
+check "unsafe route-proof target disables the job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "unsafe route-proof target is rejected before live probe" bash -c "! grep -qx 'message' '$OPENCLAW_ARGS_FILE'"
+rmdir "$ROUTE_PROOF"
+
+mkdir -p "$SB/openclaw-alt"
+"$SRC/install.sh" --copy --openclaw-workspace "$SB/openclaw-alt" >/dev/null 2>&1
 rm -f "$OPENCLAW_ARGS_FILE"
 FAKE_OPENCLAW_ALT_WORKSPACE="$SB/openclaw-alt" \
   OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
@@ -71,6 +86,50 @@ FAKE_OPENCLAW_ALT_WORKSPACE="$SB/openclaw-alt" \
   --notify-channel imessage --notify-to owner-route >/dev/null
 check "configured alternate agent converges" grep -qx 'alternate' "$OPENCLAW_ARGS_FILE"
 check "alternate workspace gets a distinct watermark" grep -Eq 'notes/openclaw-.+-alternate-openclaw-alt-[0-9a-f]{12}-ingest.md' "$OPENCLAW_ARGS_FILE"
+
+FOREIGN_WORKSPACE="$SB/openclaw-foreign"
+mkdir -p "$FOREIGN_WORKSPACE/skills/borrowedfire-learn"
+printf '%s\n' '---' 'name: borrowedfire-learn' '---' > "$FOREIGN_WORKSPACE/skills/borrowedfire-learn/SKILL.md"
+rm -f "$OPENCLAW_ARGS_FILE"
+if FAKE_OPENCLAW_WORKSPACE="$FOREIGN_WORKSPACE" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "unmanaged workspace learning stack fails closed"
+else
+  ok "unmanaged workspace learning stack fails closed"
+fi
+check "unmanaged workspace declares no job" bash -c "! grep -qx 'add' '$OPENCLAW_ARGS_FILE'"
+
+TAMPERED_WORKSPACE="$SB/openclaw-tampered"
+mkdir -p "$TAMPERED_WORKSPACE"
+"$SRC/install.sh" --copy --openclaw-workspace "$TAMPERED_WORKSPACE" >/dev/null 2>&1
+printf '%s\n' 'tampered instructions' >> "$TAMPERED_WORKSPACE/skills/digest/SKILL.md"
+rm -f "$OPENCLAW_ARGS_FILE"
+if FAKE_OPENCLAW_WORKSPACE="$TAMPERED_WORKSPACE" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "tampered managed dependency fails closed"
+else
+  ok "tampered managed dependency fails closed"
+fi
+check "tampered dependency declares no job" bash -c "! grep -qx 'add' '$OPENCLAW_ARGS_FILE'"
+
+TAMPERED_DOCTRINE_WORKSPACE="$SB/openclaw-tampered-doctrine"
+mkdir -p "$TAMPERED_DOCTRINE_WORKSPACE"
+"$SRC/install.sh" --copy --openclaw-workspace "$TAMPERED_DOCTRINE_WORKSPACE" >/dev/null 2>&1
+sed -i.bak 's/## Borrowed Fire doctrine/## Foreign doctrine/' "$TAMPERED_DOCTRINE_WORKSPACE/AGENTS.md"
+rm -f "$TAMPERED_DOCTRINE_WORKSPACE/AGENTS.md.bak" "$OPENCLAW_ARGS_FILE"
+if FAKE_OPENCLAW_WORKSPACE="$TAMPERED_DOCTRINE_WORKSPACE" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "tampered managed doctrine fails closed"
+else
+  ok "tampered managed doctrine fails closed"
+fi
+check "tampered doctrine declares no job" bash -c "! grep -qx 'add' '$OPENCLAW_ARGS_FILE'"
 
 rm -f "$OPENCLAW_ARGS_FILE"
 OUT="$(OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
@@ -101,6 +160,17 @@ fi
 check "stored-route mismatch disables the job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
 check "stored-route mismatch never enables the job" bash -c "! grep -qx 'enable' '$OPENCLAW_ARGS_FILE'"
 
+rm -f "$OPENCLAW_ARGS_FILE"
+if FAKE_OPENCLAW_STALE_SESSION_KEY=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "stored session-key mismatch fails closed"
+else
+  ok "stored session-key mismatch fails closed"
+fi
+check "stored session-key mismatch disables the job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "stored session-key mismatch never enables the job" bash -c "! grep -qx 'enable' '$OPENCLAW_ARGS_FILE'"
+
 rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
 if FAKE_OPENCLAW_FAIL_MESSAGE=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
@@ -122,6 +192,20 @@ else
 fi
 check "missing acknowledgement disables the job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
 check "missing acknowledgement never enables the job" bash -c "! grep -qx 'enable' '$OPENCLAW_ARGS_FILE'"
+
+rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
+if FAKE_OPENCLAW_POISON_ROUTE_PROOF="$HOME/.config/borrowedfire/prometheus-learning-route.sha256" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "post-probe route-proof persistence failure fails closed"
+else
+  ok "post-probe route-proof persistence failure fails closed"
+fi
+check "post-probe persistence failure sent the probe" grep -qx 'message' "$OPENCLAW_ARGS_FILE"
+check "post-probe persistence failure disables the job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "post-probe persistence failure never enables the job" bash -c "! grep -qx 'enable' '$OPENCLAW_ARGS_FILE'"
+rmdir "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
 
 rm -f "$OPENCLAW_ARGS_FILE"
 if FAKE_OPENCLAW_SCHEDULER_DISABLED=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \

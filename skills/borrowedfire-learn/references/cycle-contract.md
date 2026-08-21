@@ -33,6 +33,8 @@ The fleet worker must:
 8. stay disabled until scheduler-level alerts cover pre-turn failures and skipped runs;
 9. avoid routine notifications; notify the owner for a material digest, actionable conflict,
    failure, or prevention decision.
+10. fail without creating a product-repository outbox when Prometheus is unavailable; unattended
+    fleet authority never includes a repo-local fallback write.
 
 The scheduler's own run history is the audit trail for successful no-op runs. Prometheus pages are
 the audit trail for material captures. Do not add “ran successfully” journal noise.

@@ -75,9 +75,24 @@ check "copy mode: manifest says copy"  grep -q '^ship copy$' "$HOME/.qwen/skills
 check "copy: references included"      test -f "$HOME/.qwen/skills/remember/references/brain-schema.md"
 
 # --- 7. brain pointer ---
+mkdir -p "$HOME/prometheus/config" "$HOME/prometheus/projects"
 git init -q "$HOME/prometheus"
+printf '%s\n' 'journal/*.md merge=union' 'inbox/*.md merge=union' \
+  'projects/*.md merge=union' > "$HOME/prometheus/.gitattributes"
+touch "$HOME/prometheus/INDEX.md" "$HOME/prometheus/config/fleet.md" \
+  "$HOME/prometheus/projects/_template.md"
 "$SRC/install.sh" >/dev/null 2>&1
 check "brain pointer auto-written"     grep -q "$HOME/prometheus" "$HOME/.config/borrowedfire/brain"
+
+NESTED_HOME="$SB/nested-brain-home"
+mkdir -p "$NESTED_HOME/.codex" "$NESTED_HOME/prometheus/config" "$NESTED_HOME/prometheus/projects"
+git init -q "$NESTED_HOME"
+printf '%s\n' 'journal/*.md merge=union' 'inbox/*.md merge=union' \
+  'projects/*.md merge=union' > "$NESTED_HOME/prometheus/.gitattributes"
+touch "$NESTED_HOME/prometheus/INDEX.md" "$NESTED_HOME/prometheus/config/fleet.md" \
+  "$NESTED_HOME/prometheus/projects/_template.md"
+HOME="$NESTED_HOME" "$SRC/install.sh" >/dev/null 2>&1
+check "nested automatic brain root is rejected" test ! -e "$NESTED_HOME/.config/borrowedfire/brain"
 
 # --- 7b. an unmanaged automatic-learning collision fails closed before doctrine install ---
 COLLISION_HOME="$SB/collision-home"
@@ -119,6 +134,37 @@ if HOME="$REPLACED_HOME" "$SRC/install.sh" --dry-run >/dev/null 2>&1; then
 else
   ok "collision dry-run reports failure"
 fi
+
+for dependency in remember recall digest; do
+  DEPENDENCY_HOME="$SB/foreign-$dependency-home"
+  mkdir -p "$DEPENDENCY_HOME/.codex/skills/$dependency"
+  echo foreign > "$DEPENDENCY_HOME/.codex/skills/$dependency/SKILL.md"
+  if HOME="$DEPENDENCY_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
+    fail "unmanaged $dependency dependency fails closed"
+  else
+    ok "unmanaged $dependency dependency fails closed"
+  fi
+  check "unmanaged $dependency suppresses doctrine" bash -c \
+    "! grep -q 'run \`borrowedfire-learn\` automatically' '$DEPENDENCY_HOME/.codex/AGENTS.md'"
+done
+
+MOVED_HOME="$SB/moved-learning-home"
+mkdir -p "$MOVED_HOME/.codex"
+HOME="$MOVED_HOME" "$SRC/install.sh" >/dev/null 2>&1
+for dependency in borrowedfire-learn remember recall digest; do
+  unlink "$MOVED_HOME/.codex/skills/$dependency"
+  ln -s "$SB/old-borrowedfire/skills/$dependency" "$MOVED_HOME/.codex/skills/$dependency"
+done
+if HOME="$MOVED_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
+  ok "moved-checkout learning links are repointed"
+else
+  fail "moved-checkout learning links are repointed"
+fi
+check "repointed learning link uses current checkout" \
+  test "$(readlink "$MOVED_HOME/.codex/skills/borrowedfire-learn")" = "$SRC/skills/borrowedfire-learn"
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+check "repointed stack retains automatic doctrine" \
+  grep -q 'run `borrowedfire-learn` automatically' "$MOVED_HOME/.codex/AGENTS.md"
 
 # --- 8. uninstall: removes owned, leaves unowned, strips doctrine ---
 mkdir -p "$HOME/.claude/skills/my-own-skill"; echo mine > "$HOME/.claude/skills/my-own-skill/SKILL.md"
@@ -210,8 +256,14 @@ check "CODEX_HOME: doctrine written"   grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$S
 # --- 9g. pre-existing correct symlink gets recorded (Codex P2 round 6) ---
 rm -rf "$HOME/.claude/skills"; mkdir -p "$HOME/.claude/skills"
 ln -s "$SRC/skills/recall" "$HOME/.claude/skills/recall"   # manual pre-installer link, no manifest
-"$SRC/install.sh" >/dev/null 2>&1
+if "$SRC/install.sh" >/dev/null 2>&1; then
+  ok "adopted-link: automatic stack remains valid"
+else
+  fail "adopted-link: automatic stack remains valid"
+fi
 check "adopted-link: in manifest"      grep -q '^recall link$' "$HOME/.claude/skills/.borrowedfire-manifest"
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+check "adopted-link: doctrine retained" grep -q 'run `borrowedfire-learn` automatically' "$HOME/.claude/CLAUDE.md"
 "$SRC/install.sh" --uninstall >/dev/null 2>&1
 check "adopted-link: uninstallable"    test ! -L "$HOME/.claude/skills/recall"
 

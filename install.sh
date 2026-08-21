@@ -20,6 +20,7 @@ MARK_BEGIN="<!-- BEGIN BORROWEDFIRE DOCTRINE -->"
 MARK_END="<!-- END BORROWEDFIRE DOCTRINE -->"
 # Skill names from older revisions of this repo; eligible for --adopt cleanup.
 LEGACY_NAMES="takeoff autoland orbit repo-quality-audit blackbox debrief learn"
+LEARNING_SKILLS="borrowedfire-learn remember recall digest"
 
 COPY=0 DRY=0 UNINSTALL=0 ADOPT=0 BRAIN="" OPENCLAW_WS="" INSTALL_ERRORS=0
 while [ $# -gt 0 ]; do
@@ -43,8 +44,24 @@ act() { # act <description> <command...>: honor --dry-run
 }
 
 is_git_checkout() {
-  [ -d "$1" ] && command -v git >/dev/null 2>&1 &&
-    git -C "$1" rev-parse --is-inside-work-tree 2>/dev/null | grep -qx 'true'
+  local requested top
+  [ -d "$1" ] || return 1
+  command -v git >/dev/null 2>&1 || return 1
+  requested="$(cd "$1" && pwd -P)" || return 1
+  top="$(git -C "$requested" rev-parse --show-toplevel 2>/dev/null)" || return 1
+  top="$(cd "$top" && pwd -P)" || return 1
+  [ "$requested" = "$top" ]
+}
+
+is_prometheus_root() {
+  is_git_checkout "$1" &&
+    [ -f "$1/INDEX.md" ] &&
+    [ -f "$1/config/fleet.md" ] &&
+    [ -f "$1/projects/_template.md" ] &&
+    [ -f "$1/.gitattributes" ] &&
+    grep -qxF 'journal/*.md merge=union' "$1/.gitattributes" &&
+    grep -qxF 'inbox/*.md merge=union' "$1/.gitattributes" &&
+    grep -qxF 'projects/*.md merge=union' "$1/.gitattributes"
 }
 
 # --- preflight: never distribute a broken skill set ---
@@ -101,6 +118,24 @@ skill_is_managed() { # skill_is_managed <skilldir> <manifest> <name>
     copy) [ -d "$tgt" ] && [ ! -L "$tgt" ] && [ -e "$tgt/.borrowedfire-copy" ] ;;
     *) return 1 ;;
   esac
+}
+
+skill_has_unmanaged_collision() { # skill_has_unmanaged_collision <skilldir> <manifest> <name>
+  local sd="$1" mf="$2" name="$3" mode tgt
+  mode="$(manifest_mode "$mf" "$name")"
+  tgt="$sd/$name"
+  [ -L "$tgt" ] || [ -e "$tgt" ] || return 1
+  if [ -L "$tgt" ] && [ "$(readlink "$tgt")" = "$SRC/skills/$name" ]; then
+    return 1
+  fi
+  case "$mode" in
+    # A manifest-owned symlink may still point at an older checkout. install_skill
+    # safely repoints it before the final exact ownership check.
+    link) [ -L "$tgt" ] || return 0 ;;
+    copy) [ -d "$tgt" ] && [ ! -L "$tgt" ] && [ -e "$tgt/.borrowedfire-copy" ] || return 0 ;;
+    *) return 0 ;;
+  esac
+  return 1
 }
 
 copy_skill() { # copy_skill <src> <tgt>: copy + drop the ownership marker inside
@@ -250,12 +285,13 @@ for row in "${HARNESSES[@]}"; do
   mf="$sd/$MANIFEST_NAME"
   say "== $label ($sd)"
   [ "$DRY" -eq 1 ] || mkdir -p "$sd"
-  learning_collision=0
-  learning_target="$sd/borrowedfire-learn"
-  if { [ -L "$learning_target" ] || [ -e "$learning_target" ]; } &&
-      ! skill_is_managed "$sd" "$mf" "borrowedfire-learn"; then
-    learning_collision=1
-  fi
+  learning_collision=""
+  for learning_name in $LEARNING_SKILLS; do
+    if skill_has_unmanaged_collision "$sd" "$mf" "$learning_name"; then
+      learning_collision="$learning_name"
+      break
+    fi
+  done
 
   if [ "$UNINSTALL" -eq 1 ]; then
     if [ -f "$mf" ]; then
@@ -298,9 +334,18 @@ for row in "${HARNESSES[@]}"; do
     install_skill "$sd" "$mf" "$(basename "$src_dir")"
   done
 
-  if { [ "$learning_collision" -eq 1 ] && [ "$ADOPT" -eq 0 ]; } ||
-      { [ "$DRY" -eq 0 ] && ! skill_is_managed "$sd" "$mf" "borrowedfire-learn"; }; then
-    echo "error: $label has an unmanaged borrowedfire-learn collision; automatic doctrine removed for this harness" >&2
+  learning_unmanaged=""
+  if [ "$DRY" -eq 0 ]; then
+    for learning_name in $LEARNING_SKILLS; do
+      if ! skill_is_managed "$sd" "$mf" "$learning_name"; then
+        learning_unmanaged="$learning_name"
+        break
+      fi
+    done
+  fi
+  if { [ -n "$learning_collision" ] && [ "$ADOPT" -eq 0 ]; } || [ -n "$learning_unmanaged" ]; then
+    learning_problem="${learning_collision:-$learning_unmanaged}"
+    echo "error: $label has an unmanaged automatic-learning dependency ($learning_problem); automatic doctrine removed for this harness" >&2
     remove_doctrine "$cf"
     INSTALL_ERRORS=$((INSTALL_ERRORS + 1))
   else
@@ -309,7 +354,7 @@ for row in "${HARNESSES[@]}"; do
 done
 
 if [ "$INSTALL_ERRORS" -gt 0 ]; then
-  echo "install failed closed: borrowedfire-learn is not installer-owned in $INSTALL_ERRORS harness(es)" >&2
+  echo "install failed closed: the automatic-learning stack is not fully installer-owned in $INSTALL_ERRORS harness(es)" >&2
   exit 1
 fi
 
@@ -317,13 +362,14 @@ fi
 if [ "$UNINSTALL" -eq 0 ]; then
   ptr="$HOME/.config/borrowedfire/brain"
   if [ -n "$BRAIN" ]; then
-    if [ -d "$BRAIN" ]; then
+    if is_prometheus_root "$BRAIN"; then
+      BRAIN="$(cd "$BRAIN" && pwd -P)"
       act "brain pointer -> $BRAIN" mkdir -p "$(dirname "$ptr")"
       [ "$DRY" -eq 1 ] || printf '%s\n' "$BRAIN" > "$ptr"
     else
-      echo "warning: --brain '$BRAIN' does not exist; pointer not written. Clone your brain repo there first (see prometheus-template/README.md)." >&2
+      echo "warning: --brain '$BRAIN' is not an exact Prometheus Git root with the required schema; pointer not written." >&2
     fi
-  elif [ ! -f "$ptr" ] && is_git_checkout "$HOME/prometheus"; then
+  elif [ ! -f "$ptr" ] && is_prometheus_root "$HOME/prometheus"; then
     act "brain pointer -> $HOME/prometheus" mkdir -p "$(dirname "$ptr")"
     [ "$DRY" -eq 1 ] || printf '%s\n' "$HOME/prometheus" > "$ptr"
   fi

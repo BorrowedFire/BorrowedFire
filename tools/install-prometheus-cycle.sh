@@ -3,6 +3,7 @@
 # Uses OpenClaw's declaration key so re-running updates one job instead of creating duplicates.
 set -u
 
+SRC="$(cd "$(dirname "$0")/.." && pwd -P)"
 OPENCLAW_BIN="${OPENCLAW_BIN:-openclaw}"
 BRAIN=""
 CRON_EXPR="35 3 * * *"
@@ -31,6 +32,76 @@ is_prometheus_root() {
     grep -qxF 'journal/*.md merge=union' "$1/.gitattributes" &&
     grep -qxF 'inbox/*.md merge=union' "$1/.gitattributes" &&
     grep -qxF 'projects/*.md merge=union' "$1/.gitattributes"
+}
+
+managed_learning_stack_matches() {
+  python3 - "$SRC" "$1" <<'PY'
+import os
+import stat
+import sys
+from pathlib import Path
+
+source_root = Path(sys.argv[1]).resolve()
+workspace = Path(sys.argv[2]).resolve()
+skills = ("borrowedfire-learn", "remember", "recall", "digest")
+manifest_path = workspace / "skills" / ".borrowedfire-manifest"
+
+try:
+    lines = manifest_path.read_text(encoding="utf-8").splitlines()
+except OSError:
+    raise SystemExit(1)
+
+manifest = {}
+for line in lines:
+    parts = line.split()
+    if len(parts) != 2 or parts[0] in manifest:
+        raise SystemExit(1)
+    manifest[parts[0]] = parts[1]
+
+def tree_entries(root, ignore_marker=False):
+    entries = {}
+    for base, dirs, files in os.walk(root, followlinks=False):
+        base_path = Path(base)
+        for name in dirs + files:
+            if ignore_marker and name == ".borrowedfire-copy":
+                continue
+            path = base_path / name
+            relative = path.relative_to(root).as_posix()
+            info = path.lstat()
+            if stat.S_ISDIR(info.st_mode):
+                entries[relative] = ("dir", None)
+            elif stat.S_ISREG(info.st_mode):
+                entries[relative] = ("file", path.read_bytes())
+            elif stat.S_ISLNK(info.st_mode):
+                entries[relative] = ("link", os.readlink(path))
+            else:
+                raise SystemExit(1)
+    return entries
+
+for name in skills:
+    source = source_root / "skills" / name
+    target = workspace / "skills" / name
+    mode = manifest.get(name)
+    if mode == "link":
+        if not target.is_symlink() or os.readlink(target) != str(source):
+            raise SystemExit(1)
+    elif mode == "copy":
+        marker = target / ".borrowedfire-copy"
+        if target.is_symlink() or not target.is_dir() or not marker.is_file():
+            raise SystemExit(1)
+        if tree_entries(source) != tree_entries(target, ignore_marker=True):
+            raise SystemExit(1)
+    else:
+        raise SystemExit(1)
+
+try:
+    doctrine = (source_root / "doctrine" / "DOCTRINE.md").read_text(encoding="utf-8")
+    context = (workspace / "AGENTS.md").read_text(encoding="utf-8")
+except OSError:
+    raise SystemExit(1)
+if context.count(doctrine) != 1:
+    raise SystemExit(1)
+PY
 }
 
 usage() {
@@ -129,9 +200,8 @@ if [ ! -d "$AGENT_WORKSPACE" ]; then
   exit 1
 fi
 AGENT_WORKSPACE="$(cd "$AGENT_WORKSPACE" && pwd -P)"
-if [ ! -f "$AGENT_WORKSPACE/skills/borrowedfire-learn/SKILL.md" ] ||
-   ! grep -qxF 'name: borrowedfire-learn' "$AGENT_WORKSPACE/skills/borrowedfire-learn/SKILL.md"; then
-  printf 'Requested OpenClaw agent workspace lacks the installed borrowedfire-learn skill; no job was declared.\n' >&2
+if ! managed_learning_stack_matches "$AGENT_WORKSPACE"; then
+  printf 'Requested OpenClaw workspace lacks the exact installer-managed learning stack and doctrine from this checkout; no job was declared.\n' >&2
   exit 1
 fi
 
@@ -231,6 +301,7 @@ CONVERGE_ARGS=(
   --description "$DESCRIPTION"
   --agent "$AGENT_ID"
   --session isolated
+  --clear-session-key
   --wake now
   --cron "$CRON_EXPR"
   --tz "$TIMEZONE"
@@ -313,6 +384,7 @@ checks = [
     job.get("enabled") is False,
     job.get("agentId") == expected["agent_id"],
     job.get("sessionTarget") == "isolated",
+    not job.get("sessionKey"),
     job.get("wakeMode") == "now",
     isinstance(delivery, dict) and delivery.get("mode") == "none",
     isinstance(delivery, dict) and delivery.get("channel") == expected["channel"],
@@ -355,17 +427,58 @@ PY
 }
 
 STORED_ROUTE_HASH=""
-if [ -f "$ROUTE_PROOF_FILE" ]; then
-  IFS= read -r STORED_ROUTE_HASH < "$ROUTE_PROOF_FILE"
+if [ -e "$ROUTE_PROOF_FILE" ] || [ -L "$ROUTE_PROOF_FILE" ]; then
+  STORED_ROUTE_HASH="$(python3 - "$ROUTE_PROOF_FILE" <<'PY'
+import os
+import stat
+import sys
+
+path = sys.argv[1]
+flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+try:
+    descriptor = os.open(path, flags)
+    info = os.fstat(descriptor)
+    if not stat.S_ISREG(info.st_mode):
+        raise OSError("route proof is not a regular file")
+    os.fchmod(descriptor, 0o600)
+    with os.fdopen(descriptor, "r", encoding="utf-8") as handle:
+        value = handle.read().strip()
+except OSError:
+    raise SystemExit(1)
+print(value)
+PY
+)" || {
+    "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
+    printf 'Existing notification-route proof is unsafe or unreadable; Prometheus learning job is disabled.\n' >&2
+    exit 1
+  }
 fi
 
 if [ "$STORED_ROUTE_HASH" != "$ROUTE_HASH" ]; then
+  PROOF_DIR="$(dirname "$ROUTE_PROOF_FILE")"
+  mkdir -p "$PROOF_DIR" || {
+    "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
+    printf 'Could not prepare notification-route proof storage; Prometheus learning job is disabled.\n' >&2
+    exit 1
+  }
+  PROOF_TMP="$(mktemp "$PROOF_DIR/.prometheus-learning-route.XXXXXX")" || {
+    "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
+    printf 'Could not prepare notification-route proof storage; Prometheus learning job is disabled.\n' >&2
+    exit 1
+  }
+  if ! chmod 600 "$PROOF_TMP"; then
+    rm -f "$PROOF_TMP"
+    "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
+    printf 'Could not prepare notification-route proof storage; Prometheus learning job is disabled.\n' >&2
+    exit 1
+  fi
   PROBE_MESSAGE="Prometheus learning notifications are configured on this host. This is a one-time route verification."
   PROBE_OUTPUT="$("$OPENCLAW_BIN" message send \
     --channel "$NOTIFY_CHANNEL" \
     --target "$NOTIFY_TO" \
     --message "$PROBE_MESSAGE" \
     --json)" || {
+      rm -f "$PROOF_TMP"
       "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
       printf 'Live notification-route verification failed; Prometheus learning job is disabled.\n' >&2
       exit 1
@@ -393,25 +506,42 @@ def acknowledged(value):
 if not acknowledged(payload):
     raise SystemExit(1)
 '; then
+    rm -f "$PROOF_TMP"
     "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
     printf 'Notification provider returned no message acknowledgement; Prometheus learning job is disabled.\n' >&2
     exit 1
   fi
 
-  PROOF_DIR="$(dirname "$ROUTE_PROOF_FILE")"
-  mkdir -p "$PROOF_DIR" || {
+  if ! printf '%s\n' "$ROUTE_HASH" > "$PROOF_TMP" ||
+     ! python3 - "$PROOF_TMP" "$ROUTE_PROOF_FILE" "$ROUTE_HASH" <<'PY'
+import os
+import stat
+import sys
+
+temporary, target, expected = sys.argv[1:]
+try:
+    if os.path.lexists(target):
+        current = os.lstat(target)
+        if not stat.S_ISREG(current.st_mode) or stat.S_ISLNK(current.st_mode):
+            raise OSError("unsafe route proof target")
+    os.replace(temporary, target)
+    current = os.lstat(target)
+    if not stat.S_ISREG(current.st_mode) or stat.S_ISLNK(current.st_mode):
+        raise OSError("unsafe route proof result")
+    if stat.S_IMODE(current.st_mode) != 0o600:
+        raise OSError("route proof permissions are not private")
+    with open(target, encoding="utf-8") as handle:
+        if handle.read().splitlines() != [expected]:
+            raise OSError("route proof contents do not match")
+except OSError:
+    raise SystemExit(1)
+PY
+  then
+    rm -f "$PROOF_TMP"
     "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
-    printf 'Could not persist notification-route proof; Prometheus learning job is disabled.\n' >&2
+    printf 'Could not persist and verify notification-route proof; Prometheus learning job is disabled.\n' >&2
     exit 1
-  }
-  PROOF_TMP="$(mktemp "$PROOF_DIR/.prometheus-learning-route.XXXXXX")" || {
-    "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
-    printf 'Could not persist notification-route proof; Prometheus learning job is disabled.\n' >&2
-    exit 1
-  }
-  chmod 600 "$PROOF_TMP"
-  printf '%s\n' "$ROUTE_HASH" > "$PROOF_TMP"
-  mv "$PROOF_TMP" "$ROUTE_PROOF_FILE"
+  fi
   printf 'Notification route verified with a live one-time message.\n'
 else
   printf 'Notification route already has a matching host-local live proof.\n'

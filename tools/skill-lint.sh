@@ -93,6 +93,12 @@ fi
 if ! body "$LEARN_SKILL" | grep -qF 'exact local-only `.brain-outbox/<file>`'; then
   err "borrowedfire-learn: narrow outbox cleanup contract is missing"
 fi
+if ! body "$LEARN_SKILL" | grep -qF 'keep the pending capture in output only'; then
+  err "borrowedfire-learn: unavailable-brain fallback must remain output-only without repo-write authority"
+fi
+if ! body "$LEARN_SKILL" | grep -qF 'fleet mode never creates a fallback outbox in a product repository'; then
+  err "borrowedfire-learn: fleet mode must not write a product-repo fallback outbox"
+fi
 
 # 8. workflow contracts that must survive review-loop edits
 LAND_SKILL="$SKILLS_DIR/land/SKILL.md"
