@@ -250,6 +250,12 @@ for row in "${HARNESSES[@]}"; do
   mf="$sd/$MANIFEST_NAME"
   say "== $label ($sd)"
   [ "$DRY" -eq 1 ] || mkdir -p "$sd"
+  learning_collision=0
+  learning_target="$sd/borrowedfire-learn"
+  if { [ -L "$learning_target" ] || [ -e "$learning_target" ]; } &&
+      ! skill_is_managed "$sd" "$mf" "borrowedfire-learn"; then
+    learning_collision=1
+  fi
 
   if [ "$UNINSTALL" -eq 1 ]; then
     if [ -f "$mf" ]; then
@@ -292,8 +298,10 @@ for row in "${HARNESSES[@]}"; do
     install_skill "$sd" "$mf" "$(basename "$src_dir")"
   done
 
-  if [ "$DRY" -eq 0 ] && ! skill_is_managed "$sd" "$mf" "borrowedfire-learn"; then
-    echo "error: $label has an unmanaged borrowedfire-learn collision; doctrine not updated for this harness" >&2
+  if { [ "$learning_collision" -eq 1 ] && [ "$ADOPT" -eq 0 ]; } ||
+      { [ "$DRY" -eq 0 ] && ! skill_is_managed "$sd" "$mf" "borrowedfire-learn"; }; then
+    echo "error: $label has an unmanaged borrowedfire-learn collision; automatic doctrine removed for this harness" >&2
+    remove_doctrine "$cf"
     INSTALL_ERRORS=$((INSTALL_ERRORS + 1))
   else
     update_doctrine "$cf"

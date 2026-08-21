@@ -21,8 +21,8 @@ expression when the host has a different maintenance window.
 The fleet worker must:
 
 1. resolve and sync the private Prometheus git repo;
-2. use `notes/<harness>-<host>-ingest.md`, with both components sanitized, and never claim
-   visibility into other machines;
+2. scope the high-water mark to harness, host, agent, and canonical workspace identity, with text
+   components sanitized, and never claim visibility into another controller binding;
 3. retain only verified durable deltas and deduplicate before capture;
 4. leave ambiguous items pending rather than advancing past them;
 5. use `remember` for writes and `digest` for restructuring;

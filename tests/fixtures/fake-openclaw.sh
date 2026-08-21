@@ -9,6 +9,15 @@ set -u
 if [ "${FAKE_OPENCLAW_FAIL_EDIT:-0}" -eq 1 ] && [ "${1:-}" = "cron" ] && [ "${2:-}" = "edit" ]; then
   exit 9
 fi
+if [ "${1:-}" = "agents" ] && [ "${2:-}" = "list" ]; then
+  if [ "${FAKE_OPENCLAW_UNKNOWN_AGENT:-0}" -eq 1 ]; then
+    printf '[{"id":"different","workspace":"%s"}]\n' "${FAKE_OPENCLAW_WORKSPACE:?}"
+  else
+    printf '[{"id":"main","workspace":"%s"},{"id":"alternate","workspace":"%s"}]\n' \
+      "${FAKE_OPENCLAW_WORKSPACE:?}" "${FAKE_OPENCLAW_ALT_WORKSPACE:-${FAKE_OPENCLAW_WORKSPACE:?}}"
+  fi
+  exit 0
+fi
 if [ "${1:-}" = "message" ] && [ "${2:-}" = "send" ]; then
   if [ "${FAKE_OPENCLAW_FAIL_MESSAGE:-0}" -eq 1 ]; then
     exit 10
@@ -43,9 +52,13 @@ def last_value(flag):
 print(json.dumps({
     "id": "fixture-job",
     "declarationKey": "borrowedfire.prometheus-learning.v1",
+    "name": last_value("--name"),
+    "displayName": last_value("--display-name"),
+    "description": last_value("--description"),
     "enabled": False,
     "agentId": last_value("--agent"),
     "sessionTarget": "isolated",
+    "wakeMode": last_value("--wake"),
     "schedule": {
         "kind": "cron",
         "expr": last_value("--cron"),
@@ -55,12 +68,22 @@ print(json.dumps({
         "mode": "none",
         "channel": last_value("--channel"),
         "to": "wrong-route" if mismatch else last_value("--to"),
+        "threadId": None,
     },
     "failureAlert": {
         "after": 2,
+        "cooldownMs": 43200000,
         "includeSkipped": True,
+        "mode": "announce",
         "channel": last_value("--failure-alert-channel"),
         "to": last_value("--failure-alert-to"),
+    },
+    "payload": {
+        "kind": "agentTurn",
+        "message": last_value("--message"),
+        "timeoutSeconds": 900,
+        "lightContext": False,
+        "toolsAllow": last_value("--tools").replace(",", " ").split(),
     },
 }))
 PY

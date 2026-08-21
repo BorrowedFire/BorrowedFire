@@ -86,7 +86,7 @@ fi
 if ! grep -qF 'run `borrowedfire-learn` automatically' "$DOCTRINE"; then
   err "doctrine: automatic learning checkpoint is missing"
 fi
-if ! body "$LEARN_SKILL" | grep -qF 'notes/<harness>-<host>-ingest.md'; then
+if ! body "$LEARN_SKILL" | grep -qF 'notes/openclaw-<host>-<agent>-<workspace>-<workspace-hash>-ingest.md'; then
   err "borrowedfire-learn: host-scoped watermark contract is missing"
 fi
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase

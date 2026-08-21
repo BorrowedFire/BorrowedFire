@@ -102,6 +102,24 @@ else
 fi
 check "stale ownership does not install doctrine" bash -c "! grep -q 'run \`borrowedfire-learn\` automatically' '$STALE_HOME/.codex/AGENTS.md'"
 
+REPLACED_HOME="$SB/replaced-owned-home"
+mkdir -p "$REPLACED_HOME/.codex"
+HOME="$REPLACED_HOME" "$SRC/install.sh" >/dev/null 2>&1
+unlink "$REPLACED_HOME/.codex/skills/borrowedfire-learn"
+mkdir "$REPLACED_HOME/.codex/skills/borrowedfire-learn"
+echo foreign > "$REPLACED_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
+if HOME="$REPLACED_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
+  fail "replaced managed learning skill fails closed"
+else
+  ok "replaced managed learning skill fails closed"
+fi
+check "stale automatic doctrine is removed" bash -c "! grep -q 'run \`borrowedfire-learn\` automatically' '$REPLACED_HOME/.codex/AGENTS.md'"
+if HOME="$REPLACED_HOME" "$SRC/install.sh" --dry-run >/dev/null 2>&1; then
+  fail "collision dry-run reports failure"
+else
+  ok "collision dry-run reports failure"
+fi
+
 # --- 8. uninstall: removes owned, leaves unowned, strips doctrine ---
 mkdir -p "$HOME/.claude/skills/my-own-skill"; echo mine > "$HOME/.claude/skills/my-own-skill/SKILL.md"
 "$SRC/install.sh" --uninstall >/dev/null 2>&1

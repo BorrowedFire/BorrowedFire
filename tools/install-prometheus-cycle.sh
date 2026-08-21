@@ -14,7 +14,23 @@ DRY=0
 ROUTE_PROOF_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/borrowedfire/prometheus-learning-route.sha256"
 
 is_git_checkout() {
-  [ -d "$1" ] && git -C "$1" rev-parse --is-inside-work-tree 2>/dev/null | grep -qx 'true'
+  local requested top
+  [ -d "$1" ] || return 1
+  requested="$(cd "$1" && pwd -P)" || return 1
+  top="$(git -C "$requested" rev-parse --show-toplevel 2>/dev/null)" || return 1
+  top="$(cd "$top" && pwd -P)" || return 1
+  [ "$requested" = "$top" ]
+}
+
+is_prometheus_root() {
+  is_git_checkout "$1" &&
+    [ -f "$1/INDEX.md" ] &&
+    [ -f "$1/config/fleet.md" ] &&
+    [ -f "$1/projects/_template.md" ] &&
+    [ -f "$1/.gitattributes" ] &&
+    grep -qxF 'journal/*.md merge=union' "$1/.gitattributes" &&
+    grep -qxF 'inbox/*.md merge=union' "$1/.gitattributes" &&
+    grep -qxF 'projects/*.md merge=union' "$1/.gitattributes"
 }
 
 usage() {
@@ -55,8 +71,8 @@ if [ -z "$BRAIN" ] && is_git_checkout "$HOME/prometheus"; then
   BRAIN="$HOME/prometheus"
 fi
 
-if [ -z "$BRAIN" ] || ! is_git_checkout "$BRAIN"; then
-  printf 'Prometheus brain not found; pass --brain or configure ~/.config/borrowedfire/brain.\n' >&2
+if [ -z "$BRAIN" ] || ! is_prometheus_root "$BRAIN"; then
+  printf 'Prometheus brain root/schema not found; pass its exact Git root or configure ~/.config/borrowedfire/brain.\n' >&2
   exit 1
 fi
 BRAIN="$(cd "$BRAIN" && pwd -P)"
@@ -77,7 +93,78 @@ fi
 JOB_NAME="Prometheus Learning Cycle"
 DECLARATION_KEY="borrowedfire.prometheus-learning.v1"
 DESCRIPTION="Nightly verified learning, status capture, and due-only consolidation in the shared Prometheus brain."
-MESSAGE="Run the installed borrowedfire-learn skill in fleet mode. The Prometheus root is $BRAIN. Follow the skill and its cycle-contract reference exactly. Derive the sanitized host-scoped notes/<harness>-<host>-ingest.md watermark; ingest only verified durable deltas visible on this host since its successful high-water mark; deduplicate before using remember; advance the mark only after durable commit/push; and invoke digest only when seven days have elapsed since its last completed run or inbox backlog exceeds 15. Never claim access to another host's session history. Do not mutate product repositories, accounts, credentials, deployments, releases, stores, skills, doctrine, or scheduler configuration, except to delete one exact local-only .brain-outbox/<file> after its capture is committed and pushed to Prometheus; never delete the directory, another item, or a pending item. Do not announce routine success or a no-op. Use the configured message target only for one concise material-digest summary, an actionable owner decision, conflicting evidence, a sync/push failure, or a concrete prevention follow-up."
+
+if [ "$DRY" -eq 1 ]; then
+  printf 'would declare %s (%s) at %s [%s]\n' "$JOB_NAME" "$DECLARATION_KEY" "$CRON_EXPR" "$TIMEZONE"
+  printf 'Prometheus: %s\n' "$BRAIN"
+  printf 'Agent: %s; notification channel: %s; explicit destination configured\n' "$AGENT_ID" "$NOTIFY_CHANNEL"
+  exit 0
+fi
+
+AGENTS_OUTPUT="$("$OPENCLAW_BIN" agents list --json)" || {
+  printf 'Configured OpenClaw agents could not be inspected; no job was declared.\n' >&2
+  exit 1
+}
+AGENT_WORKSPACE="$(printf '%s' "$AGENTS_OUTPUT" | python3 -c '
+import json
+import sys
+
+requested = sys.argv[1]
+try:
+    agents = json.load(sys.stdin)
+except (json.JSONDecodeError, OSError):
+    raise SystemExit(1)
+if not isinstance(agents, list):
+    raise SystemExit(1)
+matches = [item for item in agents if isinstance(item, dict) and item.get("id") == requested]
+if len(matches) != 1 or not isinstance(matches[0].get("workspace"), str) or not matches[0]["workspace"].strip():
+    raise SystemExit(1)
+print(matches[0]["workspace"].strip())
+' "$AGENT_ID")" || {
+  printf 'Requested OpenClaw agent is not configured with one concrete workspace; no job was declared.\n' >&2
+  exit 1
+}
+if [ ! -d "$AGENT_WORKSPACE" ]; then
+  printf 'Requested OpenClaw agent workspace does not exist; no job was declared.\n' >&2
+  exit 1
+fi
+AGENT_WORKSPACE="$(cd "$AGENT_WORKSPACE" && pwd -P)"
+if [ ! -f "$AGENT_WORKSPACE/skills/borrowedfire-learn/SKILL.md" ] ||
+   ! grep -qxF 'name: borrowedfire-learn' "$AGENT_WORKSPACE/skills/borrowedfire-learn/SKILL.md"; then
+  printf 'Requested OpenClaw agent workspace lacks the installed borrowedfire-learn skill; no job was declared.\n' >&2
+  exit 1
+fi
+
+HOST_ID="$(hostname -s)" || {
+  printf 'Host identity could not be resolved; no job was declared.\n' >&2
+  exit 1
+}
+WATERMARK_FILE="$(python3 - "$HOST_ID" "$AGENT_ID" "$AGENT_WORKSPACE" <<'PY'
+import hashlib
+import os
+import re
+import sys
+
+def slug(value):
+    normalized = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    if not normalized:
+        raise SystemExit(1)
+    return normalized
+
+host = slug(sys.argv[1])
+agent = slug(sys.argv[2])
+workspace = os.path.realpath(sys.argv[3])
+workspace_name = slug(os.path.basename(workspace))
+workspace_hash = hashlib.sha256(workspace.encode("utf-8")).hexdigest()[:12]
+print(f"notes/openclaw-{host}-{agent}-{workspace_name}-{workspace_hash}-ingest.md")
+PY
+)" || {
+  printf 'Host/agent/workspace watermark identity could not be derived; no job was declared.\n' >&2
+  exit 1
+}
+
+MESSAGE="Run the installed borrowedfire-learn skill in fleet mode. The Prometheus root is $BRAIN. Follow the skill and its cycle-contract reference exactly. Use only $WATERMARK_FILE as this controller binding's high-water mark; ingest only verified durable deltas visible in this agent workspace since that mark; deduplicate before using remember; advance the mark only after durable commit/push; and invoke digest only when seven days have elapsed since its last completed run or inbox backlog exceeds 15. Never claim access to another host, agent, or workspace's private session history. Do not mutate product repositories, accounts, credentials, deployments, releases, stores, skills, doctrine, or scheduler configuration, except to delete one exact local-only .brain-outbox/<file> after its capture is committed and pushed to Prometheus; never delete the directory, another item, or a pending item. Do not announce routine success or a no-op. Use the configured message target only for one concise material-digest summary, an actionable owner decision, conflicting evidence, a sync/push failure, or a concrete prevention follow-up."
+TOOLS_ALLOW="read,edit,write,apply_patch,exec,process,message"
 
 ARGS=(
   cron add
@@ -91,22 +178,14 @@ ARGS=(
   --tz "$TIMEZONE"
   --session isolated
   --wake now
-  --expect-final
   --no-deliver
   --channel "$NOTIFY_CHANNEL"
   --to "$NOTIFY_TO"
   --timeout-seconds 900
-  --tools "read,edit,write,apply_patch,exec,process,message"
+  --tools "$TOOLS_ALLOW"
   --message "$MESSAGE"
   --json
 )
-
-if [ "$DRY" -eq 1 ]; then
-  printf 'would declare %s (%s) at %s [%s]\n' "$JOB_NAME" "$DECLARATION_KEY" "$CRON_EXPR" "$TIMEZONE"
-  printf 'Prometheus: %s\n' "$BRAIN"
-  printf 'Agent: %s; notification channel: %s; explicit destination configured\n' "$AGENT_ID" "$NOTIFY_CHANNEL"
-  exit 0
-fi
 
 STATUS_OUTPUT="$("$OPENCLAW_BIN" cron status --json)" || exit $?
 if ! printf '%s' "$STATUS_OUTPUT" | python3 -c '
@@ -125,7 +204,6 @@ if not isinstance(payload, dict) or payload.get("enabled") is not True:
 fi
 
 CREATE_OUTPUT="$("$OPENCLAW_BIN" "${ARGS[@]}")" || exit $?
-printf '%s\n' "$CREATE_OUTPUT"
 JOB_ID="$(printf '%s' "$CREATE_OUTPUT" | python3 -c '
 import json
 import sys
@@ -147,17 +225,48 @@ print(job_id)
   exit 1
 }
 
+CONVERGE_ARGS=(
+  cron edit "$JOB_ID"
+  --name "$JOB_NAME"
+  --description "$DESCRIPTION"
+  --agent "$AGENT_ID"
+  --session isolated
+  --wake now
+  --cron "$CRON_EXPR"
+  --tz "$TIMEZONE"
+  --message "$MESSAGE"
+  --timeout-seconds 900
+  --no-light-context
+  --tools "$TOOLS_ALLOW"
+  --no-deliver
+  --channel "$NOTIFY_CHANNEL"
+  --to "$NOTIFY_TO"
+)
+
+if ! "$OPENCLAW_BIN" "${CONVERGE_ARGS[@]}" >/dev/null; then
+  "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
+  printf 'Agent/workspace job convergence failed; Prometheus learning job is disabled.\n' >&2
+  exit 1
+fi
+
+if ! "$OPENCLAW_BIN" cron edit "$JOB_ID" --no-failure-alert >/dev/null; then
+  "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
+  printf 'Old failure-alert policy could not be cleared; Prometheus learning job is disabled.\n' >&2
+  exit 1
+fi
+
 ALERT_ARGS=(
   cron edit "$JOB_ID"
   --failure-alert
   --failure-alert-after 2
   --failure-alert-cooldown 12h
   --failure-alert-include-skipped
+  --failure-alert-mode announce
   --failure-alert-channel "$NOTIFY_CHANNEL"
   --failure-alert-to "$NOTIFY_TO"
 )
 
-if ! "$OPENCLAW_BIN" "${ALERT_ARGS[@]}"; then
+if ! "$OPENCLAW_BIN" "${ALERT_ARGS[@]}" >/dev/null; then
   "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
   printf 'Failure-alert setup failed; Prometheus learning job is disabled.\n' >&2
   exit 1
@@ -179,6 +288,10 @@ expected = {
     "timezone": sys.argv[4],
     "channel": sys.argv[5],
     "to": sys.argv[6],
+    "name": sys.argv[7],
+    "description": sys.argv[8],
+    "message": sys.argv[9],
+    "tools": sys.argv[10].split(","),
 }
 try:
     payload = json.load(sys.stdin)
@@ -190,25 +303,40 @@ if not isinstance(job, dict):
 delivery = job.get("delivery")
 failure = job.get("failureAlert")
 schedule = job.get("schedule")
+agent_payload = job.get("payload")
 checks = [
     job.get("id") == expected["job_id"],
     job.get("declarationKey") == "borrowedfire.prometheus-learning.v1",
+    job.get("name") == expected["name"],
+    job.get("displayName") == expected["name"],
+    job.get("description") == expected["description"],
     job.get("enabled") is False,
     job.get("agentId") == expected["agent_id"],
     job.get("sessionTarget") == "isolated",
+    job.get("wakeMode") == "now",
     isinstance(delivery, dict) and delivery.get("mode") == "none",
     isinstance(delivery, dict) and delivery.get("channel") == expected["channel"],
     isinstance(delivery, dict) and delivery.get("to") == expected["to"],
+    isinstance(delivery, dict) and not delivery.get("accountId"),
+    isinstance(delivery, dict) and delivery.get("threadId") is None,
     isinstance(failure, dict) and failure.get("after") == 2,
+    isinstance(failure, dict) and failure.get("cooldownMs") == 43200000,
     isinstance(failure, dict) and failure.get("includeSkipped") is True,
+    isinstance(failure, dict) and failure.get("mode") == "announce",
     isinstance(failure, dict) and failure.get("channel") == expected["channel"],
     isinstance(failure, dict) and failure.get("to") == expected["to"],
+    isinstance(failure, dict) and not failure.get("accountId"),
     isinstance(schedule, dict) and schedule.get("expr") == expected["expr"],
     isinstance(schedule, dict) and schedule.get("tz") == expected["timezone"],
+    isinstance(agent_payload, dict) and agent_payload.get("kind") == "agentTurn",
+    isinstance(agent_payload, dict) and agent_payload.get("message") == expected["message"],
+    isinstance(agent_payload, dict) and agent_payload.get("timeoutSeconds") == 900,
+    isinstance(agent_payload, dict) and agent_payload.get("lightContext") is False,
+    isinstance(agent_payload, dict) and agent_payload.get("toolsAllow") == expected["tools"],
 ]
 if not all(checks):
     raise SystemExit(1)
-' "$JOB_ID" "$AGENT_ID" "$CRON_EXPR" "$TIMEZONE" "$NOTIFY_CHANNEL" "$NOTIFY_TO"; then
+' "$JOB_ID" "$AGENT_ID" "$CRON_EXPR" "$TIMEZONE" "$NOTIFY_CHANNEL" "$NOTIFY_TO" "$JOB_NAME" "$DESCRIPTION" "$MESSAGE" "$TOOLS_ALLOW"; then
   "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
   printf 'Stored job does not match the requested safe configuration; Prometheus learning job is disabled.\n' >&2
   exit 1
@@ -289,8 +417,9 @@ else
   printf 'Notification route already has a matching host-local live proof.\n'
 fi
 
-if ! "$OPENCLAW_BIN" cron enable "$JOB_ID"; then
+if ! "$OPENCLAW_BIN" cron enable "$JOB_ID" >/dev/null; then
   "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
   printf 'Enable failed; Prometheus learning job is disabled.\n' >&2
   exit 1
 fi
+printf 'Prometheus learning job enabled after exact configuration and route verification.\n'

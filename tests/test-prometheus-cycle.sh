@@ -6,6 +6,7 @@ SRC="$(cd "$(dirname "$0")/.." && pwd)"
 SB="$(mktemp -d)"
 export HOME="$SB/home"
 export OPENCLAW_ARGS_FILE="$SB/openclaw-args"
+export FAKE_OPENCLAW_WORKSPACE="$SB/openclaw-workspace"
 PASS=0
 FAIL=0
 
@@ -16,8 +17,14 @@ check() {
   if "$@" >/dev/null 2>&1; then ok "$desc"; else fail "$desc"; fi
 }
 
-mkdir -p "$HOME/.config/borrowedfire"
+mkdir -p "$HOME/.config/borrowedfire" "$SB/prometheus/config" "$SB/prometheus/projects" \
+  "$FAKE_OPENCLAW_WORKSPACE/skills/borrowedfire-learn"
 git init -q "$SB/prometheus"
+printf '%s\n' 'journal/*.md merge=union' 'inbox/*.md merge=union' \
+  'projects/*.md merge=union' > "$SB/prometheus/.gitattributes"
+touch "$SB/prometheus/INDEX.md" "$SB/prometheus/config/fleet.md" "$SB/prometheus/projects/_template.md"
+printf '%s\n' '---' 'name: borrowedfire-learn' '---' > \
+  "$FAKE_OPENCLAW_WORKSPACE/skills/borrowedfire-learn/SKILL.md"
 printf '%s\n' "$SB/prometheus" > "$HOME/.config/borrowedfire/brain"
 
 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
@@ -31,6 +38,9 @@ check "uses isolated session" grep -qx 'isolated' "$OPENCLAW_ARGS_FILE"
 check "binds the main agent by default" grep -qx 'main' "$OPENCLAW_ARGS_FILE"
 check "creates disabled before alert setup" grep -qx -- '--disabled' "$OPENCLAW_ARGS_FILE"
 check "enables only after configuration" grep -qx 'enable' "$OPENCLAW_ARGS_FILE"
+check "removes unsupported expect-final flag" bash -c "! grep -qx -- '--expect-final' '$OPENCLAW_ARGS_FILE'"
+check "resets stale failure-alert policy" grep -qx -- '--no-failure-alert' "$OPENCLAW_ARGS_FILE"
+check "pins failure alerts to announce mode" grep -qx 'announce' "$OPENCLAW_ARGS_FILE"
 check "does not pin a model" bash -c "! grep -qx -- '--model' '$OPENCLAW_ARGS_FILE'"
 check "does not hide bootstrap context" bash -c "! grep -qx -- '--light-context' '$OPENCLAW_ARGS_FILE'"
 check "disables routine delivery" grep -qx -- '--no-deliver' "$OPENCLAW_ARGS_FILE"
@@ -39,7 +49,7 @@ check "stores an explicit notification destination" grep -qx 'owner-route' "$OPE
 check "alerts after repeated failures" grep -qx -- '--failure-alert-after' "$OPENCLAW_ARGS_FILE"
 check "alerts on skipped runs" grep -qx -- '--failure-alert-include-skipped' "$OPENCLAW_ARGS_FILE"
 check "prompt requires namespaced learning mode" grep -q 'borrowedfire-learn skill in fleet mode' "$OPENCLAW_ARGS_FILE"
-check "prompt uses host-scoped watermark" grep -q 'notes/<harness>-<host>-ingest.md' "$OPENCLAW_ARGS_FILE"
+check "prompt uses binding-scoped watermark" grep -Eq 'notes/openclaw-.+-main-openclaw-workspace-[0-9a-f]{12}-ingest.md' "$OPENCLAW_ARGS_FILE"
 check "prompt preserves product mutation boundary" grep -q 'Do not mutate product repositories' "$OPENCLAW_ARGS_FILE"
 check "prompt narrows outbox cleanup" grep -q 'exact local-only .brain-outbox/<file>' "$OPENCLAW_ARGS_FILE"
 check "prompt permits material digest summary" grep -q 'material-digest summary' "$OPENCLAW_ARGS_FILE"
@@ -51,6 +61,16 @@ OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null
 check "matching route is not probed twice" test "$(grep -c '^message$' "$OPENCLAW_ARGS_FILE")" -eq 1
+
+mkdir -p "$SB/openclaw-alt/skills/borrowedfire-learn"
+printf '%s\n' '---' 'name: borrowedfire-learn' '---' > "$SB/openclaw-alt/skills/borrowedfire-learn/SKILL.md"
+rm -f "$OPENCLAW_ARGS_FILE"
+FAKE_OPENCLAW_ALT_WORKSPACE="$SB/openclaw-alt" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" --agent alternate \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+check "configured alternate agent converges" grep -qx 'alternate' "$OPENCLAW_ARGS_FILE"
+check "alternate workspace gets a distinct watermark" grep -Eq 'notes/openclaw-.+-alternate-openclaw-alt-[0-9a-f]{12}-ingest.md' "$OPENCLAW_ARGS_FILE"
 
 rm -f "$OPENCLAW_ARGS_FILE"
 OUT="$(OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
@@ -113,6 +133,16 @@ else
 fi
 check "disabled scheduler declares no job" bash -c "! grep -qx 'add' '$OPENCLAW_ARGS_FILE'"
 
+rm -f "$OPENCLAW_ARGS_FILE"
+if FAKE_OPENCLAW_UNKNOWN_AGENT=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" --agent typo \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "unknown agent fails closed"
+else
+  ok "unknown agent fails closed"
+fi
+check "unknown agent declares no job" bash -c "! grep -qx 'add' '$OPENCLAW_ARGS_FILE'"
+
 if OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" >/dev/null 2>&1; then
   fail "missing notification route fails closed"
@@ -130,12 +160,31 @@ fi
 
 git -C "$SB/prometheus" config user.name Fixture
 git -C "$SB/prometheus" config user.email fixture@example.invalid
-git -C "$SB/prometheus" commit --allow-empty -qm init
+git -C "$SB/prometheus" add .gitattributes INDEX.md config/fleet.md projects/_template.md
+git -C "$SB/prometheus" commit -qm init
 git -C "$SB/prometheus" worktree add -q -b fixture-worktree "$SB/prometheus-worktree"
 OUT="$(OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" --brain "$SB/prometheus-worktree" \
   --notify-channel imessage --notify-to owner-route --dry-run)"
 check "valid Git worktree brain is accepted" grep -q "$SB/prometheus-worktree" <<<"$OUT"
+
+mkdir -p "$SB/prometheus/subdirectory"
+if OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" --brain "$SB/prometheus/subdirectory" \
+  --notify-channel imessage --notify-to owner-route --dry-run >/dev/null 2>&1; then
+  fail "nested Git directory is rejected as a brain root"
+else
+  ok "nested Git directory is rejected as a brain root"
+fi
+
+git init -q "$SB/not-prometheus"
+if OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" --brain "$SB/not-prometheus" \
+  --notify-channel imessage --notify-to owner-route --dry-run >/dev/null 2>&1; then
+  fail "arbitrary Git repository is rejected as a brain"
+else
+  ok "arbitrary Git repository is rejected as a brain"
+fi
 
 printf '%s\n' "----" "PASS=$PASS FAIL=$FAIL"
 rm -rf "$SB"

@@ -69,9 +69,11 @@ An always-on harness runs the same quality bar over durable notes and outboxes v
 host. It must not pretend to read another machine's private session history.
 
 1. Resolve Prometheus and sync it using the schema protocol.
-2. Derive a host-scoped watermark as `notes/<harness>-<host>-ingest.md`: use the active harness
-   identifier and `hostname -s`, lowercase each, replace non-alphanumeric runs with `-`, and refuse
-   a blank component. Read that high-water mark if present.
+2. Derive a controller-binding watermark. For OpenClaw use
+   `notes/openclaw-<host>-<agent>-<workspace>-<workspace-hash>-ingest.md`, where the hash comes from
+   the canonical workspace path. Lowercase text components, replace non-alphanumeric runs with
+   `-`, and refuse a blank component. Other harnesses must include an equivalent host plus
+   workspace/session-source identity. Read only that binding's high-water mark.
 3. Inspect only new harness-local notes, pending `.brain-outbox/` captures in explicitly
    registered/accessible repos, and project-status evidence created since that mark. An outbox
    source file may be removed only after its exact capture is durably committed and pushed.
