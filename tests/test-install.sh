@@ -289,13 +289,20 @@ mkdir -p "$MOVED_COPY_HOME/.codex"
 HOME="$MOVED_COPY_HOME" "$SRC/install.sh" >/dev/null 2>&1
 unlink "$MOVED_COPY_HOME/.codex/skills/remember"
 ln -s "$SB/old-borrowedfire/skills/remember" "$MOVED_COPY_HOME/.codex/skills/remember"
-HOME="$MOVED_COPY_HOME" "$SRC/install.sh" --copy >/dev/null 2>&1
+if HOME="$MOVED_COPY_HOME" "$SRC/install.sh" --copy >/dev/null 2>&1; then
+  ok "copy mode converges after a managed checkout moves"
+else
+  fail "copy mode converges after a managed checkout moves"
+fi
 check "copy mode converts a moved managed link" bash -c \
   "test -d '$MOVED_COPY_HOME/.codex/skills/remember' && ! test -L '$MOVED_COPY_HOME/.codex/skills/remember'"
 check "moved-link conversion records copy ownership" \
   grep -q '^remember copy$' "$MOVED_COPY_HOME/.codex/skills/.borrowedfire-manifest"
 check "moved-link conversion installs the exact current skill" \
   diff -qr -x .borrowedfire-copy "$SRC/skills/remember" "$MOVED_COPY_HOME/.codex/skills/remember"
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+check "moved-link conversion retains automatic doctrine" \
+  grep -q 'run `borrowedfire-learn` automatically' "$MOVED_COPY_HOME/.codex/AGENTS.md"
 
 # --- 8. uninstall: removes owned, leaves unowned, strips doctrine ---
 mkdir -p "$HOME/.claude/skills/my-own-skill"; echo mine > "$HOME/.claude/skills/my-own-skill/SKILL.md"
