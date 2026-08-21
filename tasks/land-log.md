@@ -1,5 +1,11 @@
 # Land log
 
+> **Note on issue/PR numbers.** This repository was recreated with clean commit
+> history on 2026-08-21. Entries below that cite `#N` (for example PR #10, issue #11)
+> refer to the **previous** repository, archived privately as
+> `BorrowedFire/BorrowedFire-archive-2026-08`. Numbering in this repository restarts from #1,
+> so a bare `#N` here does not resolve to the item the entry describes.
+
 Dated entries appended by `land` runs — item, classification, gates, decisions, outcome.
 
 ## 2026-08-04 — union-path reconcile protocol (PR #10)
@@ -20,10 +26,10 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
 - Outcome: squash-merged as `4788afa` (2026-08-04). Live proof: reconcile protocol executed
   against the real brain pre-merge. Follow-ups: issue #11 (protocol test coverage; template
   README scoping; lock-claim blanket-reset precondition).
-- PR: https://github.com/BorrowedFire/BorrowedFire/pull/10
+- PR: https://github.com/BorrowedFire/BorrowedFire-archive-2026-08/pull/10
 
 ## 2026-08-05 — reconcile protocol test coverage + doc scopings (issue #11)
-- Item: https://github.com/BorrowedFire/BorrowedFire/issues/11 — live two-clone coverage for the
+- Item: https://github.com/BorrowedFire/BorrowedFire-archive-2026-08/issues/11 — live two-clone coverage for the
   reconcile protocol (drop-and-redo, final-bullet adjacency + settled control, post-Queue append
   point, stranded-commit guard, test 3 hardened to the schema's unconditional claim), template
   README "edit anything" scoped to the union-merge caveat, and the addendum's only-unpushed-commit
