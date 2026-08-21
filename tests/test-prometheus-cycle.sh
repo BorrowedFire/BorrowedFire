@@ -229,6 +229,7 @@ check "distinct OpenClaw config paths get distinct watermarks" \
   "$CONFIG_A_WATERMARK" != "$CONFIG_B_WATERMARK"
 
 CONFIG_DIGEST_PATH="$SB/controller-config.json"
+# shellcheck disable=SC2016  # $include is an intentional literal OpenClaw config key
 printf '%s\n' '{"$include":"./channel-config.json"}' > "$CONFIG_DIGEST_PATH"
 CONFIG_ROOT_DIGEST="$(git hash-object "$CONFIG_DIGEST_PATH")"
 OPENCLAW_ARGS_FILE="$SB/config-digest-one-args" OPENCLAW_CONFIG_PATH="$CONFIG_DIGEST_PATH" \
