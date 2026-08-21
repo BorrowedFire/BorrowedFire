@@ -74,10 +74,14 @@ host. It must not pretend to read another machine's private session history.
    the failure; fleet mode never creates a fallback outbox in a product repository.
 2. Derive a controller-binding watermark. For OpenClaw use
    `notes/openclaw-<host>-<agent>-<workspace>-<binding-hash>-ingest.md`, where the hash covers the
-   stable full host/machine identity, agent, canonical workspace path, and controller root.
+   stable full host/machine identity, agent, canonical workspace path, and effective OpenClaw
+   state directory, config path, and profile identity.
    Lowercase text components, replace non-alphanumeric runs with `-`, and refuse a blank component.
    Other harnesses must include an equivalent host plus workspace/session-source identity. Read
-   only that binding's high-water mark.
+   only that binding's high-water mark. If it does not exist, capture the UTC cycle-start time as a
+   prospective baseline: do not backfill pre-existing session notes, but still inspect all pending
+   `.brain-outbox/` items and exact-current project status. Historical note backfill requires a
+   separate owner-authorized bounded migration.
 3. Inspect only new harness-local notes, pending `.brain-outbox/` captures in explicitly
    registered/accessible repos, and project-status evidence created since that mark. An outbox
    source file may be removed only after its exact capture is durably committed and pushed.

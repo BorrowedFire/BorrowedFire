@@ -127,26 +127,6 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-if [ -z "$BRAIN" ] && [ -n "${PROMETHEUS_DIR:-}" ]; then
-  BRAIN="$PROMETHEUS_DIR"
-fi
-if [ -z "$BRAIN" ] && [ -f "$HOME/.config/borrowedfire/brain" ]; then
-  IFS= read -r BRAIN < "$HOME/.config/borrowedfire/brain"
-fi
-if ! command -v git >/dev/null 2>&1; then
-  printf 'git is required to resolve and validate Prometheus.\n' >&2
-  exit 1
-fi
-if [ -z "$BRAIN" ] && is_git_checkout "$HOME/prometheus"; then
-  BRAIN="$HOME/prometheus"
-fi
-
-if [ -z "$BRAIN" ] || ! is_prometheus_root "$BRAIN"; then
-  printf 'Prometheus brain root/schema not found; pass its exact Git root or configure ~/.config/borrowedfire/brain.\n' >&2
-  exit 1
-fi
-BRAIN="$(cd "$BRAIN" && pwd -P)"
-
 if [ "$DRY" -eq 0 ] && ! command -v "$OPENCLAW_BIN" >/dev/null 2>&1; then
   printf 'OpenClaw CLI not found: %s\n' "$OPENCLAW_BIN" >&2
   exit 1
@@ -155,11 +135,6 @@ if [ "$DRY" -eq 0 ] && ! command -v python3 >/dev/null 2>&1; then
   printf 'python3 is required to validate the OpenClaw declaration response.\n' >&2
   exit 1
 fi
-if [ -z "$AGENT_ID" ] || [ -z "$NOTIFY_CHANNEL" ] || [ -z "$NOTIFY_TO" ]; then
-  printf 'agent id, notification channel, and notification destination must not be blank.\n' >&2
-  exit 1
-fi
-
 JOB_NAME="Prometheus Learning Cycle"
 DECLARATION_KEY="borrowedfire.prometheus-learning.v1"
 DESCRIPTION="Nightly verified learning, status capture, and due-only consolidation in the shared Prometheus brain."
@@ -239,6 +214,39 @@ fail_declaration_safely() {
   exit 1
 }
 
+if ! command -v git >/dev/null 2>&1; then
+  if [ "$DRY" -eq 0 ]; then
+    fail_declaration_safely 'git is unavailable, so Prometheus cannot be resolved or validated.'
+  fi
+  printf 'git is required to resolve and validate Prometheus.\n' >&2
+  exit 1
+fi
+if [ -z "$BRAIN" ] && [ -n "${PROMETHEUS_DIR:-}" ]; then
+  BRAIN="$PROMETHEUS_DIR"
+fi
+if [ -z "$BRAIN" ] && [ -f "$HOME/.config/borrowedfire/brain" ]; then
+  IFS= read -r BRAIN < "$HOME/.config/borrowedfire/brain"
+fi
+if [ -z "$BRAIN" ] && is_git_checkout "$HOME/prometheus"; then
+  BRAIN="$HOME/prometheus"
+fi
+if [ -z "$BRAIN" ] || ! is_prometheus_root "$BRAIN"; then
+  if [ "$DRY" -eq 0 ]; then
+    fail_declaration_safely 'Prometheus brain root/schema not found; pass its exact Git root or configure ~/.config/borrowedfire/brain.'
+  fi
+  printf 'Prometheus brain root/schema not found; pass its exact Git root or configure ~/.config/borrowedfire/brain.\n' >&2
+  exit 1
+fi
+BRAIN="$(cd "$BRAIN" && pwd -P)"
+
+if [ -z "$AGENT_ID" ] || [ -z "$NOTIFY_CHANNEL" ] || [ -z "$NOTIFY_TO" ]; then
+  if [ "$DRY" -eq 0 ]; then
+    fail_declaration_safely 'Agent id, notification channel, and notification destination must not be blank.'
+  fi
+  printf 'agent id, notification channel, and notification destination must not be blank.\n' >&2
+  exit 1
+fi
+
 if [ "$DRY" -eq 1 ]; then
   printf 'would declare %s (%s) at %s [%s]\n' "$JOB_NAME" "$DECLARATION_KEY" "$CRON_EXPR" "$TIMEZONE"
   printf 'Prometheus: %s\n' "$BRAIN"
@@ -312,7 +320,7 @@ MACHINE_ID="$(resolve_machine_identity)" ||
   fail_declaration_safely 'Stable machine identity could not be resolved; no job was declared.'
 OPENCLAW_BASE_HOME="${OPENCLAW_HOME:-$HOME}"
 OPENCLAW_PROFILE_NAME="${OPENCLAW_PROFILE:-default}"
-WATERMARK_FILE="$(python3 - "$HOST_NAME" "$MACHINE_ID" "$AGENT_ID" "$AGENT_WORKSPACE" \
+CONTROLLER_BINDING="$(python3 - "$HOST_NAME" "$MACHINE_ID" "$AGENT_ID" "$AGENT_WORKSPACE" \
   "$OPENCLAW_BASE_HOME" "${OPENCLAW_STATE_DIR:-}" "${OPENCLAW_CONFIG_PATH:-}" \
   "$OPENCLAW_PROFILE_NAME" <<'PY'
 import hashlib
@@ -353,21 +361,36 @@ else:
         state_dir = legacy_dir
     state_dir = os.path.realpath(state_dir)
 config_path = resolve_openclaw_path(config_override) if config_override else os.path.join(state_dir, "openclaw.json")
+try:
+    with open(config_path, "rb") as handle:
+        config_digest = hashlib.sha256(handle.read()).hexdigest()
+except FileNotFoundError:
+    config_digest = "missing"
+except OSError:
+    raise SystemExit(1)
 host = slug(host_name, 64)
 agent = slug(agent_id, 48)
 workspace_name = slug(os.path.basename(workspace), 64)
 binding = "\0".join((host_name, machine_id, agent_id, workspace, state_dir, config_path, profile))
 binding_hash = hashlib.sha256(binding.encode("utf-8")).hexdigest()[:12]
+route_scope_hash = hashlib.sha256((binding + "\0" + config_digest).encode("utf-8")).hexdigest()
 basename = f"openclaw-{host}-{agent}-{workspace_name}-{binding_hash}-ingest.md"
 if len(basename.encode("utf-8")) > 240:
     raise SystemExit(1)
 print(f"notes/{basename}")
+print(route_scope_hash)
 PY
 )" || {
   fail_declaration_safely 'Host/machine/agent/workspace/controller watermark identity could not be derived; no job was declared.'
 }
+WATERMARK_FILE="${CONTROLLER_BINDING%%$'\n'*}"
+ROUTE_SCOPE_HASH="${CONTROLLER_BINDING#*$'\n'}"
+if [ -z "$WATERMARK_FILE" ] ||
+   ! printf '%s' "$ROUTE_SCOPE_HASH" | grep -Eq '^[0-9a-f]{64}$'; then
+  fail_declaration_safely 'Host/machine/agent/workspace/controller watermark identity could not be derived; no job was declared.'
+fi
 
-MESSAGE="Run the installed borrowedfire-learn skill in fleet mode. The Prometheus root is $BRAIN. Follow the skill and its cycle-contract reference exactly. Use only $WATERMARK_FILE as this controller binding's high-water mark; ingest only verified durable deltas visible in this agent workspace since that mark; deduplicate before using remember; advance the mark only after durable commit/push; and invoke digest only when seven days have elapsed since its last completed run or inbox backlog exceeds 15. Never claim access to another host, agent, or workspace's private session history. Do not mutate product repositories, accounts, credentials, deployments, releases, stores, skills, doctrine, or scheduler configuration, except to delete one exact local-only .brain-outbox/<file> after its capture is committed and pushed to Prometheus; never delete the directory, another item, or a pending item. Do not announce routine success or a no-op. Use the configured message target only for one concise material-digest summary, an actionable owner decision, conflicting evidence, a sync/push failure, or a concrete prevention follow-up."
+MESSAGE="Run the installed borrowedfire-learn skill in fleet mode. The Prometheus root is $BRAIN. Follow the skill and its cycle-contract reference exactly. Use only $WATERMARK_FILE as this controller binding's high-water mark. If it is absent, use the exact prospective-bootstrap behavior in the skill: do not backfill pre-existing session notes, but still inspect pending outboxes and exact-current project status. Otherwise ingest only verified durable deltas visible in this agent workspace since that mark. Deduplicate before using remember; advance the mark only after durable commit/push; and invoke digest only when seven days have elapsed since its last completed run or inbox backlog exceeds 15. Never claim access to another host, agent, or workspace's private session history. Do not mutate product repositories, accounts, credentials, deployments, releases, stores, skills, doctrine, or scheduler configuration, except to delete one exact local-only .brain-outbox/<file> after its capture is committed and pushed to Prometheus; never delete the directory, another item, or a pending item. Do not announce routine success or a no-op. Use the configured message target only for one concise material-digest summary, an actionable owner decision, conflicting evidence, a sync/push failure, or a concrete prevention follow-up."
 
 fail_job_safely() {
   local reason="$1"
@@ -552,11 +575,11 @@ if ! verify_job_configuration false; then
   fail_job_safely 'Stored job does not match the requested safe configuration.'
 fi
 
-ROUTE_HASH="$(python3 - "$NOTIFY_CHANNEL" "$NOTIFY_TO" <<'PY'
+ROUTE_HASH="$(python3 - "$ROUTE_SCOPE_HASH" "$NOTIFY_CHANNEL" "$NOTIFY_TO" <<'PY'
 import hashlib
 import sys
 
-print(hashlib.sha256((sys.argv[1] + "\0" + sys.argv[2]).encode("utf-8")).hexdigest())
+print(hashlib.sha256("\0".join(sys.argv[1:]).encode("utf-8")).hexdigest())
 PY
 )" || {
   fail_job_safely 'Could not derive the private notification-route proof.'
@@ -619,11 +642,14 @@ except (json.JSONDecodeError, OSError):
     raise SystemExit(1)
 
 def acknowledged(value):
+    placeholders = {"ok", "unknown", "sent", "success", "true", "none", "null"}
     if isinstance(value, dict):
         for key, item in value.items():
             normalized = key.replace("_", "").lower()
-            if normalized in {"messageid", "sentmessageid"} and isinstance(item, str) and item.strip():
-                return True
+            if normalized in {"messageid", "sentmessageid"} and isinstance(item, str):
+                message_id = item.strip()
+                if message_id and message_id.lower() not in placeholders:
+                    return True
         return any(acknowledged(item) for item in value.values())
     if isinstance(value, list):
         return any(acknowledged(item) for item in value)

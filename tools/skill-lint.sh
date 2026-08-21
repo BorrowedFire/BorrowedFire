@@ -99,6 +99,10 @@ fi
 if ! body "$LEARN_SKILL" | grep -qF 'notes/openclaw-<host>-<agent>-<workspace>-<binding-hash>-ingest.md'; then
   err "borrowedfire-learn: host-scoped watermark contract is missing"
 fi
+if ! body "$LEARN_SKILL" | grep -qF 'effective OpenClaw' ||
+   ! body "$LEARN_SKILL" | grep -qF 'do not backfill pre-existing session notes'; then
+  err "borrowedfire-learn: controller identity and prospective bootstrap contracts are missing"
+fi
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
 if ! body "$LEARN_SKILL" | grep -qF 'exact local-only `.brain-outbox/<file>`'; then
   err "borrowedfire-learn: narrow outbox cleanup contract is missing"

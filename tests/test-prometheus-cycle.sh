@@ -59,6 +59,8 @@ check "alerts after repeated failures" grep -qx -- '--failure-alert-after' "$OPE
 check "alerts on skipped runs" grep -qx -- '--failure-alert-include-skipped' "$OPENCLAW_ARGS_FILE"
 check "prompt requires namespaced learning mode" grep -q 'borrowedfire-learn skill in fleet mode' "$OPENCLAW_ARGS_FILE"
 check "prompt uses binding-scoped watermark" grep -Eq 'notes/openclaw-.+-main-openclaw-workspace-[0-9a-f]{12}-ingest.md' "$OPENCLAW_ARGS_FILE"
+check "prompt defines prospective first-run behavior" \
+  grep -q 'do not backfill pre-existing session notes' "$OPENCLAW_ARGS_FILE"
 check "prompt preserves product mutation boundary" grep -q 'Do not mutate product repositories' "$OPENCLAW_ARGS_FILE"
 check "prompt narrows outbox cleanup" grep -q 'exact local-only .brain-outbox/<file>' "$OPENCLAW_ARGS_FILE"
 check "prompt permits material digest summary" grep -q 'material-digest summary' "$OPENCLAW_ARGS_FILE"
@@ -184,6 +186,20 @@ check "distinct OpenClaw config paths get distinct watermarks" \
   test -n "$CONFIG_A_WATERMARK" -a -n "$CONFIG_B_WATERMARK" -a \
   "$CONFIG_A_WATERMARK" != "$CONFIG_B_WATERMARK"
 
+CONFIG_DIGEST_PATH="$SB/controller-config.json"
+printf '%s\n' '{"channels":{"imessage":{"defaultAccount":"one"}}}' > "$CONFIG_DIGEST_PATH"
+OPENCLAW_ARGS_FILE="$SB/config-digest-one-args" OPENCLAW_CONFIG_PATH="$CONFIG_DIGEST_PATH" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+printf '%s\n' '{"channels":{"imessage":{"defaultAccount":"two"}}}' > "$CONFIG_DIGEST_PATH"
+OPENCLAW_ARGS_FILE="$SB/config-digest-two-args" OPENCLAW_CONFIG_PATH="$CONFIG_DIGEST_PATH" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+check "OpenClaw config changes require a fresh route probe" \
+  grep -qx 'message' "$SB/config-digest-two-args"
+
 OPENCLAW_ARGS_FILE="$SB/profile-a-args" OPENCLAW_PROFILE="profile-a" \
   OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
@@ -197,6 +213,10 @@ PROFILE_B_WATERMARK="$(grep -Eo 'notes/openclaw-[^ ]+-ingest\.md' "$SB/profile-b
 check "distinct OpenClaw profiles get distinct watermarks" \
   test -n "$PROFILE_A_WATERMARK" -a -n "$PROFILE_B_WATERMARK" -a \
   "$PROFILE_A_WATERMARK" != "$PROFILE_B_WATERMARK"
+check "distinct OpenClaw profiles require independent route probes" \
+  grep -qx 'message' "$SB/profile-a-args"
+check "second OpenClaw profile does not reuse the first route proof" \
+  grep -qx 'message' "$SB/profile-b-args"
 
 mkdir -p "$SB/machine-fallback-bin"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 1' > "$SB/machine-fallback-bin/ioreg"
@@ -377,6 +397,19 @@ check "missing acknowledgement disables the job" grep -qx 'disable' "$OPENCLAW_A
 check "missing acknowledgement never enables the job" bash -c "! grep -qx 'enable' '$OPENCLAW_ARGS_FILE'"
 
 rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
+if FAKE_OPENCLAW_MESSAGE_PLACEHOLDER_ACK=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "placeholder provider acknowledgement fails closed"
+else
+  ok "placeholder provider acknowledgement fails closed"
+fi
+check "placeholder acknowledgement disables the job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "placeholder acknowledgement never enables the job" bash -c "! grep -qx 'enable' '$OPENCLAW_ARGS_FILE'"
+check "placeholder acknowledgement stores no route proof" \
+  test ! -e "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
+
+rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
 if FAKE_OPENCLAW_MESSAGE_ERROR_WITH_ACK=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
@@ -504,6 +537,7 @@ else
   ok "missing notification route fails closed"
 fi
 
+rm -f "$OPENCLAW_ARGS_FILE"
 if HOME="$SB/no-brain-home" OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" \
   --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
@@ -511,6 +545,8 @@ if HOME="$SB/no-brain-home" OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" 
 else
   ok "missing brain fails closed"
 fi
+check "missing brain disables the existing declaration" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "missing brain verifies the disabled declaration" grep -qx 'get' "$OPENCLAW_ARGS_FILE"
 
 git -C "$SB/prometheus" config user.name Fixture
 git -C "$SB/prometheus" config user.email fixture@example.invalid

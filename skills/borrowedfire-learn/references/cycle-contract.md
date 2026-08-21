@@ -24,7 +24,8 @@ The fleet worker must:
 2. scope the high-water mark to harness, stable full host/machine identity, agent, canonical
    workspace, and the effective OpenClaw state/config/profile identity, with text components
    sanitized and the complete binding hashed; never claim visibility into another controller
-   binding;
+   binding. On a missing mark, use the cycle-start time as a prospective baseline: do not backfill
+   pre-existing session notes, but still inspect pending outboxes and exact-current project status;
 3. retain only verified durable deltas and deduplicate before capture;
 4. leave ambiguous items pending rather than advancing past them;
 5. use `remember` for writes and `digest` for restructuring;
@@ -55,9 +56,10 @@ Borrowed Fire checkout:
 
 The installer resolves Prometheus with the standard pointer rules and declares one idempotent
 OpenClaw job. It requires an explicit owner-notification destination and sends a one-time live
-route-verification message before enabling the job. A private host-local route hash prevents
-repeat messages unless the destination changes. It does not pin a model/provider; private fleet
-policy remains authoritative.
+route-verification message before enabling the job. A private host-local route hash includes the
+full controller binding and effective OpenClaw config digest, so profile, state/config, or default
+account changes require a fresh proof. It does not pin a model/provider; private fleet policy
+remains authoritative.
 
 Useful overrides:
 

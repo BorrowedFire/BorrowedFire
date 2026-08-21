@@ -39,6 +39,8 @@ if [ "${1:-}" = "message" ] && [ "${2:-}" = "send" ]; then
   fi
   if [ "${FAKE_OPENCLAW_MESSAGE_NO_ACK:-0}" -eq 1 ]; then
     printf '{"channel":"imessage","ok":true}\n'
+  elif [ "${FAKE_OPENCLAW_MESSAGE_PLACEHOLDER_ACK:-0}" -eq 1 ]; then
+    printf '%s\n' '{"action":"send","channel":"imessage","messageId":"ok","payload":{"messageId":"ok","ok":true}}'
   elif [ "${FAKE_OPENCLAW_MESSAGE_ERROR_WITH_ACK:-0}" -eq 1 ]; then
     printf '%s\n' '{"action":"send","channel":"imessage","messageId":"generated-on-error","payload":{"ok":false,"error":"provider rejected route","messageId":"generated-on-error"}}'
   else
