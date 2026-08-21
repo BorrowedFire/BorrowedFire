@@ -9,6 +9,17 @@ set -u
 if [ "${FAKE_OPENCLAW_FAIL_EDIT:-0}" -eq 1 ] && [ "${1:-}" = "cron" ] && [ "${2:-}" = "edit" ]; then
   exit 9
 fi
+if [ "${1:-}" = "message" ] && [ "${2:-}" = "send" ]; then
+  if [ "${FAKE_OPENCLAW_FAIL_MESSAGE:-0}" -eq 1 ]; then
+    exit 10
+  fi
+  if [ "${FAKE_OPENCLAW_MESSAGE_NO_ACK:-0}" -eq 1 ]; then
+    printf '{"channel":"imessage","ok":true}\n'
+  else
+    printf '{"channel":"imessage","result":{"messageId":"fixture-message"}}\n'
+  fi
+  exit 0
+fi
 if [ "${1:-}" = "cron" ] && [ "${2:-}" = "status" ]; then
   if [ "${FAKE_OPENCLAW_SCHEDULER_DISABLED:-0}" -eq 1 ]; then
     printf '{"enabled":false}\n'

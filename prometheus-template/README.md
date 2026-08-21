@@ -30,10 +30,10 @@ skills are installed:
 
 ```sh
 cd /path/to/BorrowedFire
-./tools/install-prometheus-cycle.sh
+./tools/install-prometheus-cycle.sh --notify-channel imessage --notify-to '<owner-route>'
 ```
 
-Every harness runs the lightweight `learn` pass at substantive checkpoints through the shared
+Every harness runs the lightweight `borrowedfire-learn` pass at substantive checkpoints through the shared
 doctrine. The controller supplies the nightly fleet pass and due-only `digest`; do not schedule a
 controller independently on every machine.
 

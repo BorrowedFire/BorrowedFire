@@ -46,8 +46,9 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
 2. **Inventory.** Page counts per type, inbox backlog, pending outboxes, `needs-review` pages,
    days since last digest (git log).
 3. **Ingest outboxes.** Any `.brain-outbox/` files in repos you can see, and fenced
-   `BRAIN CAPTURE` blocks the owner has queued: file them as normal captures, then delete the
-   outbox files.
+   `BRAIN CAPTURE` blocks the owner has queued: file them as normal captures. Delete only the
+   exact local-only source file after its capture commit has pushed successfully; never delete
+   the outbox directory, another item, or a file whose push is pending.
 4. **Promote inbox** (files >1 day old only). Classify → whole-file `git mv` into the typed page
    location, or append its content to an existing page and `git mv` the inbox file to an archived
    stub. Unclear items stay, tagged `needs-review` with a note on what's missing.
@@ -68,7 +69,7 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
 Weekly, or when inbox exceeds ~15 items. Claude Code: `/loop /digest` or a cron job; other
 harnesses: their scheduled-task mechanism. Digest is safe to run unattended — locked,
 non-deleting, atomic commits. A direct or standalone scheduled digest always reports to the owner.
-When `learn` invokes digest inside its nightly fleet pass, report material changes or actionable
+When `borrowedfire-learn` invokes digest inside its nightly fleet pass, report material changes or actionable
 problems; a clean no-op remains in scheduler run history without notifying the owner.
 
 ## Related

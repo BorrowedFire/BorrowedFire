@@ -69,22 +69,29 @@ for dir in "$SKILLS_DIR"/*/; do
 done
 
 # 7. memory system installs together
-for m in remember recall digest learn; do
+for m in remember recall digest borrowedfire-learn; do
   [ -d "$SKILLS_DIR/$m" ] || err "memory system incomplete: missing '$m'"
 done
 [ -f "$SKILLS_DIR/remember/references/brain-schema.md" ] || err "missing remember/references/brain-schema.md (recall + digest depend on it)"
 
-LEARN_SKILL="$SKILLS_DIR/learn/SKILL.md"
+LEARN_SKILL="$SKILLS_DIR/borrowedfire-learn/SKILL.md"
 DOCTRINE="$ROOT/doctrine/DOCTRINE.md"
 if ! body "$LEARN_SKILL" | grep -qF 'Run without a user prompt'; then
-  err "learn: automatic checkpoint invocation is missing"
+  err "borrowedfire-learn: automatic checkpoint invocation is missing"
 fi
 if ! body "$LEARN_SKILL" | grep -qF 'No autonomous self-rewrite'; then
-  err "learn: self-modification boundary is missing"
+  err "borrowedfire-learn: self-modification boundary is missing"
 fi
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
-if ! grep -qF 'run `learn` automatically' "$DOCTRINE"; then
+if ! grep -qF 'run `borrowedfire-learn` automatically' "$DOCTRINE"; then
   err "doctrine: automatic learning checkpoint is missing"
+fi
+if ! body "$LEARN_SKILL" | grep -qF 'notes/<harness>-<host>-ingest.md'; then
+  err "borrowedfire-learn: host-scoped watermark contract is missing"
+fi
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+if ! body "$LEARN_SKILL" | grep -qF 'exact local-only `.brain-outbox/<file>`'; then
+  err "borrowedfire-learn: narrow outbox cleanup contract is missing"
 fi
 
 # 8. workflow contracts that must survive review-loop edits

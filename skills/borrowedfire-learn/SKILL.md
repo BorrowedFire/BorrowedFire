@@ -1,9 +1,9 @@
 ---
-name: learn
+name: borrowedfire-learn
 description: Turn completed work into durable, verified improvement in Prometheus. Run automatically at the end of every substantive task or meaningful checkpoint—implementation, diagnosis, review, merge, release, rollback, planning decision, or owner correction—and in scheduled fleet-maintenance mode. Extract reusable lessons, decisions, owner preferences, and exact-current project-status changes; deduplicate against the brain; persist them through `remember`; and let `digest` consolidate recurring patterns. No-op when nothing durable changed. NOT for speculative conclusions, routine success logs, secrets, autonomous product-repo edits, or self-modifying skills without normal review.
 ---
 
-# Learn
+# Borrowed Fire Learn
 
 Make completed work improve the next run. This is Prometheus's automatic learning pass: inspect
 what was actually established, retain only durable signal, connect it to prevention, and write it
@@ -25,7 +25,10 @@ through the existing memory protocol. A clean no-op is a successful result.
   successful happy paths with no reusable insight, or a duplicate already captured.
 - **No silent authority expansion.** Learning may write the private brain. It may not modify a
   product repo, deployment, account, store, credential, skill, doctrine, or scheduler unless that
-  change is already authorized by the active task. Otherwise record a bounded follow-up.
+  change is already authorized by the active task. The sole fleet-mode exception is removing one
+  exact local-only `.brain-outbox/<file>` after its content is committed and pushed to Prometheus;
+  never remove the directory, another outbox item, or an item whose push is pending. Otherwise
+  record a bounded follow-up.
 - **No autonomous self-rewrite.** A recurring pattern may justify a proposed skill/doctrine/test
   change, but that change follows the normal branch, review, and landing workflow.
 - **Never store secrets or private brain content in a product repo.** Use `remember`'s degradation
@@ -66,9 +69,12 @@ An always-on harness runs the same quality bar over durable notes and outboxes v
 host. It must not pretend to read another machine's private session history.
 
 1. Resolve Prometheus and sync it using the schema protocol.
-2. Read the host's `notes/<harness>-ingest.md` high-water mark, if present.
+2. Derive a host-scoped watermark as `notes/<harness>-<host>-ingest.md`: use the active harness
+   identifier and `hostname -s`, lowercase each, replace non-alphanumeric runs with `-`, and refuse
+   a blank component. Read that high-water mark if present.
 3. Inspect only new harness-local notes, pending `.brain-outbox/` captures in explicitly
-   registered/accessible repos, and project-status evidence created since that mark.
+   registered/accessible repos, and project-status evidence created since that mark. An outbox
+   source file may be removed only after its exact capture is durably committed and pushed.
 4. Run Session mode over those deltas, then advance the high-water mark only after captures are
    durably committed. Never skip failed or ambiguous inputs by moving the mark past them.
 5. Run `digest` only when its cadence/backlog threshold is due. Its fleet lock decides whether

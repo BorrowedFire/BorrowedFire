@@ -23,9 +23,9 @@ check "claude: closeout linked"        test -L "$HOME/.claude/skills/session-clo
 check "codex: closeout linked"         test -L "$HOME/.codex/skills/session-closeout"
 check "qwen: maintainer linked"        test -L "$HOME/.qwen/skills/maintainer"
 check "openclaw: digest linked"        test -L "$SB/openclaw-ws/skills/digest"
-check "claude: learn linked"           test -L "$HOME/.claude/skills/learn"
-check "codex: learn linked"            test -L "$HOME/.codex/skills/learn"
-check "openclaw: learn linked"         test -L "$SB/openclaw-ws/skills/learn"
+check "claude: learning linked"        test -L "$HOME/.claude/skills/borrowedfire-learn"
+check "codex: learning linked"         test -L "$HOME/.codex/skills/borrowedfire-learn"
+check "openclaw: learning linked"      test -L "$SB/openclaw-ws/skills/borrowedfire-learn"
 check "claude: manifest written"       grep -q '^remember link$' "$HOME/.claude/skills/.borrowedfire-manifest"
 check "claude: doctrine block present" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md"
 check "openclaw: doctrine in AGENTS.md" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$SB/openclaw-ws/AGENTS.md"
@@ -36,7 +36,7 @@ check "manifest has 16 entries"        test "$(wc -l < "$HOME/.claude/skills/.bo
 check "doctrine idempotent (1 block)"  test "$(grep -c 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md")" -eq 1
 check "still 16 manifest entries"      test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 16
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
-check "doctrine invokes learn"         grep -q 'run `learn` automatically' "$HOME/.claude/CLAUDE.md"
+check "doctrine invokes namespaced learning" grep -q 'run `borrowedfire-learn` automatically' "$HOME/.claude/CLAUDE.md"
 
 # --- 3. legacy unowned dir warns, --adopt retires it ---
 mkdir -p "$HOME/.codex/skills/takeoff"; echo x > "$HOME/.codex/skills/takeoff/SKILL.md"
@@ -75,9 +75,32 @@ check "copy mode: manifest says copy"  grep -q '^ship copy$' "$HOME/.qwen/skills
 check "copy: references included"      test -f "$HOME/.qwen/skills/remember/references/brain-schema.md"
 
 # --- 7. brain pointer ---
-mkdir -p "$HOME/prometheus/.git"
+git init -q "$HOME/prometheus"
 "$SRC/install.sh" >/dev/null 2>&1
 check "brain pointer auto-written"     grep -q "$HOME/prometheus" "$HOME/.config/borrowedfire/brain"
+
+# --- 7b. an unmanaged automatic-learning collision fails closed before doctrine install ---
+COLLISION_HOME="$SB/collision-home"
+mkdir -p "$COLLISION_HOME/.codex/skills/borrowedfire-learn"
+echo foreign > "$COLLISION_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
+if HOME="$COLLISION_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
+  fail "unmanaged learning collision fails closed"
+else
+  ok "unmanaged learning collision fails closed"
+fi
+check "foreign learning skill remains intact" grep -q foreign "$COLLISION_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
+check "collision harness gets no learning doctrine" bash -c "! grep -q 'run \`borrowedfire-learn\` automatically' '$COLLISION_HOME/.codex/AGENTS.md'"
+
+STALE_HOME="$SB/stale-owned-home"
+mkdir -p "$STALE_HOME/.codex/skills/borrowedfire-learn"
+echo foreign > "$STALE_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
+echo 'borrowedfire-learn link' > "$STALE_HOME/.codex/skills/.borrowedfire-manifest"
+if HOME="$STALE_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
+  fail "stale ownership shape fails closed"
+else
+  ok "stale ownership shape fails closed"
+fi
+check "stale ownership does not install doctrine" bash -c "! grep -q 'run \`borrowedfire-learn\` automatically' '$STALE_HOME/.codex/AGENTS.md'"
 
 # --- 8. uninstall: removes owned, leaves unowned, strips doctrine ---
 mkdir -p "$HOME/.claude/skills/my-own-skill"; echo mine > "$HOME/.claude/skills/my-own-skill/SKILL.md"

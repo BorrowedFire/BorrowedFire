@@ -11,6 +11,11 @@ AGENT_ID="main"
 NOTIFY_CHANNEL=""
 NOTIFY_TO=""
 DRY=0
+ROUTE_PROOF_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/borrowedfire/prometheus-learning-route.sha256"
+
+is_git_checkout() {
+  [ -d "$1" ] && git -C "$1" rev-parse --is-inside-work-tree 2>/dev/null | grep -qx 'true'
+}
 
 usage() {
   printf '%s\n' \
@@ -42,15 +47,19 @@ fi
 if [ -z "$BRAIN" ] && [ -f "$HOME/.config/borrowedfire/brain" ]; then
   IFS= read -r BRAIN < "$HOME/.config/borrowedfire/brain"
 fi
-if [ -z "$BRAIN" ] && [ -d "$HOME/prometheus/.git" ]; then
+if ! command -v git >/dev/null 2>&1; then
+  printf 'git is required to resolve and validate Prometheus.\n' >&2
+  exit 1
+fi
+if [ -z "$BRAIN" ] && is_git_checkout "$HOME/prometheus"; then
   BRAIN="$HOME/prometheus"
 fi
 
-if [ -z "$BRAIN" ] || [ ! -d "$BRAIN/.git" ]; then
+if [ -z "$BRAIN" ] || ! is_git_checkout "$BRAIN"; then
   printf 'Prometheus brain not found; pass --brain or configure ~/.config/borrowedfire/brain.\n' >&2
   exit 1
 fi
-BRAIN="$(cd "$BRAIN" && pwd)"
+BRAIN="$(cd "$BRAIN" && pwd -P)"
 
 if [ "$DRY" -eq 0 ] && ! command -v "$OPENCLAW_BIN" >/dev/null 2>&1; then
   printf 'OpenClaw CLI not found: %s\n' "$OPENCLAW_BIN" >&2
@@ -68,7 +77,7 @@ fi
 JOB_NAME="Prometheus Learning Cycle"
 DECLARATION_KEY="borrowedfire.prometheus-learning.v1"
 DESCRIPTION="Nightly verified learning, status capture, and due-only consolidation in the shared Prometheus brain."
-MESSAGE="Run the installed learn skill in fleet mode. The Prometheus root is $BRAIN. Follow the skill and its cycle-contract reference exactly. Ingest only verified durable deltas visible on this host since its successful high-water mark; deduplicate before using remember; advance the mark only after durable commit/push; and invoke digest only when seven days have elapsed since its last completed run or inbox backlog exceeds 15. Never claim access to another host's session history. Do not mutate product repositories, accounts, credentials, deployments, releases, stores, skills, doctrine, or scheduler configuration. Do not announce routine success or a no-op. Use the configured message target only for one concise material-digest summary, an actionable owner decision, conflicting evidence, a sync/push failure, or a concrete prevention follow-up."
+MESSAGE="Run the installed borrowedfire-learn skill in fleet mode. The Prometheus root is $BRAIN. Follow the skill and its cycle-contract reference exactly. Derive the sanitized host-scoped notes/<harness>-<host>-ingest.md watermark; ingest only verified durable deltas visible on this host since its successful high-water mark; deduplicate before using remember; advance the mark only after durable commit/push; and invoke digest only when seven days have elapsed since its last completed run or inbox backlog exceeds 15. Never claim access to another host's session history. Do not mutate product repositories, accounts, credentials, deployments, releases, stores, skills, doctrine, or scheduler configuration, except to delete one exact local-only .brain-outbox/<file> after its capture is committed and pushed to Prometheus; never delete the directory, another item, or a pending item. Do not announce routine success or a no-op. Use the configured message target only for one concise material-digest summary, an actionable owner decision, conflicting evidence, a sync/push failure, or a concrete prevention follow-up."
 
 ARGS=(
   cron add
@@ -203,6 +212,81 @@ if not all(checks):
   "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
   printf 'Stored job does not match the requested safe configuration; Prometheus learning job is disabled.\n' >&2
   exit 1
+fi
+
+ROUTE_HASH="$(python3 - "$NOTIFY_CHANNEL" "$NOTIFY_TO" <<'PY'
+import hashlib
+import sys
+
+print(hashlib.sha256((sys.argv[1] + "\0" + sys.argv[2]).encode("utf-8")).hexdigest())
+PY
+)" || {
+  "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
+  printf 'Could not derive the private notification-route proof; Prometheus learning job is disabled.\n' >&2
+  exit 1
+}
+
+STORED_ROUTE_HASH=""
+if [ -f "$ROUTE_PROOF_FILE" ]; then
+  IFS= read -r STORED_ROUTE_HASH < "$ROUTE_PROOF_FILE"
+fi
+
+if [ "$STORED_ROUTE_HASH" != "$ROUTE_HASH" ]; then
+  PROBE_MESSAGE="Prometheus learning notifications are configured on this host. This is a one-time route verification."
+  PROBE_OUTPUT="$("$OPENCLAW_BIN" message send \
+    --channel "$NOTIFY_CHANNEL" \
+    --target "$NOTIFY_TO" \
+    --message "$PROBE_MESSAGE" \
+    --json)" || {
+      "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
+      printf 'Live notification-route verification failed; Prometheus learning job is disabled.\n' >&2
+      exit 1
+    }
+  if ! printf '%s' "$PROBE_OUTPUT" | python3 -c '
+import json
+import sys
+
+try:
+    payload = json.load(sys.stdin)
+except (json.JSONDecodeError, OSError):
+    raise SystemExit(1)
+
+def acknowledged(value):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            normalized = key.replace("_", "").lower()
+            if normalized in {"messageid", "sentmessageid"} and isinstance(item, str) and item.strip():
+                return True
+        return any(acknowledged(item) for item in value.values())
+    if isinstance(value, list):
+        return any(acknowledged(item) for item in value)
+    return False
+
+if not acknowledged(payload):
+    raise SystemExit(1)
+'; then
+    "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
+    printf 'Notification provider returned no message acknowledgement; Prometheus learning job is disabled.\n' >&2
+    exit 1
+  fi
+
+  PROOF_DIR="$(dirname "$ROUTE_PROOF_FILE")"
+  mkdir -p "$PROOF_DIR" || {
+    "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
+    printf 'Could not persist notification-route proof; Prometheus learning job is disabled.\n' >&2
+    exit 1
+  }
+  PROOF_TMP="$(mktemp "$PROOF_DIR/.prometheus-learning-route.XXXXXX")" || {
+    "$OPENCLAW_BIN" cron disable "$JOB_ID" >/dev/null 2>&1 || true
+    printf 'Could not persist notification-route proof; Prometheus learning job is disabled.\n' >&2
+    exit 1
+  }
+  chmod 600 "$PROOF_TMP"
+  printf '%s\n' "$ROUTE_HASH" > "$PROOF_TMP"
+  mv "$PROOF_TMP" "$ROUTE_PROOF_FILE"
+  printf 'Notification route verified with a live one-time message.\n'
+else
+  printf 'Notification route already has a matching host-local live proof.\n'
 fi
 
 if ! "$OPENCLAW_BIN" cron enable "$JOB_ID"; then

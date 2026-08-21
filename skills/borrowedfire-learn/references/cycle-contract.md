@@ -5,7 +5,7 @@ defined in `../SKILL.md` and needs no scheduler.
 
 ## Cadence
 
-- **Every substantive task:** the shared Borrowed Fire doctrine invokes `learn` before final
+- **Every substantive task:** the shared Borrowed Fire doctrine invokes `borrowedfire-learn` before final
   closeout. A verified no-op is acceptable.
 - **Nightly fleet pass:** one always-on OpenClaw host runs at 03:35 in the owner's timezone. It
   ingests only new local-harness notes/outboxes and exact-current project status into Prometheus.
@@ -21,12 +21,14 @@ expression when the host has a different maintenance window.
 The fleet worker must:
 
 1. resolve and sync the private Prometheus git repo;
-2. use the host-specific high-water mark and never claim visibility into other machines;
+2. use `notes/<harness>-<host>-ingest.md`, with both components sanitized, and never claim
+   visibility into other machines;
 3. retain only verified durable deltas and deduplicate before capture;
 4. leave ambiguous items pending rather than advancing past them;
 5. use `remember` for writes and `digest` for restructuring;
 6. avoid product-repo, account, credential, deployment, release, store, skill, doctrine, and
-   scheduler mutations;
+   scheduler mutations, except deleting the exact local-only `.brain-outbox/<file>` whose content
+   has already been committed and pushed to Prometheus; never delete a pending item or directory;
 7. run with normal bootstrap context so the installed skill and doctrine remain visible;
 8. stay disabled until scheduler-level alerts cover pre-turn failures and skipped runs;
 9. avoid routine notifications; notify the owner for a material digest, actionable conflict,
@@ -45,8 +47,10 @@ Borrowed Fire checkout:
 ```
 
 The installer resolves Prometheus with the standard pointer rules and declares one idempotent
-OpenClaw job. It requires and verifies an explicit owner-notification destination before enabling
-the job. It does not pin a model/provider; private fleet policy remains authoritative.
+OpenClaw job. It requires an explicit owner-notification destination and sends a one-time live
+route-verification message before enabling the job. A private host-local route hash prevents
+repeat messages unless the destination changes. It does not pin a model/provider; private fleet
+policy remains authoritative.
 
 Useful overrides:
 
