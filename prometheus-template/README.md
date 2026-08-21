@@ -25,6 +25,19 @@ Then on **every fleet machine**: `git clone git@github.com:<you>/prometheus.git 
 run the Borrowed Fire `install.sh` there (it writes the pointer file the skills use to find the
 brain).
 
+On exactly one always-on OpenClaw host, install the unattended learning controller after the
+skills are installed:
+
+```sh
+cd /path/to/BorrowedFire
+./tools/install-prometheus-cycle.sh --notify-channel imessage --notify-to '<owner-route>'
+```
+
+Every harness runs the lightweight `borrowedfire-learn` pass at substantive checkpoints through the shared
+doctrine. The controller supplies the nightly fleet pass and due-only `digest`; it resolves and pins
+one effective notification account for the configured agent. Do not schedule a controller
+independently on every machine.
+
 ## What's in the tree
 
 - `.gitattributes` — union-merge rules that make concurrent multi-machine appends safe. **Do not

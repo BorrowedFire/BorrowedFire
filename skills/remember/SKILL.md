@@ -66,8 +66,13 @@ When one of these happens in any session, offer a one-line capture (never block 
 An always-on assistant harness with its own session-local notes (e.g. an OpenClaw workspace's
 daily notes) should run `remember` as a nightly batch: scan notes since the last batch, capture
 the durable items (decisions, people, lessons — not chit-chat) into the brain, and record the
-high-water mark in `notes/<harness>-ingest.md` frontmatter (`last_ingested:`). Push-based: each
-machine pushes its own memory; `digest` never reads other machines' workspaces.
+high-water mark whose filename includes the harness, host, agent, and canonical workspace identity
+(`last_ingested:` in frontmatter). Lowercase and sanitize text identifiers; hash the canonical
+workspace together with stable full host/machine, agent, and effective OpenClaw state directory,
+active canonical-or-legacy config path, and profile identity so separate controllers cannot collide. Two controller bindings
+never share a watermark. A missing watermark is a prospective boundary: do not backfill old
+session notes without a separate owner-authorized bounded migration. Push-based: each machine
+pushes its own memory; `digest` never reads other machines' workspaces.
 
 ## Related
 

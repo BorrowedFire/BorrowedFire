@@ -14,14 +14,15 @@
 #   --openclaw-workspace  path to an OpenClaw workspace to install into
 set -u
 
-SRC="$(cd "$(dirname "$0")" && pwd)"
+SRC="$(cd "$(dirname "$0")" && pwd -P)"
 MANIFEST_NAME=".borrowedfire-manifest"
 MARK_BEGIN="<!-- BEGIN BORROWEDFIRE DOCTRINE -->"
 MARK_END="<!-- END BORROWEDFIRE DOCTRINE -->"
 # Skill names from older revisions of this repo; eligible for --adopt cleanup.
-LEGACY_NAMES="takeoff autoland orbit repo-quality-audit blackbox debrief"
+LEGACY_NAMES="takeoff autoland orbit repo-quality-audit blackbox debrief learn"
+LEARNING_SKILLS="borrowedfire-learn remember recall digest"
 
-COPY=0 DRY=0 UNINSTALL=0 ADOPT=0 BRAIN="" OPENCLAW_WS=""
+COPY=0 DRY=0 UNINSTALL=0 ADOPT=0 BRAIN="" OPENCLAW_WS="" INSTALL_ERRORS=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --copy) COPY=1 ;;
@@ -40,6 +41,26 @@ act() { # act <description> <command...>: honor --dry-run
   local desc="$1"; shift
   say "  $desc"
   [ "$DRY" -eq 1 ] || "$@"
+}
+
+is_git_checkout() {
+  local requested top
+  [ -d "$1" ] || return 1
+  command -v git >/dev/null 2>&1 || return 1
+  requested="$(cd "$1" && pwd -P)" || return 1
+  top="$(git -C "$requested" rev-parse --show-toplevel 2>/dev/null)" || return 1
+  top="$(cd "$top" && pwd -P)" || return 1
+  [ "$requested" = "$top" ]
+}
+
+is_prometheus_root() {
+  is_git_checkout "$1" &&
+    [ -f "$1/INDEX.md" ] &&
+    [ -f "$1/config/fleet.md" ] &&
+    [ -f "$1/.gitattributes" ] &&
+    grep -qxF 'journal/*.md merge=union' "$1/.gitattributes" &&
+    grep -qxF 'inbox/*.md merge=union' "$1/.gitattributes" &&
+    grep -qxF 'projects/*.md merge=union' "$1/.gitattributes"
 }
 
 # --- preflight: never distribute a broken skill set ---
@@ -69,6 +90,35 @@ if [ "${#HARNESSES[@]}" -eq 0 ]; then
   exit 1
 fi
 
+# Bind an explicitly requested brain before automatic-learning doctrine can be
+# activated in any harness. A rejected or unwritable switch must not leave new
+# doctrine silently using an older pointer.
+if [ "$UNINSTALL" -eq 0 ] && [ -n "$BRAIN" ]; then
+  if ! is_prometheus_root "$BRAIN"; then
+    echo "error: --brain '$BRAIN' is not an exact Prometheus Git root with the required schema; installation aborted before doctrine changes." >&2
+    exit 1
+  fi
+  BRAIN="$(cd "$BRAIN" && pwd -P)"
+  ptr="$HOME/.config/borrowedfire/brain"
+  say "  brain pointer -> $BRAIN"
+  if [ "$DRY" -eq 0 ]; then
+    ptr_dir="$(dirname "$ptr")"
+    mkdir -p "$ptr_dir" || {
+      echo "error: brain pointer directory could not be created; installation aborted before doctrine changes." >&2
+      exit 1
+    }
+    ptr_tmp="$(mktemp "$ptr_dir/.brain.XXXXXX")" || {
+      echo "error: brain pointer staging file could not be created; installation aborted before doctrine changes." >&2
+      exit 1
+    }
+    if ! printf '%s\n' "$BRAIN" > "$ptr_tmp" || ! chmod 600 "$ptr_tmp" || ! mv -f "$ptr_tmp" "$ptr"; then
+      rm -f "$ptr_tmp"
+      echo "error: brain pointer could not be written atomically; installation aborted before doctrine changes." >&2
+      exit 1
+    fi
+  fi
+fi
+
 manifest_mode() { # manifest_mode <manifest> <name> -> prints mode or nothing
   [ -f "$1" ] && awk -v n="$2" '$1 == n {print $2}' "$1"
 }
@@ -84,6 +134,43 @@ manifest_del() { # manifest_del <manifest> <name>
   [ -f "$mf" ] || return 0
   tmp="$(mktemp)"
   awk -v n="$name" '$1 != n' "$mf" > "$tmp" && mv "$tmp" "$mf"
+}
+
+skill_is_managed() { # skill_is_managed <skilldir> <manifest> <name>
+  local sd="$1" mf="$2" name="$3" mode tgt src
+  mode="$(manifest_mode "$mf" "$name")"
+  tgt="$sd/$name"
+  src="$SRC/skills/$name"
+  case "$mode" in
+    link) [ -L "$tgt" ] && [ "$(readlink "$tgt")" = "$src" ] ;;
+    copy) [ -d "$tgt" ] && [ ! -L "$tgt" ] && [ -e "$tgt/.borrowedfire-copy" ] &&
+      copied_skill_matches "$src" "$tgt" ;;
+    *) return 1 ;;
+  esac
+}
+
+copied_skill_matches() { # copied_skill_matches <source> <target>
+  # The ownership marker alone proves provenance, not currency. Automatic
+  # doctrine may run only when every copied learning dependency is byte-current.
+  diff -qr -x .borrowedfire-copy "$1" "$2" >/dev/null 2>&1
+}
+
+skill_has_unmanaged_collision() { # skill_has_unmanaged_collision <skilldir> <manifest> <name>
+  local sd="$1" mf="$2" name="$3" mode tgt
+  mode="$(manifest_mode "$mf" "$name")"
+  tgt="$sd/$name"
+  [ -L "$tgt" ] || [ -e "$tgt" ] || return 1
+  if [ -L "$tgt" ] && [ "$(readlink "$tgt")" = "$SRC/skills/$name" ]; then
+    return 1
+  fi
+  case "$mode" in
+    # A manifest-owned symlink may still point at an older checkout. install_skill
+    # safely repoints it before the final exact ownership check.
+    link) [ -L "$tgt" ] || return 0 ;;
+    copy) [ -d "$tgt" ] && [ ! -L "$tgt" ] && [ -e "$tgt/.borrowedfire-copy" ] || return 0 ;;
+    *) return 0 ;;
+  esac
+  return 1
 }
 
 copy_skill() { # copy_skill <src> <tgt>: copy + drop the ownership marker inside
@@ -117,8 +204,20 @@ install_skill() { # install_skill <skilldir> <manifest> <name>
 
   if [ -L "$tgt" ] || [ -e "$tgt" ]; then
     if [ "$owned" = "link" ] && [ -L "$tgt" ]; then
-      # ours, pointing elsewhere (e.g. the repo moved): repoint
-      act "repoint  $name" ln -sfn "$src" "$tgt"
+      # Ours, pointing elsewhere (e.g. the repo moved). Honor an explicit
+      # copy-mode conversion instead of preserving the stale install mode.
+      if [ "$COPY" -eq 1 ]; then
+        say "  convert  $name (moved link -> copy)"
+        if [ "$DRY" -eq 0 ]; then
+          if copy_skill "$src" "$tgt"; then
+            manifest_set "$mf" "$name" copy
+          else
+            echo "warning: convert of $name failed" >&2
+          fi
+        fi
+      else
+        act "repoint  $name" ln -sfn "$src" "$tgt"
+      fi
       return
     fi
     if [ "$owned" = "copy" ] && [ ! -L "$tgt" ] && [ -e "$tgt/.borrowedfire-copy" ]; then
@@ -195,34 +294,97 @@ remove_entry() { # remove_entry <skilldir> <manifest> <name> <why>
   [ "$DRY" -eq 1 ] || manifest_del "$2" "$3"
 }
 
-update_doctrine() { # update_doctrine <context-file>
-  local cf="$1" tmp
-  if [ "$DRY" -eq 1 ]; then say "  doctrine $cf"; return; fi
-  mkdir -p "$(dirname "$cf")"
-  touch "$cf"
-  tmp="$(mktemp)"
-  awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
+resolve_context_target() { # resolve_context_target <path>
+  local target="$1" link hops=0 target_dir
+  while [ -L "$target" ]; do
+    hops=$((hops + 1))
+    [ "$hops" -le 40 ] || return 1
+    link="$(readlink "$target")" || return 1
+    case "$link" in
+      /*) target="$link" ;;
+      *) target="$(dirname "$target")/$link" ;;
+    esac
+  done
+  target_dir="$(cd "$(dirname "$target")" && pwd -P)" || return 1
+  printf '%s/%s\n' "$target_dir" "$(basename "$target")"
+}
+
+file_mode() { # file_mode <path>
+  local target="$1" mode
+  if mode="$(stat -c '%a' "$target" 2>/dev/null)"; then
+    printf '%s\n' "$mode"
+  elif mode="$(stat -f '%Lp' "$target" 2>/dev/null)"; then
+    printf '%s\n' "$mode"
+  else
+    return 1
+  fi
+}
+
+write_doctrine() { # write_doctrine <context-file> <doctrine-source> <description>
+  local cf="$1" source="$2" description="$3" target tmp mode source_lines
+  if [ "$DRY" -eq 1 ]; then say "  doctrine $cf ($description)"; return; fi
+  mkdir -p "$(dirname "$cf")" || return 1
+  touch "$cf" || return 1
+  target="$(resolve_context_target "$cf")" || return 1
+  tmp="$(mktemp "$(dirname "$target")/.borrowedfire-doctrine.XXXXXX")" || return 1
+  if ! awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
     index($0, b) {inblock=1; next}
     index($0, e) {inblock=0; next}
-    !inblock {print}
-  ' "$cf" > "$tmp"
-  # trim trailing blank lines, then append the current block
-  printf '%s\n' "$(cat "$tmp")" > "$cf" 2>/dev/null || cat "$tmp" > "$cf"
-  { echo ""; cat "$SRC/doctrine/DOCTRINE.md"; } >> "$cf"
-  rm -f "$tmp"
-  say "  doctrine $cf (updated)"
+    !inblock && /^[[:space:]]*$/ {blanks=blanks $0 ORS; next}
+    !inblock {printf "%s%s\n", blanks, $0; blanks=""}
+  ' "$target" > "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  if ! { echo ""; cat "$source"; } >> "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  mode="$(file_mode "$target")" || {
+    rm -f "$tmp"
+    return 1
+  }
+  if ! chmod "$mode" "$tmp" || ! mv -f "$tmp" "$target"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  source_lines="$(wc -l < "$source" | tr -d ' ')"
+  if [ -z "$source_lines" ] || [ "$source_lines" -eq 0 ] ||
+     ! tail -n "$source_lines" "$cf" | cmp -s - "$source"; then
+    return 1
+  fi
+  say "  doctrine $cf ($description)"
+}
+
+update_doctrine() { # update_doctrine <context-file>
+  write_doctrine "$1" "$SRC/doctrine/DOCTRINE.md" "updated"
+}
+
+update_safe_doctrine() { # update_safe_doctrine <context-file>
+  write_doctrine "$1" "$SRC/doctrine/DOCTRINE_NO_LEARNING.md" "learning disabled; safety retained"
 }
 
 remove_doctrine() { # remove_doctrine <context-file>
-  local cf="$1" tmp
+  local cf="$1" target tmp mode
   [ -f "$cf" ] || return 0
   if [ "$DRY" -eq 1 ]; then say "  doctrine $cf (would remove block)"; return; fi
-  tmp="$(mktemp)"
-  awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
+  target="$(resolve_context_target "$cf")" || return 1
+  tmp="$(mktemp "$(dirname "$target")/.borrowedfire-doctrine.XXXXXX")" || return 1
+  mode="$(file_mode "$target")" || {
+    rm -f "$tmp"
+    return 1
+  }
+  if ! awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
     index($0, b) {inblock=1; next}
     index($0, e) {inblock=0; next}
     !inblock {print}
-  ' "$cf" > "$tmp" && mv "$tmp" "$cf"
+  ' "$target" > "$tmp" || ! chmod "$mode" "$tmp" || ! mv -f "$tmp" "$target"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  if grep -qF "$MARK_BEGIN" "$target" || grep -qF "$MARK_END" "$target"; then
+    return 1
+  fi
   say "  doctrine $cf (block removed)"
 }
 
@@ -233,8 +395,22 @@ for row in "${HARNESSES[@]}"; do
   mf="$sd/$MANIFEST_NAME"
   say "== $label ($sd)"
   [ "$DRY" -eq 1 ] || mkdir -p "$sd"
+  learning_collision=""
+  for learning_name in $LEARNING_SKILLS; do
+    if skill_has_unmanaged_collision "$sd" "$mf" "$learning_name"; then
+      learning_collision="$learning_name"
+      break
+    fi
+  done
 
   if [ "$UNINSTALL" -eq 1 ]; then
+    # Remove the automatic invocation before its skills. If the context cannot
+    # be updated, leave the runnable stack intact and fail the uninstall.
+    if ! remove_doctrine "$cf"; then
+      echo "error: $label doctrine could not be removed; owned skills were left installed" >&2
+      INSTALL_ERRORS=$((INSTALL_ERRORS + 1))
+      continue
+    fi
     if [ -f "$mf" ]; then
       snap="$(mktemp)"; cp "$mf" "$snap"   # snapshot: remove_entry rewrites the manifest
       while IFS=' ' read -r name _mode; do
@@ -243,7 +419,6 @@ for row in "${HARNESSES[@]}"; do
       rm -f "$snap"
       [ "$DRY" -eq 1 ] || rm -f "$mf"
     fi
-    remove_doctrine "$cf"
     continue
   fi
 
@@ -275,22 +450,44 @@ for row in "${HARNESSES[@]}"; do
     install_skill "$sd" "$mf" "$(basename "$src_dir")"
   done
 
-  update_doctrine "$cf"
+  learning_unmanaged=""
+  if [ "$DRY" -eq 0 ]; then
+    for learning_name in $LEARNING_SKILLS; do
+      if ! skill_is_managed "$sd" "$mf" "$learning_name"; then
+        learning_unmanaged="$learning_name"
+        break
+      fi
+    done
+  fi
+  if { [ -n "$learning_collision" ] && [ "$ADOPT" -eq 0 ]; } || [ -n "$learning_unmanaged" ]; then
+    learning_problem="${learning_collision:-$learning_unmanaged}"
+    if update_safe_doctrine "$cf"; then
+      echo "error: $label has an unmanaged automatic-learning dependency ($learning_problem); automatic learning disabled while non-learning doctrine remains active" >&2
+    else
+      echo "error: $label has an unmanaged automatic-learning dependency ($learning_problem), and the safe doctrine could not be verified; inspect $cf before the next task" >&2
+    fi
+    INSTALL_ERRORS=$((INSTALL_ERRORS + 1))
+  else
+    if ! update_doctrine "$cf"; then
+      echo "error: $label doctrine update could not be written and verified" >&2
+      INSTALL_ERRORS=$((INSTALL_ERRORS + 1))
+    fi
+  fi
 done
+
+if [ "$INSTALL_ERRORS" -gt 0 ]; then
+  echo "operation failed closed: the automatic-learning stack is not safe in $INSTALL_ERRORS harness(es)" >&2
+  exit 1
+fi
 
 # --- brain pointer ---
 if [ "$UNINSTALL" -eq 0 ]; then
   ptr="$HOME/.config/borrowedfire/brain"
-  if [ -n "$BRAIN" ]; then
-    if [ -d "$BRAIN" ]; then
-      act "brain pointer -> $BRAIN" mkdir -p "$(dirname "$ptr")"
-      [ "$DRY" -eq 1 ] || printf '%s\n' "$BRAIN" > "$ptr"
-    else
-      echo "warning: --brain '$BRAIN' does not exist; pointer not written. Clone your brain repo there first (see prometheus-template/README.md)." >&2
-    fi
-  elif [ ! -f "$ptr" ] && [ -d "$HOME/prometheus/.git" ]; then
+  if [ -z "$BRAIN" ] && [ ! -f "$ptr" ] && is_prometheus_root "$HOME/prometheus"; then
     act "brain pointer -> $HOME/prometheus" mkdir -p "$(dirname "$ptr")"
-    [ "$DRY" -eq 1 ] || printf '%s\n' "$HOME/prometheus" > "$ptr"
+    if [ "$DRY" -eq 0 ]; then
+      printf '%s\n' "$HOME/prometheus" > "$ptr" && chmod 600 "$ptr"
+    fi
   fi
 fi
 
