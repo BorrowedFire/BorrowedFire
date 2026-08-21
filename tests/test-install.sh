@@ -81,10 +81,10 @@ mkdir -p "$HOME/prometheus/config" "$HOME/prometheus/projects"
 git init -q "$HOME/prometheus"
 printf '%s\n' 'journal/*.md merge=union' 'inbox/*.md merge=union' \
   'projects/*.md merge=union' > "$HOME/prometheus/.gitattributes"
-touch "$HOME/prometheus/INDEX.md" "$HOME/prometheus/config/fleet.md" \
-  "$HOME/prometheus/projects/_template.md"
+touch "$HOME/prometheus/INDEX.md" "$HOME/prometheus/config/fleet.md"
 "$SRC/install.sh" >/dev/null 2>&1
-check "brain pointer auto-written"     grep -q "$HOME/prometheus" "$HOME/.config/borrowedfire/brain"
+check "schema-valid brain without helper template is accepted" \
+  grep -q "$HOME/prometheus" "$HOME/.config/borrowedfire/brain"
 
 NESTED_HOME="$SB/nested-brain-home"
 mkdir -p "$NESTED_HOME/.codex" "$NESTED_HOME/prometheus/config" "$NESTED_HOME/prometheus/projects"

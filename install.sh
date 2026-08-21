@@ -57,7 +57,6 @@ is_prometheus_root() {
   is_git_checkout "$1" &&
     [ -f "$1/INDEX.md" ] &&
     [ -f "$1/config/fleet.md" ] &&
-    [ -f "$1/projects/_template.md" ] &&
     [ -f "$1/.gitattributes" ] &&
     grep -qxF 'journal/*.md merge=union' "$1/.gitattributes" &&
     grep -qxF 'inbox/*.md merge=union' "$1/.gitattributes" &&

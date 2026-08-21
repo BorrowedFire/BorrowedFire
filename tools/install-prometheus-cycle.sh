@@ -27,7 +27,6 @@ is_prometheus_root() {
   is_git_checkout "$1" &&
     [ -f "$1/INDEX.md" ] &&
     [ -f "$1/config/fleet.md" ] &&
-    [ -f "$1/projects/_template.md" ] &&
     [ -f "$1/.gitattributes" ] &&
     grep -qxF 'journal/*.md merge=union' "$1/.gitattributes" &&
     grep -qxF 'inbox/*.md merge=union' "$1/.gitattributes" &&
@@ -287,13 +286,13 @@ resolve_machine_identity() {
     fi
   done
   if [ -z "$value" ] && command -v ioreg >/dev/null 2>&1; then
-    value="$(ioreg -rd1 -c IOPlatformExpertDevice 2>/dev/null | awk -F'"' '/IOPlatformUUID/ {print $(NF-1); exit}')" || return 1
+    value="$(ioreg -rd1 -c IOPlatformExpertDevice 2>/dev/null | awk -F'"' '/IOPlatformUUID/ {print $(NF-1); exit}')" || value=""
   fi
   if [ -z "$value" ] && command -v sysctl >/dev/null 2>&1; then
-    value="$(sysctl -n kern.uuid 2>/dev/null)" || return 1
+    value="$(sysctl -n kern.uuid 2>/dev/null)" || value=""
   fi
   if [ -z "$value" ] && command -v hostid >/dev/null 2>&1; then
-    value="$(hostid 2>/dev/null)" || return 1
+    value="$(hostid 2>/dev/null)" || value=""
   fi
   [ -n "$value" ] || return 1
   printf '%s\n' "$value"
@@ -310,8 +309,9 @@ import os
 import re
 import sys
 
-def slug(value):
+def slug(value, limit):
     normalized = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    normalized = normalized[:limit].rstrip("-")
     if not normalized:
         raise SystemExit(1)
     return normalized
@@ -321,12 +321,15 @@ machine_id = sys.argv[2]
 agent_id = sys.argv[3]
 workspace = os.path.realpath(sys.argv[4])
 controller_root = os.path.realpath(sys.argv[5])
-host = slug(host_name)
-agent = slug(agent_id)
-workspace_name = slug(os.path.basename(workspace))
+host = slug(host_name, 64)
+agent = slug(agent_id, 48)
+workspace_name = slug(os.path.basename(workspace), 64)
 binding = "\0".join((host_name, machine_id, agent_id, workspace, controller_root))
 binding_hash = hashlib.sha256(binding.encode("utf-8")).hexdigest()[:12]
-print(f"notes/openclaw-{host}-{agent}-{workspace_name}-{binding_hash}-ingest.md")
+basename = f"openclaw-{host}-{agent}-{workspace_name}-{binding_hash}-ingest.md"
+if len(basename.encode("utf-8")) > 240:
+    raise SystemExit(1)
+print(f"notes/{basename}")
 PY
 )" || {
   fail_declaration_safely 'Host/machine/agent/workspace watermark identity could not be derived; no job was declared.'

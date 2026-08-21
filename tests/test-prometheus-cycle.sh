@@ -5,8 +5,10 @@ set -u
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 SB="$(mktemp -d)"
 export HOME="$SB/home"
+export XDG_CONFIG_HOME="$HOME/.config"
 export OPENCLAW_ARGS_FILE="$SB/openclaw-args"
 export FAKE_OPENCLAW_WORKSPACE="$SB/openclaw-workspace"
+unset PROMETHEUS_DIR OPENCLAW_HOME
 PASS=0
 FAIL=0
 
@@ -22,7 +24,7 @@ mkdir -p "$HOME/.config/borrowedfire" "$SB/prometheus/config" "$SB/prometheus/pr
 git init -q "$SB/prometheus"
 printf '%s\n' 'journal/*.md merge=union' 'inbox/*.md merge=union' \
   'projects/*.md merge=union' > "$SB/prometheus/.gitattributes"
-touch "$SB/prometheus/INDEX.md" "$SB/prometheus/config/fleet.md" "$SB/prometheus/projects/_template.md"
+touch "$SB/prometheus/INDEX.md" "$SB/prometheus/config/fleet.md"
 printf '%s\n' "$SB/prometheus" > "$HOME/.config/borrowedfire/brain"
 "$SRC/install.sh" --copy --openclaw-workspace "$FAKE_OPENCLAW_WORKSPACE" >/dev/null 2>&1
 
@@ -153,6 +155,42 @@ HOST_TWO_WATERMARK="$(grep -Eo 'notes/openclaw-[^ ]+-ingest\.md' "$OPENCLAW_ARGS
 check "same-short-name controllers get distinct watermarks" \
   test -n "$HOST_ONE_WATERMARK" -a -n "$HOST_TWO_WATERMARK" -a \
   "$HOST_ONE_WATERMARK" != "$HOST_TWO_WATERMARK"
+
+mkdir -p "$SB/machine-fallback-bin"
+printf '%s\n' '#!/usr/bin/env bash' 'exit 1' > "$SB/machine-fallback-bin/ioreg"
+printf '%s\n' '#!/usr/bin/env bash' 'exit 1' > "$SB/machine-fallback-bin/sysctl"
+printf '%s\n' '#!/usr/bin/env bash' 'printf "%s\\n" fallback-machine-id' \
+  > "$SB/machine-fallback-bin/hostid"
+chmod +x "$SB/machine-fallback-bin/ioreg" "$SB/machine-fallback-bin/sysctl" \
+  "$SB/machine-fallback-bin/hostid"
+rm -f "$OPENCLAW_ARGS_FILE"
+if PATH="$SB/machine-fallback-bin:$PATH" OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null; then
+  ok "machine identity falls through failed candidate commands"
+else
+  fail "machine identity falls through failed candidate commands"
+fi
+
+LONG_COMPONENT="$(printf '%200s' '' | tr ' ' w)"
+LONG_WORKSPACE="$SB/$LONG_COMPONENT"
+LONG_HOST_BIN="$SB/long-host-bin"
+mkdir -p "$LONG_WORKSPACE" "$LONG_HOST_BIN"
+"$SRC/install.sh" --copy --openclaw-workspace "$LONG_WORKSPACE" >/dev/null 2>&1
+printf '%s\n' '#!/usr/bin/env bash' \
+  'printf "%063d.%063d.%063d.%061d\\n" 0 0 0 0 | tr "0" h' \
+  > "$LONG_HOST_BIN/hostname"
+chmod +x "$LONG_HOST_BIN/hostname"
+rm -f "$OPENCLAW_ARGS_FILE"
+FAKE_OPENCLAW_WORKSPACE="$LONG_WORKSPACE" PATH="$LONG_HOST_BIN:$PATH" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+LONG_WATERMARK="$(grep -Eo 'notes/openclaw-[^ ]+-ingest\.md' "$OPENCLAW_ARGS_FILE" | head -1)"
+check "watermark basename stays below the portable safety bound" \
+  test "$(printf '%s' "${LONG_WATERMARK##*/}" | wc -c | tr -d ' ')" -le 240
+check "bounded watermark retains binding hash" \
+  grep -Eq '^notes/openclaw-.+-[0-9a-f]{12}-ingest\.md$' <<<"$LONG_WATERMARK"
 
 FOREIGN_WORKSPACE="$SB/openclaw-foreign"
 mkdir -p "$FOREIGN_WORKSPACE/skills/borrowedfire-learn"
@@ -420,7 +458,7 @@ fi
 
 git -C "$SB/prometheus" config user.name Fixture
 git -C "$SB/prometheus" config user.email fixture@example.invalid
-git -C "$SB/prometheus" add .gitattributes INDEX.md config/fleet.md projects/_template.md
+git -C "$SB/prometheus" add .gitattributes INDEX.md config/fleet.md
 git -C "$SB/prometheus" commit -qm init
 git -C "$SB/prometheus" worktree add -q -b fixture-worktree "$SB/prometheus-worktree"
 OUT="$(OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
