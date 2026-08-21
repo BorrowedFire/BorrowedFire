@@ -23,15 +23,19 @@ check "claude: closeout linked"        test -L "$HOME/.claude/skills/session-clo
 check "codex: closeout linked"         test -L "$HOME/.codex/skills/session-closeout"
 check "qwen: maintainer linked"        test -L "$HOME/.qwen/skills/maintainer"
 check "openclaw: digest linked"        test -L "$SB/openclaw-ws/skills/digest"
+check "claude: learn linked"           test -L "$HOME/.claude/skills/learn"
+check "codex: learn linked"            test -L "$HOME/.codex/skills/learn"
+check "openclaw: learn linked"         test -L "$SB/openclaw-ws/skills/learn"
 check "claude: manifest written"       grep -q '^remember link$' "$HOME/.claude/skills/.borrowedfire-manifest"
 check "claude: doctrine block present" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md"
 check "openclaw: doctrine in AGENTS.md" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$SB/openclaw-ws/AGENTS.md"
-check "manifest has 15 entries"        test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 15
+check "manifest has 16 entries"        test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 16
 
 # --- 2. idempotence: re-run, doctrine block appears exactly once ---
 "$SRC/install.sh" --openclaw-workspace "$SB/openclaw-ws" >/dev/null 2>&1
 check "doctrine idempotent (1 block)"  test "$(grep -c 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md")" -eq 1
-check "still 15 manifest entries"      test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 15
+check "still 16 manifest entries"      test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 16
+check "doctrine invokes learn"         grep -q 'run `learn` automatically' "$HOME/.claude/CLAUDE.md"
 
 # --- 3. legacy unowned dir warns, --adopt retires it ---
 mkdir -p "$HOME/.codex/skills/takeoff"; echo x > "$HOME/.codex/skills/takeoff/SKILL.md"

@@ -68,11 +68,23 @@ for dir in "$SKILLS_DIR"/*/; do
   fi
 done
 
-# 7. memory trio installs together
-for m in remember recall digest; do
-  [ -d "$SKILLS_DIR/$m" ] || err "memory trio incomplete: missing '$m'"
+# 7. memory system installs together
+for m in remember recall digest learn; do
+  [ -d "$SKILLS_DIR/$m" ] || err "memory system incomplete: missing '$m'"
 done
 [ -f "$SKILLS_DIR/remember/references/brain-schema.md" ] || err "missing remember/references/brain-schema.md (recall + digest depend on it)"
+
+LEARN_SKILL="$SKILLS_DIR/learn/SKILL.md"
+DOCTRINE="$ROOT/doctrine/DOCTRINE.md"
+if ! body "$LEARN_SKILL" | grep -qF 'Run without a user prompt'; then
+  err "learn: automatic checkpoint invocation is missing"
+fi
+if ! body "$LEARN_SKILL" | grep -qF 'No autonomous self-rewrite'; then
+  err "learn: self-modification boundary is missing"
+fi
+if ! grep -qF 'run `learn` automatically' "$DOCTRINE"; then
+  err "doctrine: automatic learning checkpoint is missing"
+fi
 
 # 8. workflow contracts that must survive review-loop edits
 LAND_SKILL="$SKILLS_DIR/land/SKILL.md"

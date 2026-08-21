@@ -7,7 +7,8 @@ private, git-authoritative markdown brain (in the lineage of
 Borrowed Fire is the system; Prometheus, the one who borrowed the fire, is its memory.
 
 - **Memory** compounds: every agent captures decisions, people, meetings, and hard-won lessons
-  into the brain; every agent reads them back before it works.
+  into the brain; every agent reads them back before it works. `learn` runs automatically at
+  substantive checkpoints, and one always-on host performs a bounded nightly consolidation pass.
 - **Development** is orchestrated: a control-plane skill works the queue across all registered
   repos, delegating to a review-gated landing loop, with humans only answering decision-ready
   briefs.
@@ -39,6 +40,7 @@ deleted).
 
 | Skill | What it does |
 |---|---|
+| [learn](skills/learn/SKILL.md) | Automatic learning pass: extract verified durable deltas from completed work, dedupe, connect them to prevention, and capture through Prometheus; includes a safe scheduled fleet mode. |
 | [remember](skills/remember/SKILL.md) | Capture decisions, people, meetings, lessons, ideas into the brain — typed pages, wikilink graph, fleet-safe git sync. Owns the [schema](skills/remember/references/brain-schema.md). |
 | [recall](skills/recall/SKILL.md) | Answer from the brain with page citations and honest gaps; preflight lessons before any repo work. |
 | [digest](skills/digest/SKILL.md) | The dream cycle: promote inbox, ingest outboxes, dedupe entities, repair the graph, distill lessons, refresh the index. Locked, safe to schedule. |
@@ -71,7 +73,7 @@ brain projects/ registry ─────────────┘        │
                                                │
                           store-release ◀──────┘ (mobile)   changelog / signal (words)
 
-every skill ──▶ remember (lessons, decisions) ──▶ digest (consolidate) ──▶ recall (next run knows)
+completed work ──▶ learn (verify + dedupe) ──▶ remember ──▶ digest ──▶ recall (next run knows)
 ```
 
 The shared rules every agent follows — brain sync protocol, capture triggers, safety rails, tier
@@ -79,10 +81,21 @@ routing — live in [`doctrine/DOCTRINE.md`](doctrine/DOCTRINE.md), installed in
 context file. The high-risk denylist (always owner-gated) is defined once in
 [`skills/land/references/denylist.md`](skills/land/references/denylist.md).
 
+For genuinely unattended improvement, install the nightly controller on exactly one always-on
+OpenClaw host after installing its workspace skills:
+
+```sh
+./tools/install-prometheus-cycle.sh
+```
+
+It declares one idempotent job at 02:35 America/New_York by default, does not pin a provider/model,
+and remains silent on routine success or a no-op. See
+[`skills/learn/references/cycle-contract.md`](skills/learn/references/cycle-contract.md).
+
 ## Repo layout
 
 ```
-skills/            15 SKILL.md skills (+ agents/openai.yaml metadata, references/)
+skills/            16 SKILL.md skills (+ agents/openai.yaml metadata, references/)
 doctrine/          the managed context block install.sh distributes
 prometheus-template/  starting tree for your private brain repo
 install.sh         manifest-owned cross-harness installer
