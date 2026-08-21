@@ -105,6 +105,8 @@ else
 fi
 check "foreign learning skill remains intact" grep -q foreign "$COLLISION_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
 check "collision harness gets no learning doctrine" bash -c "! grep -q 'run \`borrowedfire-learn\` automatically' '$COLLISION_HOME/.codex/AGENTS.md'"
+check "collision harness retains safety doctrine" grep -q '^\*\*Safety\.\*\*' "$COLLISION_HOME/.codex/AGENTS.md"
+check "collision harness retains memory doctrine" grep -q '^\*\*Memory\.\*\*' "$COLLISION_HOME/.codex/AGENTS.md"
 
 STALE_HOME="$SB/stale-owned-home"
 mkdir -p "$STALE_HOME/.codex/skills/borrowedfire-learn"
@@ -116,6 +118,7 @@ else
   ok "stale ownership shape fails closed"
 fi
 check "stale ownership does not install doctrine" bash -c "! grep -q 'run \`borrowedfire-learn\` automatically' '$STALE_HOME/.codex/AGENTS.md'"
+check "stale ownership retains safety doctrine" grep -q '^\*\*Safety\.\*\*' "$STALE_HOME/.codex/AGENTS.md"
 
 REPLACED_HOME="$SB/replaced-owned-home"
 mkdir -p "$REPLACED_HOME/.codex"
@@ -128,7 +131,8 @@ if HOME="$REPLACED_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
 else
   ok "replaced managed learning skill fails closed"
 fi
-check "stale automatic doctrine is removed" bash -c "! grep -q 'run \`borrowedfire-learn\` automatically' '$REPLACED_HOME/.codex/AGENTS.md'"
+check "stale automatic learning trigger is removed" bash -c "! grep -q 'run \`borrowedfire-learn\` automatically' '$REPLACED_HOME/.codex/AGENTS.md'"
+check "replaced learning skill retains safety doctrine" grep -q '^\*\*Safety\.\*\*' "$REPLACED_HOME/.codex/AGENTS.md"
 if HOME="$REPLACED_HOME" "$SRC/install.sh" --dry-run >/dev/null 2>&1; then
   fail "collision dry-run reports failure"
 else
@@ -146,6 +150,8 @@ for dependency in remember recall digest; do
   fi
   check "unmanaged $dependency suppresses doctrine" bash -c \
     "! grep -q 'run \`borrowedfire-learn\` automatically' '$DEPENDENCY_HOME/.codex/AGENTS.md'"
+  check "unmanaged $dependency retains safety doctrine" grep -q '^\*\*Safety\.\*\*' \
+    "$DEPENDENCY_HOME/.codex/AGENTS.md"
 done
 
 MOVED_HOME="$SB/moved-learning-home"

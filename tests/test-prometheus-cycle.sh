@@ -115,6 +115,8 @@ else
   ok "tampered managed dependency fails closed"
 fi
 check "tampered dependency declares no job" bash -c "! grep -qx 'add' '$OPENCLAW_ARGS_FILE'"
+check "tampered dependency disables the existing job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "tampered dependency verifies the disabled job" grep -qx 'get' "$OPENCLAW_ARGS_FILE"
 
 TAMPERED_DOCTRINE_WORKSPACE="$SB/openclaw-tampered-doctrine"
 mkdir -p "$TAMPERED_DOCTRINE_WORKSPACE"
@@ -130,6 +132,7 @@ else
   ok "tampered managed doctrine fails closed"
 fi
 check "tampered doctrine declares no job" bash -c "! grep -qx 'add' '$OPENCLAW_ARGS_FILE'"
+check "tampered doctrine disables the existing job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
 
 rm -f "$OPENCLAW_ARGS_FILE"
 OUT="$(OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \

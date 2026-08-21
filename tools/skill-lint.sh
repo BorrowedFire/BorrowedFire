@@ -76,6 +76,7 @@ done
 
 LEARN_SKILL="$SKILLS_DIR/borrowedfire-learn/SKILL.md"
 DOCTRINE="$ROOT/doctrine/DOCTRINE.md"
+SAFE_DOCTRINE="$ROOT/doctrine/DOCTRINE_NO_LEARNING.md"
 if ! body "$LEARN_SKILL" | grep -qF 'Run without a user prompt'; then
   err "borrowedfire-learn: automatic checkpoint invocation is missing"
 fi
@@ -85,6 +86,15 @@ fi
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
 if ! grep -qF 'run `borrowedfire-learn` automatically' "$DOCTRINE"; then
   err "doctrine: automatic learning checkpoint is missing"
+fi
+# shellcheck disable=SC2016  # backticks are intentional literal contract text
+if grep -qF 'run `borrowedfire-learn` automatically' "$SAFE_DOCTRINE"; then
+  err "safe doctrine: automatic learning checkpoint must be disabled"
+fi
+# shellcheck disable=SC2016  # backticks are intentional literal contract text
+if ! grep -qF '**Safety.** The `land` denylist is always owner-gated' "$SAFE_DOCTRINE" ||
+   ! grep -qF '**Memory.** Prometheus is the private git-backed brain.' "$SAFE_DOCTRINE"; then
+  err "safe doctrine: non-learning memory and safety contracts are missing"
 fi
 if ! body "$LEARN_SKILL" | grep -qF 'notes/openclaw-<host>-<agent>-<workspace>-<workspace-hash>-ingest.md'; then
   err "borrowedfire-learn: host-scoped watermark contract is missing"

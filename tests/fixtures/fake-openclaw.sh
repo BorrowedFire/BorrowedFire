@@ -40,6 +40,10 @@ if [ "${1:-}" = "cron" ] && [ "${2:-}" = "status" ]; then
   fi
   exit 0
 fi
+if [ "${1:-}" = "cron" ] && [ "${2:-}" = "list" ]; then
+  printf '{"jobs":[{"id":"fixture-job","declarationKey":"borrowedfire.prometheus-learning.v1","agentId":"main","enabled":true}]}\n'
+  exit 0
+fi
 if [ "${1:-}" = "cron" ] && [ "${2:-}" = "get" ]; then
   get_mismatch="${FAKE_OPENCLAW_GET_MISMATCH:-0}"
   [ "${FAKE_OPENCLAW_STALE_SESSION_KEY:-0}" -eq 0 ] || get_mismatch="session"

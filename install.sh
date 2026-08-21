@@ -247,9 +247,9 @@ remove_entry() { # remove_entry <skilldir> <manifest> <name> <why>
   [ "$DRY" -eq 1 ] || manifest_del "$2" "$3"
 }
 
-update_doctrine() { # update_doctrine <context-file>
-  local cf="$1" tmp
-  if [ "$DRY" -eq 1 ]; then say "  doctrine $cf"; return; fi
+write_doctrine() { # write_doctrine <context-file> <doctrine-source> <description>
+  local cf="$1" source="$2" description="$3" tmp
+  if [ "$DRY" -eq 1 ]; then say "  doctrine $cf ($description)"; return; fi
   mkdir -p "$(dirname "$cf")"
   touch "$cf"
   tmp="$(mktemp)"
@@ -260,9 +260,17 @@ update_doctrine() { # update_doctrine <context-file>
   ' "$cf" > "$tmp"
   # trim trailing blank lines, then append the current block
   printf '%s\n' "$(cat "$tmp")" > "$cf" 2>/dev/null || cat "$tmp" > "$cf"
-  { echo ""; cat "$SRC/doctrine/DOCTRINE.md"; } >> "$cf"
+  { echo ""; cat "$source"; } >> "$cf"
   rm -f "$tmp"
-  say "  doctrine $cf (updated)"
+  say "  doctrine $cf ($description)"
+}
+
+update_doctrine() { # update_doctrine <context-file>
+  write_doctrine "$1" "$SRC/doctrine/DOCTRINE.md" "updated"
+}
+
+update_safe_doctrine() { # update_safe_doctrine <context-file>
+  write_doctrine "$1" "$SRC/doctrine/DOCTRINE_NO_LEARNING.md" "learning disabled; safety retained"
 }
 
 remove_doctrine() { # remove_doctrine <context-file>
@@ -345,8 +353,8 @@ for row in "${HARNESSES[@]}"; do
   fi
   if { [ -n "$learning_collision" ] && [ "$ADOPT" -eq 0 ]; } || [ -n "$learning_unmanaged" ]; then
     learning_problem="${learning_collision:-$learning_unmanaged}"
-    echo "error: $label has an unmanaged automatic-learning dependency ($learning_problem); automatic doctrine removed for this harness" >&2
-    remove_doctrine "$cf"
+    echo "error: $label has an unmanaged automatic-learning dependency ($learning_problem); automatic learning disabled while non-learning doctrine remains active" >&2
+    update_safe_doctrine "$cf"
     INSTALL_ERRORS=$((INSTALL_ERRORS + 1))
   else
     update_doctrine "$cf"

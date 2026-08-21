@@ -165,6 +165,63 @@ JOB_NAME="Prometheus Learning Cycle"
 DECLARATION_KEY="borrowedfire.prometheus-learning.v1"
 DESCRIPTION="Nightly verified learning, status capture, and due-only consolidation in the shared Prometheus brain."
 
+disable_existing_job_for_agent() {
+  local list_output job_id verify_output
+  list_output="$("$OPENCLAW_BIN" cron list --all --json)" || return 1
+  job_id="$(printf '%s' "$list_output" | python3 -c '
+import json
+import sys
+
+agent_id, declaration_key = sys.argv[1:]
+try:
+    payload = json.load(sys.stdin)
+except (json.JSONDecodeError, OSError):
+    raise SystemExit(1)
+jobs = payload if isinstance(payload, list) else payload.get("jobs") if isinstance(payload, dict) else None
+if not isinstance(jobs, list):
+    raise SystemExit(1)
+matches = [
+    job for job in jobs
+    if isinstance(job, dict)
+    and job.get("declarationKey") == declaration_key
+    and job.get("agentId") == agent_id
+]
+if len(matches) > 1:
+    raise SystemExit(1)
+if matches:
+    job_id = matches[0].get("id")
+    if not isinstance(job_id, str) or not job_id.strip():
+        raise SystemExit(1)
+    print(job_id.strip())
+' "$AGENT_ID" "$DECLARATION_KEY")" || return 1
+  [ -n "$job_id" ] || return 0
+  "$OPENCLAW_BIN" cron disable "$job_id" >/dev/null 2>&1 || return 1
+  verify_output="$("$OPENCLAW_BIN" cron get "$job_id")" || return 1
+  printf '%s' "$verify_output" | python3 -c '
+import json
+import sys
+
+expected_id = sys.argv[1]
+try:
+    payload = json.load(sys.stdin)
+except (json.JSONDecodeError, OSError):
+    raise SystemExit(1)
+job = payload.get("job") if isinstance(payload, dict) and isinstance(payload.get("job"), dict) else payload
+if not isinstance(job, dict) or job.get("id") != expected_id or job.get("enabled") is not False:
+    raise SystemExit(1)
+' "$job_id"
+}
+
+fail_invalid_workspace() {
+  local reason="$1"
+  if disable_existing_job_for_agent; then
+    printf '%s Any existing matching Prometheus learning job is disabled.\n' "$reason" >&2
+  else
+    printf '%s The matching job could not be proven disabled; inspect OpenClaw before re-enabling it.\n' "$reason" >&2
+  fi
+  exit 1
+}
+
 if [ "$DRY" -eq 1 ]; then
   printf 'would declare %s (%s) at %s [%s]\n' "$JOB_NAME" "$DECLARATION_KEY" "$CRON_EXPR" "$TIMEZONE"
   printf 'Prometheus: %s\n' "$BRAIN"
@@ -196,13 +253,11 @@ print(matches[0]["workspace"].strip())
   exit 1
 }
 if [ ! -d "$AGENT_WORKSPACE" ]; then
-  printf 'Requested OpenClaw agent workspace does not exist; no job was declared.\n' >&2
-  exit 1
+  fail_invalid_workspace 'Requested OpenClaw agent workspace does not exist.'
 fi
 AGENT_WORKSPACE="$(cd "$AGENT_WORKSPACE" && pwd -P)"
 if ! managed_learning_stack_matches "$AGENT_WORKSPACE"; then
-  printf 'Requested OpenClaw workspace lacks the exact installer-managed learning stack and doctrine from this checkout; no job was declared.\n' >&2
-  exit 1
+  fail_invalid_workspace 'Requested OpenClaw workspace lacks the exact installer-managed learning stack and doctrine from this checkout.'
 fi
 
 HOST_ID="$(hostname -s)" || {
