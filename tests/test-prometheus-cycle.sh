@@ -47,6 +47,9 @@ check "resets stale failure-alert policy" grep -qx -- '--no-failure-alert' "$OPE
 check "pins failure alerts to announce mode" grep -qx 'announce' "$OPENCLAW_ARGS_FILE"
 check "does not pin a model" bash -c "! grep -qx -- '--model' '$OPENCLAW_ARGS_FILE'"
 check "does not hide bootstrap context" bash -c "! grep -qx -- '--light-context' '$OPENCLAW_ARGS_FILE'"
+check "does not suppress skill loading with a payload tool allowlist" \
+  bash -c "! grep -qx -- '--tools' '$OPENCLAW_ARGS_FILE'"
+check "clears stale payload tool allowlists" grep -qx -- '--clear-tools' "$OPENCLAW_ARGS_FILE"
 check "disables routine delivery" grep -qx -- '--no-deliver' "$OPENCLAW_ARGS_FILE"
 check "stores an explicit notification channel" grep -qx 'imessage' "$OPENCLAW_ARGS_FILE"
 check "stores an explicit notification destination" grep -qx 'owner-route' "$OPENCLAW_ARGS_FILE"
@@ -286,6 +289,29 @@ fi
 check "removed configured agent declares no job" bash -c "! grep -qx 'add' '$OPENCLAW_ARGS_FILE'"
 check "removed configured agent disables its stale job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
 check "removed configured agent verifies the disabled job" grep -qx 'get' "$OPENCLAW_ARGS_FILE"
+
+rm -f "$OPENCLAW_ARGS_FILE"
+if FAKE_OPENCLAW_FAIL_AGENTS_LIST=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "unreadable agent configuration fails closed"
+else
+  ok "unreadable agent configuration fails closed"
+fi
+check "unreadable agent configuration disables the declaration" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+
+INVALID_ALT_WORKSPACE="$SB/openclaw-invalid-alternate"
+mkdir -p "$INVALID_ALT_WORKSPACE"
+rm -f "$OPENCLAW_ARGS_FILE"
+if FAKE_OPENCLAW_ALT_WORKSPACE="$INVALID_ALT_WORKSPACE" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" --agent alternate \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "agent-change validation failure fails closed"
+else
+  ok "agent-change validation failure fails closed"
+fi
+check "agent-change failure disables the declaration-key job" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
 
 if OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
   "$SRC/tools/install-prometheus-cycle.sh" >/dev/null 2>&1; then

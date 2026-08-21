@@ -29,7 +29,9 @@ The fleet worker must:
 6. avoid product-repo, account, credential, deployment, release, store, skill, doctrine, and
    scheduler mutations, except deleting the exact local-only `.brain-outbox/<file>` whose content
    has already been committed and pushed to Prometheus; never delete a pending item or directory;
-7. run with normal bootstrap context so the installed skill and doctrine remain visible;
+7. run with normal bootstrap context so the installed skill and doctrine remain visible; do not
+   set a payload tool allowlist because current OpenClaw behavior suppresses the skills prompt
+   when one is present—use the private agent-level tool policy for capability restrictions;
 8. stay disabled until scheduler-level alerts cover pre-turn failures and skipped runs;
 9. avoid routine notifications; notify the owner for a material digest, actionable conflict,
    failure, or prevention decision.

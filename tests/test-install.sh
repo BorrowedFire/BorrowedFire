@@ -31,8 +31,10 @@ check "claude: doctrine block present" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$H
 check "openclaw: doctrine in AGENTS.md" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$SB/openclaw-ws/AGENTS.md"
 check "manifest has 16 entries"        test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 16
 
-# --- 2. idempotence: re-run, doctrine block appears exactly once ---
+# --- 2. idempotence: re-run, doctrine is byte-identical and appears exactly once ---
+cp "$HOME/.claude/CLAUDE.md" "$SB/claude-doctrine-before"
 "$SRC/install.sh" --openclaw-workspace "$SB/openclaw-ws" >/dev/null 2>&1
+check "doctrine idempotent (byte-identical)" cmp -s "$SB/claude-doctrine-before" "$HOME/.claude/CLAUDE.md"
 check "doctrine idempotent (1 block)"  test "$(grep -c 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md")" -eq 1
 check "still 16 manifest entries"      test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 16
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
@@ -138,6 +140,23 @@ if HOME="$REPLACED_HOME" "$SRC/install.sh" --dry-run >/dev/null 2>&1; then
 else
   ok "collision dry-run reports failure"
 fi
+
+READ_ONLY_HOME="$SB/read-only-context-home"
+mkdir -p "$READ_ONLY_HOME/.codex"
+HOME="$READ_ONLY_HOME" "$SRC/install.sh" >/dev/null 2>&1
+unlink "$READ_ONLY_HOME/.codex/skills/borrowedfire-learn"
+mkdir "$READ_ONLY_HOME/.codex/skills/borrowedfire-learn"
+echo foreign > "$READ_ONLY_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
+chmod 444 "$READ_ONLY_HOME/.codex/AGENTS.md"
+if HOME="$READ_ONLY_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
+  fail "read-only stale doctrine collision fails closed"
+else
+  ok "read-only stale doctrine collision fails closed"
+fi
+check "read-only context gets atomic safe doctrine replacement" \
+  grep -q 'Automatic learning is disabled' "$READ_ONLY_HOME/.codex/AGENTS.md"
+check "read-only context no longer invokes automatic learning" bash -c \
+  "! grep -q 'run \`borrowedfire-learn\` automatically' '$READ_ONLY_HOME/.codex/AGENTS.md'"
 
 for dependency in remember recall digest; do
   DEPENDENCY_HOME="$SB/foreign-$dependency-home"

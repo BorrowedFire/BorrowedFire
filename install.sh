@@ -248,20 +248,37 @@ remove_entry() { # remove_entry <skilldir> <manifest> <name> <why>
 }
 
 write_doctrine() { # write_doctrine <context-file> <doctrine-source> <description>
-  local cf="$1" source="$2" description="$3" tmp
+  local cf="$1" source="$2" description="$3" tmp mode source_lines
   if [ "$DRY" -eq 1 ]; then say "  doctrine $cf ($description)"; return; fi
-  mkdir -p "$(dirname "$cf")"
-  touch "$cf"
-  tmp="$(mktemp)"
-  awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
+  mkdir -p "$(dirname "$cf")" || return 1
+  touch "$cf" || return 1
+  tmp="$(mktemp "$(dirname "$cf")/.borrowedfire-doctrine.XXXXXX")" || return 1
+  if ! awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
     index($0, b) {inblock=1; next}
     index($0, e) {inblock=0; next}
-    !inblock {print}
-  ' "$cf" > "$tmp"
-  # trim trailing blank lines, then append the current block
-  printf '%s\n' "$(cat "$tmp")" > "$cf" 2>/dev/null || cat "$tmp" > "$cf"
-  { echo ""; cat "$source"; } >> "$cf"
-  rm -f "$tmp"
+    !inblock && /^[[:space:]]*$/ {blanks=blanks $0 ORS; next}
+    !inblock {printf "%s%s\n", blanks, $0; blanks=""}
+  ' "$cf" > "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  if ! { echo ""; cat "$source"; } >> "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  mode="$(stat -f '%Lp' "$cf" 2>/dev/null || stat -c '%a' "$cf" 2>/dev/null)" || {
+    rm -f "$tmp"
+    return 1
+  }
+  if ! chmod "$mode" "$tmp" || ! mv -f "$tmp" "$cf"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  source_lines="$(wc -l < "$source" | tr -d ' ')"
+  if [ -z "$source_lines" ] || [ "$source_lines" -eq 0 ] ||
+     ! tail -n "$source_lines" "$cf" | cmp -s - "$source"; then
+    return 1
+  fi
   say "  doctrine $cf ($description)"
 }
 
@@ -353,11 +370,17 @@ for row in "${HARNESSES[@]}"; do
   fi
   if { [ -n "$learning_collision" ] && [ "$ADOPT" -eq 0 ]; } || [ -n "$learning_unmanaged" ]; then
     learning_problem="${learning_collision:-$learning_unmanaged}"
-    echo "error: $label has an unmanaged automatic-learning dependency ($learning_problem); automatic learning disabled while non-learning doctrine remains active" >&2
-    update_safe_doctrine "$cf"
+    if update_safe_doctrine "$cf"; then
+      echo "error: $label has an unmanaged automatic-learning dependency ($learning_problem); automatic learning disabled while non-learning doctrine remains active" >&2
+    else
+      echo "error: $label has an unmanaged automatic-learning dependency ($learning_problem), and the safe doctrine could not be verified; inspect $cf before the next task" >&2
+    fi
     INSTALL_ERRORS=$((INSTALL_ERRORS + 1))
   else
-    update_doctrine "$cf"
+    if ! update_doctrine "$cf"; then
+      echo "error: $label doctrine update could not be written and verified" >&2
+      INSTALL_ERRORS=$((INSTALL_ERRORS + 1))
+    fi
   fi
 done
 

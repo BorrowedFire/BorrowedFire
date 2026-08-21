@@ -190,14 +190,14 @@ disable_job_and_verify() {
   job_enabled_state_is "$job_id" false
 }
 
-disable_existing_job_for_agent() {
+disable_existing_declaration() {
   local list_output job_id
   list_output="$("$OPENCLAW_BIN" cron list --all --json)" || return 1
   job_id="$(printf '%s' "$list_output" | python3 -c '
 import json
 import sys
 
-agent_id, declaration_key = sys.argv[1:]
+declaration_key = sys.argv[1]
 try:
     payload = json.load(sys.stdin)
 except (json.JSONDecodeError, OSError):
@@ -209,7 +209,6 @@ matches = [
     job for job in jobs
     if isinstance(job, dict)
     and job.get("declarationKey") == declaration_key
-    and job.get("agentId") == agent_id
 ]
 if len(matches) > 1:
     raise SystemExit(1)
@@ -218,15 +217,15 @@ if matches:
     if not isinstance(job_id, str) or not job_id.strip():
         raise SystemExit(1)
     print(job_id.strip())
-' "$AGENT_ID" "$DECLARATION_KEY")" || return 1
+' "$DECLARATION_KEY")" || return 1
   [ -n "$job_id" ] || return 0
   disable_job_and_verify "$job_id"
 }
 
 fail_invalid_workspace() {
   local reason="$1"
-  if disable_existing_job_for_agent; then
-    printf '%s Any existing matching Prometheus learning job is disabled.\n' "$reason" >&2
+  if disable_existing_declaration; then
+    printf '%s Any existing declaration-key learning job is verified disabled or absent.\n' "$reason" >&2
   else
     printf '%s The matching job could not be proven disabled; inspect OpenClaw before re-enabling it.\n' "$reason" >&2
   fi
@@ -240,10 +239,8 @@ if [ "$DRY" -eq 1 ]; then
   exit 0
 fi
 
-AGENTS_OUTPUT="$("$OPENCLAW_BIN" agents list --json)" || {
-  printf 'Configured OpenClaw agents could not be inspected; no job was declared.\n' >&2
-  exit 1
-}
+AGENTS_OUTPUT="$("$OPENCLAW_BIN" agents list --json)" ||
+  fail_invalid_workspace 'Configured OpenClaw agents could not be inspected.'
 AGENT_WORKSPACE="$(printf '%s' "$AGENTS_OUTPUT" | python3 -c '
 import json
 import sys
@@ -299,7 +296,6 @@ PY
 }
 
 MESSAGE="Run the installed borrowedfire-learn skill in fleet mode. The Prometheus root is $BRAIN. Follow the skill and its cycle-contract reference exactly. Use only $WATERMARK_FILE as this controller binding's high-water mark; ingest only verified durable deltas visible in this agent workspace since that mark; deduplicate before using remember; advance the mark only after durable commit/push; and invoke digest only when seven days have elapsed since its last completed run or inbox backlog exceeds 15. Never claim access to another host, agent, or workspace's private session history. Do not mutate product repositories, accounts, credentials, deployments, releases, stores, skills, doctrine, or scheduler configuration, except to delete one exact local-only .brain-outbox/<file> after its capture is committed and pushed to Prometheus; never delete the directory, another item, or a pending item. Do not announce routine success or a no-op. Use the configured message target only for one concise material-digest summary, an actionable owner decision, conflicting evidence, a sync/push failure, or a concrete prevention follow-up."
-TOOLS_ALLOW="read,edit,write,apply_patch,exec,process,message"
 
 fail_job_safely() {
   local reason="$1"
@@ -328,8 +324,7 @@ expected = {
     "name": sys.argv[7],
     "description": sys.argv[8],
     "message": sys.argv[9],
-    "tools": sys.argv[10].split(","),
-    "enabled": sys.argv[11] == "true",
+    "enabled": sys.argv[10] == "true",
 }
 try:
     payload = json.load(sys.stdin)
@@ -371,11 +366,11 @@ checks = [
     isinstance(agent_payload, dict) and agent_payload.get("message") == expected["message"],
     isinstance(agent_payload, dict) and agent_payload.get("timeoutSeconds") == 900,
     isinstance(agent_payload, dict) and agent_payload.get("lightContext") is False,
-    isinstance(agent_payload, dict) and agent_payload.get("toolsAllow") == expected["tools"],
+    isinstance(agent_payload, dict) and agent_payload.get("toolsAllow") is None,
 ]
 if not all(checks):
     raise SystemExit(1)
-' "$JOB_ID" "$AGENT_ID" "$CRON_EXPR" "$TIMEZONE" "$NOTIFY_CHANNEL" "$NOTIFY_TO" "$JOB_NAME" "$DESCRIPTION" "$MESSAGE" "$TOOLS_ALLOW" "$expected_enabled"
+' "$JOB_ID" "$AGENT_ID" "$CRON_EXPR" "$TIMEZONE" "$NOTIFY_CHANNEL" "$NOTIFY_TO" "$JOB_NAME" "$DESCRIPTION" "$MESSAGE" "$expected_enabled"
 }
 
 ARGS=(
@@ -394,7 +389,6 @@ ARGS=(
   --channel "$NOTIFY_CHANNEL"
   --to "$NOTIFY_TO"
   --timeout-seconds 900
-  --tools "$TOOLS_ALLOW"
   --message "$MESSAGE"
   --json
 )
@@ -450,7 +444,7 @@ CONVERGE_ARGS=(
   --message "$MESSAGE"
   --timeout-seconds 900
   --no-light-context
-  --tools "$TOOLS_ALLOW"
+  --clear-tools
   --no-deliver
   --channel "$NOTIFY_CHANNEL"
   --to "$NOTIFY_TO"

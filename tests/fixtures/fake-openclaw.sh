@@ -9,6 +9,9 @@ set -u
 if [ "${FAKE_OPENCLAW_FAIL_EDIT:-0}" -eq 1 ] && [ "${1:-}" = "cron" ] && [ "${2:-}" = "edit" ]; then
   exit 9
 fi
+if [ "${FAKE_OPENCLAW_FAIL_AGENTS_LIST:-0}" -eq 1 ] && [ "${1:-}" = "agents" ] && [ "${2:-}" = "list" ]; then
+  exit 9
+fi
 if [ "${FAKE_OPENCLAW_FAIL_ENABLE_AFTER_COMMIT:-0}" -eq 1 ] && [ "${1:-}" = "cron" ] && [ "${2:-}" = "enable" ]; then
   exit 9
 fi
@@ -127,7 +130,7 @@ print(json.dumps({
         "message": last_value("--message"),
         "timeoutSeconds": 900,
         "lightContext": False,
-        "toolsAllow": last_value("--tools").replace(",", " ").split(),
+        "toolsAllow": None if "--clear-tools" in lines else last_value("--tools").replace(",", " ").split(),
     },
 }))
 PY
