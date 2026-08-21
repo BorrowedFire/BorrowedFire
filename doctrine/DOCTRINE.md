@@ -15,6 +15,12 @@ never widens the owner's existing authorization.
 Judgment stays with the current capable harness; bounded volume work defaults to a configured
 local tier when one is available. Never hardcode private endpoints, caps, or provider policy.
 
+When `bf-route` is installed and the brain defines local tiers, use `bf-route decide` for bounded
+work and `bf-route run` only within the owner's existing edit authorization. Local runs return an
+isolated exact-commit patch by default; `--apply` and `--allow-paid` are separate explicit grants.
+The router's judgment result stays in the current paid harness, and its private fleet policy decides
+which providers are eligible.
+
 **Routing.**
 
 | Need | Skill |

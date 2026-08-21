@@ -23,15 +23,141 @@ check "claude: closeout linked"        test -L "$HOME/.claude/skills/session-clo
 check "codex: closeout linked"         test -L "$HOME/.codex/skills/session-closeout"
 check "qwen: maintainer linked"        test -L "$HOME/.qwen/skills/maintainer"
 check "openclaw: digest linked"        test -L "$SB/openclaw-ws/skills/digest"
+check "controller: bf-route linked"   test -L "$HOME/.local/bin/bf-route"
+check "controller: route manifest"    grep -q '^bf-route link$' "$HOME/.local/share/borrowedfire/tools.manifest"
 check "claude: manifest written"       grep -q '^remember link$' "$HOME/.claude/skills/.borrowedfire-manifest"
 check "claude: doctrine block present" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md"
 check "openclaw: doctrine in AGENTS.md" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$SB/openclaw-ws/AGENTS.md"
 check "manifest has 15 entries"        test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 15
 
+# controller tool falls back to a managed copy when the filesystem rejects symlinks
+FALLBACK_HOME="$SB/no-symlink-home"
+FAKEBIN="$SB/no-symlink-bin"
+REAL_LN=$(command -v ln)
+mkdir -p "$FALLBACK_HOME/.codex" "$FAKEBIN"
+{
+  echo '#!/bin/sh'
+  # shellcheck disable=SC2016 # $1 belongs to the generated fake-ln script.
+  echo 'case "$1" in -s|-sfn) exit 1 ;; esac'
+  printf 'exec %q "$@"\n' "$REAL_LN"
+} > "$FAKEBIN/ln"
+chmod 0755 "$FAKEBIN/ln"
+PATH="$FAKEBIN:$PATH" HOME="$FALLBACK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+check "controller fallback: copied"    bash -c "test -f '$FALLBACK_HOME/.local/bin/bf-route' && ! test -L '$FALLBACK_HOME/.local/bin/bf-route'"
+check "controller fallback: executable" test -x "$FALLBACK_HOME/.local/bin/bf-route"
+check "controller fallback: manifested" grep -q '^bf-route copy$' "$FALLBACK_HOME/.local/share/borrowedfire/tools.manifest"
+check "controller fallback: policy copied" test -f "$FALLBACK_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
+FALLBACK_REPO="$SB/fallback-repo"
+git init -q "$FALLBACK_REPO"
+echo test > "$FALLBACK_REPO/README.md"
+git -C "$FALLBACK_REPO" add README.md
+git -C "$FALLBACK_REPO" -c user.name=test -c user.email=test@example.invalid commit -qm baseline
+check "controller fallback: router executes" env HOME="$FALLBACK_HOME" \
+  "$FALLBACK_HOME/.local/bin/bf-route" decide --repo "$FALLBACK_REPO" --task "Update docs"
+HOME="$FALLBACK_HOME" "$SRC/install.sh" --uninstall >/dev/null 2>&1
+check "controller fallback: removable" test ! -e "$FALLBACK_HOME/.local/bin/bf-route"
+check "controller fallback: policy removable" test ! -e "$FALLBACK_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
+
+# missing files from a still-manifested copied install are repaired
+REPAIR_COPY_HOME="$SB/repair-copy-home"
+mkdir -p "$REPAIR_COPY_HOME/.codex"
+PATH="$FAKEBIN:$PATH" HOME="$REPAIR_COPY_HOME" "$SRC/install.sh" >/dev/null 2>&1
+rm "$REPAIR_COPY_HOME/.local/bin/bf-route"
+rm "$REPAIR_COPY_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
+PATH="$FAKEBIN:$PATH" HOME="$REPAIR_COPY_HOME" "$SRC/install.sh" >/dev/null 2>&1
+check "controller fallback: missing tool repaired" test -x "$REPAIR_COPY_HOME/.local/bin/bf-route"
+check "controller fallback: missing policy repaired" test -f "$REPAIR_COPY_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
+check "controller fallback: repaired copy remains owned" grep -q '^bf-route copy$' "$REPAIR_COPY_HOME/.local/share/borrowedfire/tools.manifest"
+
+# de-owning a user-modified copied executable removes only unchanged packaged policy
+PATH="$FAKEBIN:$PATH" HOME="$FALLBACK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+echo '# user modification' >> "$FALLBACK_HOME/.local/bin/bf-route"
+PATH="$FAKEBIN:$PATH" HOME="$FALLBACK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+check "controller fallback: modified tool preserved" grep -q 'user modification' "$FALLBACK_HOME/.local/bin/bf-route"
+check "controller fallback: unchanged policy removed on de-own" test ! -e "$FALLBACK_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
+check "controller fallback: modified tool de-owned" bash -c "! grep -q '^bf-route ' '$FALLBACK_HOME/.local/share/borrowedfire/tools.manifest'"
+
+# uninstall preserves a user-modified copied executable but removes unchanged managed policy
+UNINSTALL_COPY_HOME="$SB/uninstall-copy-home"
+mkdir -p "$UNINSTALL_COPY_HOME/.codex"
+PATH="$FAKEBIN:$PATH" HOME="$UNINSTALL_COPY_HOME" "$SRC/install.sh" >/dev/null 2>&1
+echo '# user modification' >> "$UNINSTALL_COPY_HOME/.local/bin/bf-route"
+HOME="$UNINSTALL_COPY_HOME" "$SRC/install.sh" --uninstall >/dev/null 2>&1
+check "controller uninstall: modified tool preserved" grep -q 'user modification' "$UNINSTALL_COPY_HOME/.local/bin/bf-route"
+check "controller uninstall: unchanged policy removed" test ! -e "$UNINSTALL_COPY_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
+check "controller uninstall: modified tool de-owned" bash -c "! grep -q '^bf-route ' '$UNINSTALL_COPY_HOME/.local/share/borrowedfire/tools.manifest'"
+
+# copied controller updates never follow a replacement symlink
+TOOL_SYMLINK_HOME="$SB/tool-symlink-home"
+TOOL_SYMLINK_EXTERNAL="$SB/tool-symlink-external"
+mkdir -p "$TOOL_SYMLINK_HOME/.codex"
+PATH="$FAKEBIN:$PATH" HOME="$TOOL_SYMLINK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+cp "$TOOL_SYMLINK_HOME/.local/bin/bf-route" "$TOOL_SYMLINK_EXTERNAL"
+cp "$TOOL_SYMLINK_EXTERNAL" "$TOOL_SYMLINK_EXTERNAL.before"
+rm "$TOOL_SYMLINK_HOME/.local/bin/bf-route"
+"$REAL_LN" -s "$TOOL_SYMLINK_EXTERNAL" "$TOOL_SYMLINK_HOME/.local/bin/bf-route"
+PATH="$FAKEBIN:$PATH" HOME="$TOOL_SYMLINK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+check "controller fallback: replacement tool symlink preserved" test -L "$TOOL_SYMLINK_HOME/.local/bin/bf-route"
+check "controller fallback: replacement tool symlink target untouched" cmp -s "$TOOL_SYMLINK_EXTERNAL" "$TOOL_SYMLINK_EXTERNAL.before"
+check "controller fallback: replacement tool symlink de-owned" bash -c "! grep -q '^bf-route ' '$TOOL_SYMLINK_HOME/.local/share/borrowedfire/tools.manifest'"
+
+# packaged policy updates never follow a replacement symlink
+POLICY_SYMLINK_HOME="$SB/policy-symlink-home"
+POLICY_SYMLINK_EXTERNAL="$SB/policy-symlink-external"
+POLICY_SYMLINK_TARGET="$POLICY_SYMLINK_HOME/.local/share/borrowedfire/tool-data/bf-route/denylist.md"
+mkdir -p "$POLICY_SYMLINK_HOME/.codex"
+PATH="$FAKEBIN:$PATH" HOME="$POLICY_SYMLINK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+cp "$POLICY_SYMLINK_TARGET" "$POLICY_SYMLINK_EXTERNAL"
+cp "$POLICY_SYMLINK_EXTERNAL" "$POLICY_SYMLINK_EXTERNAL.before"
+rm "$POLICY_SYMLINK_TARGET"
+"$REAL_LN" -s "$POLICY_SYMLINK_EXTERNAL" "$POLICY_SYMLINK_TARGET"
+PATH="$FAKEBIN:$PATH" HOME="$POLICY_SYMLINK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+check "controller fallback: replacement policy symlink preserved" test -L "$POLICY_SYMLINK_TARGET"
+check "controller fallback: replacement policy symlink target untouched" cmp -s "$POLICY_SYMLINK_EXTERNAL" "$POLICY_SYMLINK_EXTERNAL.before"
+check "controller fallback: replacement policy symlink de-owned" bash -c "! grep -q '^bf-route ' '$POLICY_SYMLINK_HOME/.local/share/borrowedfire/tools.manifest'"
+
+# controller tool install never follows symlinked managed parent directories
+PARENT_SYMLINK_HOME="$SB/parent-symlink-home"
+PARENT_SYMLINK_EXTERNAL="$SB/parent-symlink-external"
+PARENT_SYMLINK_PATH="$PARENT_SYMLINK_HOME/.local/share/borrowedfire/tool-data/bf-route"
+mkdir -p "$PARENT_SYMLINK_HOME/.codex" \
+  "$(dirname "$PARENT_SYMLINK_PATH")" \
+  "$PARENT_SYMLINK_EXTERNAL"
+printf '%s\n' "user-owned policy" > "$PARENT_SYMLINK_EXTERNAL/denylist.md"
+cp "$PARENT_SYMLINK_EXTERNAL/denylist.md" "$PARENT_SYMLINK_EXTERNAL/denylist.md.before"
+"$REAL_LN" -s "$PARENT_SYMLINK_EXTERNAL" "$PARENT_SYMLINK_PATH"
+OUT="$(PATH="$FAKEBIN:$PATH" HOME="$PARENT_SYMLINK_HOME" "$SRC/install.sh" 2>&1)"
+check "controller parent guard: symlink preserved" test -L "$PARENT_SYMLINK_PATH"
+check "controller parent guard: external target untouched" \
+  cmp -s "$PARENT_SYMLINK_EXTERNAL/denylist.md" "$PARENT_SYMLINK_EXTERNAL/denylist.md.before"
+check "controller parent guard: tool install skipped" test ! -e "$PARENT_SYMLINK_HOME/.local/bin/bf-route"
+check "controller parent guard: skip reported" grep -q 'SKIP.*controller tool parent is a symlink' <<<"$OUT"
+
+# installer manifests are never read or written through symlinks
+MANIFEST_SYMLINK_HOME="$SB/manifest-symlink-home"
+MANIFEST_SYMLINK_EXTERNAL="$SB/manifest-symlink-external"
+mkdir -p "$MANIFEST_SYMLINK_HOME/.codex/skills" "$MANIFEST_SYMLINK_HOME/.local/share/borrowedfire"
+printf '%s\n' "user-owned manifest" > "$MANIFEST_SYMLINK_EXTERNAL"
+cp "$MANIFEST_SYMLINK_EXTERNAL" "$MANIFEST_SYMLINK_EXTERNAL.before"
+"$REAL_LN" -s "$MANIFEST_SYMLINK_EXTERNAL" "$MANIFEST_SYMLINK_HOME/.local/share/borrowedfire/tools.manifest"
+"$REAL_LN" -s "$MANIFEST_SYMLINK_EXTERNAL" "$MANIFEST_SYMLINK_HOME/.codex/skills/.borrowedfire-manifest"
+HOME="$MANIFEST_SYMLINK_HOME" "$SRC/install.sh" >/dev/null 2>&1
+check "manifest guard: controller manifest symlink preserved" test -L "$MANIFEST_SYMLINK_HOME/.local/share/borrowedfire/tools.manifest"
+check "manifest guard: skill manifest symlink preserved" test -L "$MANIFEST_SYMLINK_HOME/.codex/skills/.borrowedfire-manifest"
+check "manifest guard: external target untouched" cmp -s "$MANIFEST_SYMLINK_EXTERNAL" "$MANIFEST_SYMLINK_EXTERNAL.before"
+check "manifest guard: controller install skipped" test ! -e "$MANIFEST_SYMLINK_HOME/.local/bin/bf-route"
+check "manifest guard: skill install skipped" test ! -e "$MANIFEST_SYMLINK_HOME/.codex/skills/land"
+
 # --- 2. idempotence: re-run, doctrine block appears exactly once ---
 "$SRC/install.sh" --openclaw-workspace "$SB/openclaw-ws" >/dev/null 2>&1
 check "doctrine idempotent (1 block)"  test "$(grep -c 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md")" -eq 1
 check "still 15 manifest entries"      test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 15
+
+# controller tool remains managed if the Borrowed Fire checkout moves
+rm "$HOME/.local/bin/bf-route"
+ln -s "$SB/moved-checkout/tools/bf-route" "$HOME/.local/bin/bf-route"
+"$SRC/install.sh" >/dev/null 2>&1
+check "controller: moved link repointed" test "$(readlink "$HOME/.local/bin/bf-route")" = "$SRC/tools/bf-route"
 
 # --- 3. legacy unowned dir warns, --adopt retires it ---
 mkdir -p "$HOME/.codex/skills/takeoff"; echo x > "$HOME/.codex/skills/takeoff/SKILL.md"
@@ -74,6 +200,12 @@ mkdir -p "$HOME/prometheus/.git"
 "$SRC/install.sh" >/dev/null 2>&1
 check "brain pointer auto-written"     grep -q "$HOME/prometheus" "$HOME/.config/borrowedfire/brain"
 
+rm -f "$HOME/.config/borrowedfire/brain"
+mkdir -p "$SB/relative-brain/.git"
+(cd "$SB" && "$SRC/install.sh" --brain relative-brain >/dev/null 2>&1)
+RELATIVE_BRAIN=$(cd "$SB/relative-brain" && pwd -P)
+check "relative brain pointer normalized" grep -qx "$RELATIVE_BRAIN" "$HOME/.config/borrowedfire/brain"
+
 # --- 8. uninstall: removes owned, leaves unowned, strips doctrine ---
 mkdir -p "$HOME/.claude/skills/my-own-skill"; echo mine > "$HOME/.claude/skills/my-own-skill/SKILL.md"
 "$SRC/install.sh" --uninstall >/dev/null 2>&1
@@ -81,6 +213,16 @@ check "uninstall removes owned"        test ! -e "$HOME/.claude/skills/remember"
 check "uninstall leaves unowned"       test -d "$HOME/.claude/skills/my-own-skill"
 check "uninstall strips doctrine"      bash -c "! grep -q 'BORROWEDFIRE DOCTRINE' '$HOME/.claude/CLAUDE.md'"
 check "uninstall removes manifest"     test ! -f "$HOME/.claude/skills/.borrowedfire-manifest"
+check "uninstall removes route tool"   test ! -e "$HOME/.local/bin/bf-route"
+
+# controller cleanup still works after the last harness has been removed
+NOHARNESS_HOME="$SB/no-harness-home"
+mkdir -p "$NOHARNESS_HOME/.codex"
+HOME="$NOHARNESS_HOME" "$SRC/install.sh" >/dev/null 2>&1
+rm -rf "$NOHARNESS_HOME/.codex"
+HOME="$NOHARNESS_HOME" "$SRC/install.sh" --uninstall >/dev/null 2>&1
+check "uninstall without harness removes route tool" test ! -e "$NOHARNESS_HOME/.local/bin/bf-route"
+check "uninstall without harness clears route manifest" bash -c "! grep -q '^bf-route ' '$NOHARNESS_HOME/.local/share/borrowedfire/tools.manifest' 2>/dev/null"
 
 # --- 8b. --copy converts an existing linked install (Codex P2 #3) ---
 mkdir -p "$HOME/.codex"

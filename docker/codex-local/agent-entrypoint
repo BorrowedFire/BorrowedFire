@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+: "${BF_MODEL:?missing model}"
+: "${BF_ENDPOINT:?missing endpoint}"
+: "${BF_TIER:?missing tier}"
+: "${BF_MODE:?missing mode}"
+: "${BF_BASELINE:?missing baseline commit}"
+: "${BF_FINAL_NAME:?missing final artifact name}"
+: "${BF_PATCH_NAME:?missing patch artifact name}"
+
+mkdir -p "$HOME"
+git config --global --add safe.directory /workspace
+{
+  echo "You are a bounded Borrowed Fire local agent operating in an isolated repository snapshot."
+  echo "Work only inside /workspace. Never commit, deploy, release, access credentials, or contact GitHub."
+  echo "Follow the repository instructions. Make the requested edits when this is a code task."
+  echo "Run proportionate local checks available in the snapshot. Report what changed and what remains."
+  echo
+  cat /input/task
+} > /tmp/prompt
+
+provider="model_providers.${BF_TIER}={name=\"GB10 local\",base_url=\"${BF_ENDPOINT}\",wire_api=\"responses\",requires_openai_auth=false}"
+
+codex exec \
+  --ignore-user-config \
+  --ephemeral \
+  --dangerously-bypass-approvals-and-sandbox \
+  --disable plugins \
+  --disable apps \
+  --disable browser_use \
+  --disable memories \
+  --disable multi_agent \
+  -m "$BF_MODEL" \
+  -c "model_provider=\"${BF_TIER}\"" \
+  -c model_reasoning_effort=low \
+  -c "$provider" \
+  -C /workspace \
+  -o "/result/$BF_FINAL_NAME" \
+  - < /tmp/prompt
+
+if [[ "$BF_MODE" == code ]]; then
+  git add -N .
+  git diff --check "$BF_BASELINE"
+  git diff --binary "$BF_BASELINE" > "/result/$BF_PATCH_NAME"
+else
+  : > "/result/$BF_PATCH_NAME"
+fi

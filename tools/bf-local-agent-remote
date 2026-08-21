@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+workspace=${1:?missing workspace}
+repo_slug=${2:?missing repository slug}
+commit_sha=${3:?missing commit SHA}
+endpoint=${4:?missing model endpoint}
+model=${5:?missing model name}
+tier=${6:?missing tier}
+mode=${7:?missing mode}
+task_b64=${8:?missing encoded task}
+result_nonce=${9:?missing result nonce}
+task_timeout=${10:?missing task timeout}
+
+[[ "$repo_slug" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Invalid repository slug" >&2; exit 64; }
+[[ -d "$workspace" && ! -L "$workspace" ]] || {
+  echo "Refusing a missing or linked worker workspace" >&2
+  exit 64
+}
+home_real=$(cd "$HOME" && pwd -P)
+workspace=$(cd "$workspace" && pwd -P)
+case "$workspace" in
+  "$home_real/.cache/borrowedfire-route/$repo_slug/"*) ;;
+  *) echo "Refusing workspace outside the managed route cache: $workspace" >&2; exit 64 ;;
+esac
+[[ "$commit_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid commit SHA" >&2; exit 64; }
+[[ "$endpoint" =~ ^http://[A-Za-z0-9._-]+:([0-9]{1,5})/v1$ ]] || {
+  echo "Invalid endpoint" >&2
+  exit 64
+}
+endpoint_port=${BASH_REMATCH[1]}
+(( endpoint_port >= 1 && endpoint_port <= 65535 )) || { echo "Invalid endpoint port" >&2; exit 64; }
+[[ "$model" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "Invalid model" >&2; exit 64; }
+[[ "$tier" == local-volume || "$tier" == local-quality ]] || { echo "Invalid local tier" >&2; exit 64; }
+[[ "$mode" == code || "$mode" == advice ]] || { echo "Invalid mode" >&2; exit 64; }
+[[ "$result_nonce" =~ ^[0-9a-f]{32}$ ]] || { echo "Invalid result nonce" >&2; exit 64; }
+[[ "$task_timeout" =~ ^[0-9]+$ && "$task_timeout" -ge 30 && "$task_timeout" -le 7200 ]] || {
+  echo "Invalid task timeout" >&2
+  exit 64
+}
+
+state_root="$HOME/.local/state/borrowedfire-route"
+state_dir="$state_root/$repo_slug"
+lock_file="$state_root/.agent.lockfile"
+timestamp=$(date -u +%Y%m%dT%H%M%SZ)
+run_id="bf-agent-${repo_slug:0:24}-${commit_sha:0:12}-$$"
+container="$run_id"
+run_dir="$state_dir/$timestamp-$commit_sha-$tier-$run_id"
+report="$run_dir/agent.log"
+untrusted_dir="$run_dir/untrusted"
+artifact_dir="$run_dir/artifacts"
+raw_patch="$untrusted_dir/changes.patch"
+raw_final="$untrusted_dir/final.txt"
+patch="$artifact_dir/changes.patch"
+final="$artifact_dir/final.txt"
+result=FAIL
+task_file=
+model_container=
+agent_network=
+model_network_connected=0
+
+mkdir -p "$run_dir" "$untrusted_dir"
+exec 9>"$lock_file"
+if ! flock -n 9; then
+  echo "The GB10 is already running another local agent job." >&2
+  exit 75
+fi
+
+cleanup() {
+  exit_code=$?
+  trap - EXIT
+  [[ $exit_code -eq 0 ]] && result=PASS
+  echo "RESULT=$result"
+  echo "REPORT_REMOTE=$report"
+  [[ -s "$patch" ]] && echo "BF_RESULT_${result_nonce}_PATCH=$patch"
+  [[ -f "$final" ]] && echo "BF_RESULT_${result_nonce}_FINAL=$final"
+  docker rm -f "$container" >/dev/null 2>&1 || true
+  if [[ $model_network_connected -eq 1 ]]; then
+    docker network disconnect "$agent_network" "$model_container" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$task_file" ]]; then
+    rm -f "$task_file" || true
+  fi
+  rm -rf "$workspace" || true
+  exit "$exit_code"
+}
+trap cleanup EXIT
+exec > >(tee -a "$report") 2>&1
+
+seal_artifact() {
+  python3 - "$1" "$2" <<'PY'
+import os
+import stat
+import sys
+
+source, destination = sys.argv[1:]
+source_fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW)
+try:
+    source_stat = os.fstat(source_fd)
+    if not stat.S_ISREG(source_stat.st_mode):
+        raise RuntimeError("artifact source is not a regular file")
+    if source_stat.st_uid != os.getuid() or source_stat.st_nlink != 1:
+        raise RuntimeError("artifact source has unsafe ownership or links")
+    destination_fd = os.open(
+        destination,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+        0o600,
+    )
+    try:
+        while chunk := os.read(source_fd, 1024 * 1024):
+            remaining = memoryview(chunk)
+            while remaining:
+                remaining = remaining[os.write(destination_fd, remaining):]
+    finally:
+        os.close(destination_fd)
+finally:
+    os.close(source_fd)
+PY
+}
+
+printf '%s' "$task_b64" | base64 --decode > "$run_dir/task"
+task_file="$run_dir/task"
+
+port=$endpoint_port
+mapfile -t model_containers < <(docker ps --filter "publish=$port" --format '{{.Names}}')
+[[ ${#model_containers[@]} -eq 1 ]] || {
+  echo "Expected exactly one running model container published on port $port" >&2
+  exit 69
+}
+model_container=${model_containers[0]}
+[[ "$model_container" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || {
+  echo "Model container has an unsafe name" >&2
+  exit 69
+}
+container_port=$(docker inspect "$model_container" --format '{{json .NetworkSettings.Ports}}' | python3 -c '
+import json, sys
+host_port = sys.argv[1]
+matches = []
+for container_port, bindings in (json.load(sys.stdin) or {}).items():
+    if any(binding.get("HostPort") == host_port for binding in (bindings or [])):
+        matches.append(container_port.split("/", 1)[0])
+if len(matches) != 1:
+    raise SystemExit(1)
+print(matches[0])
+' "$port") || { echo "Could not resolve the model container port" >&2; exit 69; }
+[[ "$container_port" =~ ^[0-9]+$ ]] || { echo "Invalid model container port" >&2; exit 69; }
+agent_network=borrowedfire-local-agents
+if ! docker network inspect "$agent_network" >/dev/null 2>&1; then
+  docker network create \
+    --internal \
+    --label borrowedfire.managed=local-agent \
+    "$agent_network" >/dev/null
+fi
+network_internal=$(docker network inspect "$agent_network" --format '{{.Internal}}')
+network_owner=$(docker network inspect "$agent_network" --format '{{index .Labels "borrowedfire.managed"}}')
+[[ "$network_internal" == true && "$network_owner" == local-agent ]] || {
+  echo "Refusing unmanaged or non-internal Docker network: $agent_network" >&2
+  exit 69
+}
+if docker inspect "$model_container" --format '{{json .NetworkSettings.Networks}}' | grep -q "\"$agent_network\""; then
+  internal_model_host=$model_container
+else
+  docker network connect --alias "model-$port" "$agent_network" "$model_container"
+  model_network_connected=1
+  internal_model_host="model-$port"
+fi
+internal_endpoint="http://$internal_model_host:$container_port/v1"
+if [[ "$model" == __auto__ ]]; then
+  model=$(docker run --rm \
+    --pull=never \
+    --network "$agent_network" \
+    --entrypoint node \
+    borrowedfire/codex-local:0.145.0 \
+    - "$internal_endpoint/models" <<'JS'
+const url = process.argv[2];
+const response = await fetch(url, {signal: AbortSignal.timeout(10000)});
+if (!response.ok) process.exit(1);
+const payload = await response.json();
+const models = Array.isArray(payload.data)
+  ? payload.data.map(item => item && item.id).filter(id => typeof id === "string")
+  : [];
+if (models.length !== 1 || !/^[A-Za-z0-9._/-]+$/.test(models[0])) process.exit(1);
+process.stdout.write(models[0]);
+JS
+  ) || { echo "Could not discover a unique model through the isolated worker network" >&2; exit 69; }
+fi
+
+git -C "$workspace" init -q
+git -C "$workspace" config user.name "Borrowed Fire Local Agent"
+git -C "$workspace" config user.email "local-agent@invalid"
+git -C "$workspace" add -f -A
+git -C "$workspace" commit --allow-empty -qm baseline
+baseline=$(git -C "$workspace" rev-parse HEAD)
+
+echo "BORROWED_FIRE_LOCAL_AGENT"
+echo "REPOSITORY=$repo_slug"
+echo "COMMIT_SHA=$commit_sha"
+echo "TIER=$tier"
+echo "MODEL=$model"
+echo "CLAUDE_ELIGIBLE=no"
+echo "STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+timeout --signal=TERM --kill-after=30s "${task_timeout}s" docker run --rm \
+  --pull=never \
+  --name "$container" \
+  --network "$agent_network" \
+  --user "$(id -u):$(id -g)" \
+  --cpus 4 \
+  --memory 6g \
+  --pids-limit 512 \
+  --read-only \
+  --tmpfs /tmp:rw,nosuid,size=512m \
+  --tmpfs /home/agent:rw,nosuid,size=128m,mode=1777 \
+  --env CI=true \
+  --env HOME=/home/agent \
+  --env "GIT_COMMIT=$commit_sha" \
+  --env "BF_MODEL=$model" \
+  --env "BF_ENDPOINT=$internal_endpoint" \
+  --env "BF_TIER=$tier" \
+  --env "BF_MODE=$mode" \
+  --env "BF_BASELINE=$baseline" \
+  --env "BF_FINAL_NAME=$(basename "$raw_final")" \
+  --env "BF_PATCH_NAME=$(basename "$raw_patch")" \
+  --volume "$workspace:/workspace:$([[ "$mode" == code ]] && echo rw || echo ro)" \
+  --volume "$task_file:/input/task:ro" \
+  --volume "$untrusted_dir:/result" \
+  --workdir /workspace \
+  borrowedfire/codex-local:0.145.0
+
+[[ ! -e "$artifact_dir" && ! -L "$artifact_dir" ]] || {
+  echo "The local agent created an unsafe artifact boundary." >&2
+  exit 70
+}
+mkdir "$artifact_dir"
+if [[ -e "$raw_final" || -L "$raw_final" ]]; then
+  seal_artifact "$raw_final" "$final"
+fi
+if [[ -e "$raw_patch" || -L "$raw_patch" ]]; then
+  seal_artifact "$raw_patch" "$patch"
+fi
+
+if [[ "$mode" == code && ! -s "$patch" ]]; then
+  echo "The local agent completed without producing a patch." >&2
+  exit 10
+fi
+
+echo "COMPLETED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"

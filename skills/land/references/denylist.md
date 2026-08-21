@@ -16,3 +16,46 @@ auto-merge permission.
 
 Per-repo additions come from the brain's project registry (`projects/<repo>.md` frontmatter,
 `denylist_extra:`) — read it before classifying a diff.
+
+## Router enforcement rules
+
+These machine-readable rules are consumed by `bf-route` before it applies a generated patch. Keep
+them aligned with the authoritative categories above; project `denylist_extra` entries are added at
+runtime from the matching Prometheus project page.
+
+<!-- bf-route-path: ^install\.sh$ -->
+<!-- bf-route-path: ^tools/(?:bf-route|bf-local-agent-remote|install-local-agent-worker)$ -->
+<!-- bf-route-path: ^docker/codex-local(?:/|$) -->
+<!-- bf-route-path: ^skills/land/references/denylist\.md$ -->
+<!-- bf-route-path: ^skills/maintainer/SKILL\.md$ -->
+<!-- bf-route-path: ^doctrine/DOCTRINE\.md$ -->
+<!-- bf-route-path: ^\.github/workflows/skill-lint\.yml$ -->
+<!-- bf-route-path: (?:^|/)migrations?(?:/|$) -->
+<!-- bf-route-path: (?:^|/)(?:schema|rls)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)(?:auth|authentication|authorization|sessions?|permissions?)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)(?:payments?|billing|iap)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)[^/]*(?-i:(?:[Aa]uth(?:entication|orization)?|[Ss]essions?|[Pp]ermissions?|[Pp]ayments?|[Bb]illing|[Ss]ubscriptions?|IAP|[Mm]igrations?|[Ss]chema|RLS|[Ss]ecrets?|[Cc]redentials?|[Ss]igning|(?:API|[Pp]rivate)Keys?|[Cc]onfig(?:uration)?|[Ee]nvironments?|[Dd]eploy(?:ment)?|[Rr]eleases?))(?=[A-Z0-9._/-]|$)[^/]*(?:/|$) -->
+<!-- bf-route-path: (?:^|/)(?:secrets?|keys?|signing|credentials?)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)\.env(?:[._-]|$) -->
+<!-- bf-route-path: (?:^|/)(?:config|configuration|environments?)(?:/|$) -->
+<!-- bf-route-path: (?:^|/)[^/]+\.(?:xcconfig|entitlements)$ -->
+<!-- bf-route-path: (?:^|/)scripts?/(?:backfill|seed|migrate|production)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)(?:deploy(?:ment)?|releases?)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)(?:build|archive|publish)(?:[._/-]|$) -->
+<!-- bf-route-path: (?:^|/)(?:scripts?|\.github/workflows)/[^/]*(?:build|archive|publish|release)[^/]*(?:/|$) -->
+<!-- bf-route-content: \b(?:production data|destructive|backfill|seed production)\b -->
+<!-- bf-route-content: \b(?:auth(?:entication|orization)?|payments?|billing|iap|secrets?|signing)\b -->
+<!-- bf-route-content: \b(?:deploy(?:ment)?|cut (?:a )?release)\b -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:archive|publish|release[- ]build|build (?:and )?(?:upload|ship|release))\b -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*(?:["'](?:build|release|archive|publish)["']\s*:|\b(?:build|release|archive|publish)\s*:) -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?build|(?:\./)?gradlew?\b[^\n]*(?:assemble|bundle)[A-Za-z0-9_-]*Release|xcodebuild\b[^\n]*\barchive|docker\s+build|swift\s+build\b[^\n]*\b(?:-c|--configuration)\s+release|cargo\s+build\b[^\n]*--release|dotnet\s+publish|flutter\s+build\s+(?:ipa|appbundle|apk)|eas\s+build)\b -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:git\s+push|gh\s+release\s+create|fastlane\b|vercel\s+(?:deploy|--prod)|netlify\s+deploy|wrangler\s+deploy|supabase\s+functions\s+deploy)\b -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*(?:api[_-]?key|(?:(?:access|auth|refresh|bearer|id)[_-]?)?token|client[_-]?secret|private[_-]?key|credentials?|password|passwd|secret)[A-Za-z0-9_.-]*\s*["']?\s*(?::=|=|:)\s*["']?[A-Za-z0-9/+_.=-]{6,} -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*BEGIN [A-Z0-9 ]*PRIVATE KEY -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?|DROP\s+(?:TABLE|DATABASE|SCHEMA))\b -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:ALTER|CREATE(?:\s+OR\s+REPLACE)?|DROP)\s+(?:TABLE|SCHEMA|POLICY|ROLE|FUNCTION|TRIGGER|TYPE|INDEX|VIEW|MATERIALIZED\s+VIEW|EXTENSION)\b -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:(?:ENABLE|DISABLE|FORCE|NO\s+FORCE)\s+ROW\s+LEVEL\s+SECURITY|GRANT\b|REVOKE\b) -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:INSERT\s+INTO|UPDATE\s+[A-Za-z0-9_."`]+\s+SET)\b -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*\.(?:insert|update|upsert|delete|destroy)\s*\( -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*(?<![A-Za-z0-9])(?:schema|rls|sessions?|permissions?)(?![A-Za-z0-9]) -->
+<!-- bf-route-content: ^\+(?!\+\+)[^\n]*\b(?:rm\s+-[A-Za-z]*r[A-Za-z]*f|git\s+(?:reset\s+--hard|clean\s+-[A-Za-z]*f))\b -->

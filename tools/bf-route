@@ -1,0 +1,1232 @@
+#!/usr/bin/env python3
+"""Deterministic Borrowed Fire model router.
+
+The router reads private endpoint configuration from Prometheus, sends bounded
+local work to the isolated GB10 agent worker, and uses Codex only when policy or
+local failure requires paid judgment. Claude is intentionally not a route.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import dataclasses
+import datetime as dt
+import fnmatch
+import fcntl
+import hashlib
+import io
+import json
+import os
+import pathlib
+import posixpath
+import re
+import secrets
+import shlex
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+from typing import Sequence
+
+
+EXIT_USAGE = 64
+EXIT_TEMPFAIL = 75
+EXIT_PAID_REQUIRED = 78
+
+JUDGMENT_PATTERNS = (
+    r"\b(?:code |pr )?review(?: session)?\b",
+    r"\bfinal (?:code )?review\b",
+    r"\bindependent review\b",
+    r"\bowner brief\b",
+    r"\barchitecture (?:decision|plan|review)\b",
+    r"\bsecurity (?:review|audit|decision)\b",
+    r"\bplan(?:ning)?\b",
+    r"\bdeploy(?:ment)?\b",
+    r"\brelease\b",
+)
+
+OWNER_GATED_PATTERNS = (
+    r"(?:^|/)migrations?(?:/|$)",
+    r"\bmigrations?\b",
+    r"\bschema\b",
+    r"\brls\b",
+    r"\bauth(?:entication|orization)?\b",
+    r"\b(?:auth|user|login) sessions?\b",
+    r"\bsession (?:token|cookie|management)\b",
+    r"\bpermissions?\b",
+    r"\bpayments?\b",
+    r"\bbilling\b",
+    r"\biap\b",
+    r"\bsecrets?\b",
+    r"\bcredentials?\b",
+    r"\b(?:api[ _-]?|private[ _-]?|signing[ _-]?)?keys?\b",
+    r"\b(?:(?:access|auth|refresh|bearer|id|session)[ _-]?)?tokens?\b",
+    r"\b(?:password|passwd)\b",
+    r"\bsigning\b",
+    r"\bconfig(?:uration)?\b",
+    r"\benvironments?\b",
+    r"\b(?:entitlements?|xcconfig)\b",
+    r"\bproduction data\b",
+    r"\bproduction (?:config(?:uration)?|environment)\b",
+    r"\bdestructive\b",
+    r"\b(?:delete|drop|truncate|wipe|purge|destroy)\b.*"
+    r"\b(?:data|databases?|tables?|rows?|records?|users?|accounts?)\b",
+    r"\b(?:build|compile|archive|publish)\s+(?:the\s+)?"
+    r"(?:app|application|project|package|binary|artifact|release)\b",
+    r"\b(?:create|cut|produce|generate|upload|ship)\s+(?:an?\s+)?"
+    r"(?:release[ _-]?)?build\b",
+    r"\bdeploy(?:ment)?\b",
+    r"\brelease\b",
+)
+
+QUALITY_PATTERNS = (
+    r"\bdebug\b",
+    r"\binvestigat(?:e|ion)\b",
+    r"\broot cause\b",
+    r"\brepo[- ]wide\b",
+    r"\brefactor\b",
+    r"\brace condition\b",
+    r"\bconcurrenc(?:y|t)\b",
+    r"\bflaky\b",
+    r"\bcomplex\b",
+    r"\badversarial\b",
+)
+
+
+@dataclasses.dataclass(frozen=True)
+class RouteDecision:
+    tier: str
+    reason: str
+    owner_gated: bool = False
+
+
+@dataclasses.dataclass(frozen=True)
+class Tier:
+    name: str
+    endpoint: str
+    model: str
+
+
+@dataclasses.dataclass(frozen=True)
+class PaidPolicy:
+    whitelist: tuple[str, ...]
+    escalation_cap: int
+
+
+def brain_dir() -> pathlib.Path:
+    explicit = os.environ.get("PROMETHEUS_DIR")
+    if explicit:
+        return pathlib.Path(explicit).expanduser().resolve()
+    pointer = pathlib.Path("~/.config/borrowedfire/brain").expanduser()
+    if pointer.is_file():
+        value = pointer.read_text(encoding="utf-8").strip()
+        if value:
+            configured = pathlib.Path(value).expanduser()
+            if not configured.is_absolute():
+                configured = pointer.parent / configured
+            return configured.resolve()
+    return pathlib.Path("~/prometheus").expanduser().resolve()
+
+
+def load_tiers(path: pathlib.Path | None = None) -> dict[str, Tier]:
+    fleet = path or brain_dir() / "config" / "fleet.md"
+    try:
+        text = fleet.read_text(encoding="utf-8")
+    except OSError as error:
+        raise RuntimeError(f"cannot read fleet configuration: {fleet}: {error}") from error
+
+    tiers: dict[str, Tier] = {}
+    pattern = re.compile(
+        r"^\|\s*(local-(?:volume|quality|large))\s*\|\s*`(https?://[^`]+)`\s*"
+        r"\(`([^`]+)`,\s*[^)]*\)\s*\|",
+        re.MULTILINE,
+    )
+    for match in pattern.finditer(text):
+        name, endpoint, model = match.groups()
+        if "<" in endpoint or "<" in model:
+            raise RuntimeError(f"fleet tier {name} still contains template placeholders")
+        endpoint_match = re.fullmatch(
+            r"http://[A-Za-z0-9._-]+:([0-9]{1,5})/v1",
+            endpoint,
+        )
+        if not endpoint_match or not 1 <= int(endpoint_match.group(1)) <= 65535:
+            raise RuntimeError(f"fleet tier {name} has an unsafe endpoint")
+        if not re.fullmatch(r"[A-Za-z0-9._/-]+", model):
+            raise RuntimeError(f"fleet tier {name} has an unsafe model name")
+        tiers[name] = Tier(name=name, endpoint=endpoint.rstrip("/"), model=model)
+    legacy_pattern = re.compile(
+        r"^\|\s*(?P<name>local-(?:volume|large))\s*\|\s*"
+        r"(?P<quote>`?)(?P<endpoint>http://[A-Za-z0-9._-]+:[0-9]{1,5}/v1)"
+        r"(?P=quote)\s*\|",
+        re.MULTILINE,
+    )
+    for match in legacy_pattern.finditer(text):
+        name, endpoint = match.group("name", "endpoint")
+        if name in tiers:
+            continue
+        port = int(endpoint.rsplit(":", 1)[1].split("/", 1)[0])
+        if not 1 <= port <= 65535:
+            raise RuntimeError(f"fleet tier {name} has an unsafe endpoint")
+        tiers[name] = Tier(name=name, endpoint=endpoint.rstrip("/"), model="__auto__")
+    if "local-quality" not in tiers and "local-large" in tiers:
+        legacy = tiers["local-large"]
+        tiers["local-quality"] = Tier(
+            name="local-quality",
+            endpoint=legacy.endpoint,
+            model=legacy.model,
+        )
+    if "local-quality" not in tiers and "local-volume" in tiers:
+        available = tiers["local-volume"]
+        tiers["local-quality"] = Tier(
+            name="local-quality",
+            endpoint=available.endpoint,
+            model=available.model,
+        )
+    if "local-volume" not in tiers and "local-quality" in tiers:
+        available = tiers["local-quality"]
+        tiers["local-volume"] = Tier(
+            name="local-volume",
+            endpoint=available.endpoint,
+            model=available.model,
+        )
+    missing = {"local-volume", "local-quality"} - tiers.keys()
+    if missing:
+        raise RuntimeError(f"fleet configuration is missing tiers: {', '.join(sorted(missing))}")
+    return tiers
+
+
+def load_worker_host(path: pathlib.Path | None = None) -> str:
+    fleet = path or brain_dir() / "config" / "fleet.md"
+    try:
+        text = fleet.read_text(encoding="utf-8")
+    except OSError as error:
+        raise RuntimeError(f"cannot read fleet configuration: {fleet}: {error}") from error
+    match = re.search(r"^- Controller SSH host:\s*`([^`]+)`\s*$", text, re.MULTILINE)
+    if not match or not re.fullmatch(r"[A-Za-z0-9._@-]+", match.group(1)):
+        raise RuntimeError(
+            "fleet configuration is missing a safe Controller SSH host; "
+            "legacy configurations must add '- Controller SSH host: `<ssh-host-or-alias>`'"
+        )
+    return match.group(1)
+
+
+def load_task_timeout(path: pathlib.Path | None = None) -> int:
+    fleet = path or brain_dir() / "config" / "fleet.md"
+    try:
+        text = fleet.read_text(encoding="utf-8")
+    except OSError as error:
+        raise RuntimeError(f"cannot read fleet configuration: {fleet}: {error}") from error
+    match = re.search(r"^- Local task timeout seconds:\s*`([^`]+)`\s*$", text, re.MULTILINE)
+    if not match:
+        return 900
+    if not match.group(1).isdigit():
+        raise RuntimeError("fleet configuration is missing a numeric Local task timeout seconds")
+    timeout = int(match.group(1))
+    if not 30 <= timeout <= 7200:
+        raise RuntimeError("Local task timeout seconds must be between 30 and 7200")
+    return timeout
+
+
+def load_transport_timeout(path: pathlib.Path | None = None) -> int:
+    fleet = path or brain_dir() / "config" / "fleet.md"
+    try:
+        text = fleet.read_text(encoding="utf-8")
+    except OSError as error:
+        raise RuntimeError(f"cannot read fleet configuration: {fleet}: {error}") from error
+    match = re.search(r"^- Local transport timeout seconds:\s*`([^`]+)`\s*$", text, re.MULTILINE)
+    if not match:
+        return 120
+    if not match.group(1).isdigit():
+        raise RuntimeError("fleet configuration is missing a numeric Local transport timeout seconds")
+    timeout = int(match.group(1))
+    if not 10 <= timeout <= 600:
+        raise RuntimeError("Local transport timeout seconds must be between 10 and 600")
+    return timeout
+
+
+def load_paid_policy(path: pathlib.Path | None = None) -> PaidPolicy:
+    fleet = path or brain_dir() / "config" / "fleet.md"
+    try:
+        text = fleet.read_text(encoding="utf-8")
+    except OSError as error:
+        raise RuntimeError(f"cannot read fleet configuration: {fleet}: {error}") from error
+    whitelist_match = re.search(r"^- Paid task whitelist:\s*(.+?)\s*$", text, re.MULTILINE)
+    if not whitelist_match:
+        raise RuntimeError("fleet configuration is missing the Paid task whitelist")
+    whitelist_text = whitelist_match.group(1).split(".", 1)[0]
+    whitelist = tuple(
+        item.strip().casefold() for item in whitelist_text.split(",") if item.strip()
+    )
+    if not whitelist or any(not re.fullmatch(r"[a-z][a-z-]*", item) for item in whitelist):
+        raise RuntimeError("fleet configuration has an unsafe Paid task whitelist")
+    cap_match = re.search(r"^- Escalation cap:\s*(.+?)\s*$", text, re.MULTILINE)
+    if not cap_match:
+        raise RuntimeError("fleet configuration is missing the Escalation cap")
+    cap_text = cap_match.group(1)
+    if cap_text.isdigit():
+        cap = int(cap_text)
+    elif "pending owner setting" in cap_text.casefold():
+        cap = 1
+    else:
+        raise RuntimeError("fleet configuration needs a numeric Escalation cap")
+    if not 0 <= cap <= 20:
+        raise RuntimeError("Escalation cap must be between 0 and 20")
+    return PaidPolicy(whitelist=whitelist, escalation_cap=cap)
+
+
+def validate_worker_host(value: str) -> str:
+    if not re.fullmatch(r"[A-Za-z0-9._@-]+", value):
+        raise RuntimeError("worker SSH host contains unsafe characters")
+    return value
+
+
+def matches_any(text: str, patterns: Sequence[str]) -> bool:
+    return any(re.search(pattern, text, re.IGNORECASE | re.MULTILINE) for pattern in patterns)
+
+
+def task_path_candidates(task: str) -> list[str]:
+    """Extract path-shaped task tokens for the authoritative path policy."""
+    candidates = []
+    for token in task.split():
+        candidate = token.strip("`'\"()[]{} ,:;").rstrip(".")
+        # A sensitive file can live at the repository root (for example,
+        # build.sh or App.entitlements), so a slash is not required. Ordinary
+        # prose without a path separator or filename suffix is intentionally
+        # ignored to avoid treating every task word as a path.
+        if "/" in candidate or "." in candidate:
+            candidates.append(candidate)
+    return candidates
+
+
+def normalize_declared_path(value: str, repo: pathlib.Path) -> str:
+    """Return a lexical repository-relative path when the declaration is in this repo."""
+    normalized = posixpath.normpath(value.replace("\\", "/"))
+    candidate = pathlib.PurePosixPath(normalized)
+    if candidate.is_absolute():
+        repository = pathlib.PurePosixPath(repo.resolve().as_posix())
+        try:
+            candidate = candidate.relative_to(repository)
+        except ValueError:
+            return candidate.as_posix()
+    return candidate.as_posix()
+
+
+def classify(
+    task: str,
+    files: Sequence[str] = (),
+    repo: pathlib.Path | None = None,
+) -> RouteDecision:
+    material = "\n".join((task, *files))
+    owner_gated = matches_any(material, OWNER_GATED_PATTERNS)
+    if repo is not None:
+        path_patterns, content_patterns = authoritative_patch_patterns(repo)
+        task_as_added_lines = "\n".join(f"+{line}" for line in task.splitlines())
+        declared_paths = [
+            normalize_declared_path(path, repo)
+            for path in (*files, *task_path_candidates(task))
+        ]
+        owner_gated = owner_gated or any(matches_any(path, path_patterns) for path in declared_paths)
+        owner_gated = owner_gated or matches_any(task_as_added_lines, content_patterns)
+    if owner_gated:
+        return RouteDecision("judgment", "owner-gated risk policy", owner_gated=True)
+    if matches_any(material, JUDGMENT_PATTERNS):
+        return RouteDecision("judgment", "paid judgment policy")
+    if matches_any(material, QUALITY_PATTERNS):
+        return RouteDecision("local-quality", "complexity policy")
+    return RouteDecision("local-volume", "bounded work default")
+
+
+def run_checked(command: Sequence[str], **kwargs) -> subprocess.CompletedProcess[str]:
+    # Never inherit the controller's stdin: when bf-route is driven by another script
+    # or agent with stdin piped, an inheriting child consumes that input.
+    kwargs.setdefault("stdin", subprocess.DEVNULL)
+    return subprocess.run(command, check=True, text=True, **kwargs)
+
+
+def git(repo: pathlib.Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args],
+        check=check,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+
+def repository_state(repo_value: str, ref: str) -> tuple[pathlib.Path, str]:
+    repo = pathlib.Path(repo_value).expanduser().resolve()
+    if not repo.is_dir():
+        raise RuntimeError(f"repository does not exist: {repo}")
+    top = pathlib.Path(git(repo, "rev-parse", "--show-toplevel").stdout.strip()).resolve()
+    commit = git(top, "rev-parse", "--verify", f"{ref}^{{commit}}").stdout.strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise RuntimeError(f"could not resolve a full commit for {ref}")
+    return top, commit
+
+
+def ensure_local_snapshot_supported(repo: pathlib.Path, commit: str) -> None:
+    tree = subprocess.run(
+        ["git", "-C", str(repo), "ls-tree", "-rz", "--full-tree", commit],
+        check=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).stdout
+    gitlinks = []
+    for record in tree.split(b"\0"):
+        if not record:
+            continue
+        metadata, raw_path = record.split(b"\t", 1)
+        _, object_type, _ = metadata.split(b" ", 2)
+        if object_type == b"commit":
+            gitlinks.append(os.fsdecode(raw_path))
+    if gitlinks:
+        paths = ", ".join(gitlinks)
+        raise RuntimeError(
+            "local routing does not support repositories with tracked submodules: "
+            f"{paths}"
+        )
+
+
+def safe_slug(repo: pathlib.Path) -> str:
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", repo.name).strip("-")
+    if not slug:
+        raise RuntimeError("repository name does not produce a safe worker slug")
+    return slug
+
+
+def state_root() -> pathlib.Path:
+    root = pathlib.Path("~/.local/state/borrowedfire-route").expanduser()
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def append_ledger(entry: dict[str, object]) -> None:
+    ledger = state_root() / "ledger.jsonl"
+    with ledger.open("a", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        handle.write(json.dumps(entry, sort_keys=True) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def paid_attempt_count(repo: pathlib.Path, commit: str, task_hash: str) -> int:
+    ledger = state_root() / "ledger.jsonl"
+    if not ledger.exists():
+        return 0
+    count = 0
+    try:
+        with ledger.open("r", encoding="utf-8") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
+            lines = handle.read().splitlines()
+        for line in lines:
+            entry = json.loads(line)
+            if not isinstance(entry, dict) or not isinstance(entry.get("attempts", []), list):
+                raise ValueError("invalid ledger entry shape")
+            if (
+                entry.get("repository") == str(repo)
+                and entry.get("commit") == commit
+                and entry.get("task_hash") == task_hash
+                and (
+                    entry.get("event") == "paid_attempt_started"
+                    or ("event" not in entry and "codex" in entry.get("attempts", []))
+                )
+            ):
+                count += 1
+    except (OSError, json.JSONDecodeError, AttributeError, TypeError, ValueError) as error:
+        raise RuntimeError(f"cannot safely read the paid-attempt ledger: {error}") from error
+    return count
+
+
+def paid_call_allowed(
+    repo: pathlib.Path,
+    commit: str,
+    task: str,
+    task_hash: str,
+    decision: RouteDecision,
+    reserve: bool = False,
+) -> tuple[bool, str]:
+    policy = load_paid_policy()
+    aliases = {
+        "review": r"\breviews?\b",
+        "plan": r"\bplan(?:s|ning)?\b",
+        "escalate": r"\bescalat(?:e|es|ed|ing|ion)\b",
+    }
+    whitelisted = any(
+        re.search(aliases.get(item, rf"\b{re.escape(item)}\b"), task, re.IGNORECASE)
+        for item in policy.whitelist
+    )
+    if not decision.owner_gated and not whitelisted:
+        return False, "task is not on the private paid-task whitelist"
+    if not reserve:
+        used = paid_attempt_count(repo, commit, task_hash)
+    else:
+        ledger = state_root() / "ledger.jsonl"
+        try:
+            with ledger.open("a+", encoding="utf-8") as handle:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                handle.seek(0)
+                used = 0
+                for line in handle.read().splitlines():
+                    entry = json.loads(line)
+                    if not isinstance(entry, dict) or not isinstance(entry.get("attempts", []), list):
+                        raise ValueError("invalid ledger entry shape")
+                    if (
+                        entry.get("repository") == str(repo)
+                        and entry.get("commit") == commit
+                        and entry.get("task_hash") == task_hash
+                        and (
+                            entry.get("event") == "paid_attempt_started"
+                            or ("event" not in entry and "codex" in entry.get("attempts", []))
+                        )
+                    ):
+                        used += 1
+                if used < policy.escalation_cap:
+                    handle.write(json.dumps({
+                        "event": "paid_attempt_started",
+                        "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+                        "repository": str(repo),
+                        "commit": commit,
+                        "task_hash": task_hash,
+                        "decision": decision.tier,
+                        "owner_gated": decision.owner_gated,
+                        "claude_eligible": False,
+                        "attempts": ["codex"],
+                    }, sort_keys=True) + "\n")
+                    handle.flush()
+                    os.fsync(handle.fileno())
+        except (OSError, json.JSONDecodeError, AttributeError, TypeError, ValueError) as error:
+            raise RuntimeError(f"cannot safely reserve a paid attempt: {error}") from error
+    if used >= policy.escalation_cap:
+        return False, f"paid escalation cap reached ({used}/{policy.escalation_cap})"
+    return True, f"paid policy permits attempt {used + 1}/{policy.escalation_cap}"
+
+
+def repository_slug(repo: pathlib.Path) -> str | None:
+    remote = git(repo, "remote", "get-url", "origin", check=False)
+    if remote.returncode != 0:
+        return None
+    value = remote.stdout.strip().split("#", 1)[0].split("?", 1)[0].rstrip("/")
+    match = re.fullmatch(r"[A-Za-z][A-Za-z0-9+.-]*://[^/\s]+/(.+)", value)
+    if not match:
+        match = re.fullmatch(r"(?:[^@/\s]+@)?[^:/\s]+:(.+)", value)
+    if match:
+        slug = match.group(1).rstrip("/")
+        if slug.endswith(".git"):
+            slug = slug[:-4]
+        if "/" in slug and not slug.startswith("/"):
+            return slug
+    return None
+
+
+def project_denylist_extras(repo: pathlib.Path) -> list[str]:
+    projects = brain_dir() / "projects"
+    if not projects.is_dir():
+        return []
+    wanted = repository_slug(repo)
+    exact_candidates: list[tuple[pathlib.Path, str]] = []
+    basename_candidates: list[tuple[pathlib.Path, str]] = []
+    for page in projects.glob("*.md"):
+        try:
+            text = page.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        repo_match = re.search(r"^repo:\s*([^\s]+)\s*$", text, re.MULTILINE)
+        if not repo_match:
+            continue
+        registered = repo_match.group(1).strip('"\'')
+        if wanted and registered.casefold() == wanted.casefold():
+            exact_candidates.append((page, text))
+        if registered.rsplit("/", 1)[-1].casefold() == repo.name.casefold():
+            basename_candidates.append((page, text))
+    candidates = exact_candidates if wanted else basename_candidates
+    if len(candidates) > 1:
+        identity = wanted or repo.name
+        raise RuntimeError(f"cannot uniquely resolve project policy for {identity}")
+    if not candidates:
+        return []
+    text = candidates[0][1]
+    inline = re.search(r"^denylist_extra:\s*\[([^]]*)\]\s*$", text, re.MULTILINE)
+    if inline:
+        return [item.strip().strip('"\'') for item in inline.group(1).split(",") if item.strip()]
+    block = re.search(r"^denylist_extra:\s*$((?:\n[ \t]+-[^\n]*)+)", text, re.MULTILINE)
+    if not block:
+        return []
+    return [
+        match.group(1).strip().strip('"\'')
+        for match in re.finditer(r"^[ \t]+-\s*(.+?)\s*$", block.group(1), re.MULTILINE)
+    ]
+
+
+def authoritative_patch_patterns(repo: pathlib.Path) -> tuple[list[str], list[str]]:
+    executable = pathlib.Path(__file__).expanduser().resolve()
+    checkout_root = executable.parents[1]
+    source_policy = (
+        checkout_root / "skills" / "land" / "references" / "denylist.md"
+    )
+    installed_policy = (
+        pathlib.Path("~/.local/share/borrowedfire/tool-data/bf-route/denylist.md")
+        .expanduser()
+    )
+    managed_copy = pathlib.Path("~/.local/bin/bf-route").expanduser().absolute()
+    if executable == managed_copy:
+        policy = installed_policy
+    elif (checkout_root / ".git").exists() and source_policy.is_file():
+        policy = source_policy
+    else:
+        policy = installed_policy
+    try:
+        text = policy.read_text(encoding="utf-8")
+    except OSError as error:
+        raise RuntimeError(f"cannot load authoritative denylist: {error}") from error
+    paths = re.findall(r"<!-- bf-route-path: (.+?) -->", text)
+    content = re.findall(r"<!-- bf-route-content: (.+?) -->", text)
+    if not paths or not content:
+        raise RuntimeError("authoritative denylist is missing router enforcement rules")
+    for extra in project_denylist_extras(repo):
+        escaped = re.escape(extra)
+        paths.append(fnmatch.translate(extra) if any(character in extra for character in "*?[") else escaped)
+        content.append(escaped)
+    return paths, content
+
+
+def ssh_base(worker: str) -> list[str]:
+    return [
+        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
+        "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2", worker,
+    ]
+
+
+def remote_home(worker: str, transport_timeout: int) -> str:
+    try:
+        process = subprocess.run(
+            [*ssh_base(worker), "printf '%s' \"$HOME\""],
+            check=False,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=transport_timeout,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError("timed out while determining the worker home") from error
+    home = process.stdout.strip()
+    if process.returncode or not re.fullmatch(r"/[A-Za-z0-9._/-]+", home):
+        raise RuntimeError(f"could not determine a safe home directory on worker {worker}")
+    return home.rstrip("/")
+
+
+def write_exact_tree_archive(
+    repo: pathlib.Path,
+    commit: str,
+    destination,
+) -> None:
+    """Write committed blobs and modes without applying export or checkout attributes."""
+    tree = subprocess.run(
+        ["git", "-C", str(repo), "ls-tree", "-rz", "--full-tree", commit],
+        check=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).stdout
+    cat = subprocess.Popen(
+        ["git", "-C", str(repo), "cat-file", "--batch"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    assert cat.stdin is not None
+    assert cat.stdout is not None
+    try:
+        with tarfile.open(
+            fileobj=destination,
+            mode="w|",
+            format=tarfile.PAX_FORMAT,
+            encoding="utf-8",
+            errors="surrogateescape",
+        ) as archive:
+            for record in tree.split(b"\0"):
+                if not record:
+                    continue
+                metadata, raw_path = record.split(b"\t", 1)
+                raw_mode, object_type, object_id = metadata.split(b" ", 2)
+                path = os.fsdecode(raw_path)
+                mode = int(raw_mode, 8)
+                info = tarfile.TarInfo(path)
+                info.uid = 0
+                info.gid = 0
+                info.uname = ""
+                info.gname = ""
+                info.mtime = 0
+                if object_type == b"commit":
+                    raise RuntimeError(
+                        f"local routing does not support submodule snapshot entry: {path}"
+                    )
+                if object_type != b"blob":
+                    raise RuntimeError(f"unsupported Git tree object type: {os.fsdecode(object_type)}")
+                cat.stdin.write(object_id + b"\n")
+                cat.stdin.flush()
+                header = cat.stdout.readline().rstrip(b"\n").split()
+                if len(header) != 3 or header[1] != b"blob":
+                    raise RuntimeError("could not read an exact blob from Git")
+                size = int(header[2])
+                content = cat.stdout.read(size)
+                terminator = cat.stdout.read(1)
+                if len(content) != size or terminator != b"\n":
+                    raise RuntimeError("Git returned a truncated blob")
+                if mode == 0o120000:
+                    info.type = tarfile.SYMTYPE
+                    info.mode = 0o777
+                    info.linkname = os.fsdecode(content)
+                    archive.addfile(info)
+                else:
+                    info.type = tarfile.REGTYPE
+                    info.mode = 0o755 if mode & 0o111 else 0o644
+                    info.size = size
+                    archive.addfile(info, io.BytesIO(content))
+        cat.stdin.close()
+        if cat.wait() != 0:
+            detail = (cat.stderr.read() if cat.stderr else b"").decode(errors="replace").strip()
+            raise RuntimeError(f"could not read exact Git tree: {detail}")
+    finally:
+        if cat.poll() is None:
+            cat.kill()
+            cat.wait()
+        for stream in (cat.stdin, cat.stdout, cat.stderr):
+            if stream is not None and not stream.closed:
+                stream.close()
+
+
+def stream_archive(
+    worker: str,
+    repo: pathlib.Path,
+    commit: str,
+    remote_workspace: str,
+    transport_timeout: int,
+) -> None:
+    def cleanup_remote_workspace(context: str) -> None:
+        try:
+            cleanup = subprocess.run(
+                [*ssh_base(worker), f"rm -rf {shlex.quote(remote_workspace)}"],
+                check=False,
+                stdin=subprocess.DEVNULL,
+                timeout=transport_timeout,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError(f"timed out while cleaning {context}") from error
+        if cleanup.returncode:
+            raise RuntimeError(f"failed to clean {context}")
+
+    with tempfile.TemporaryFile() as archive:
+        write_exact_tree_archive(repo, commit, archive)
+        archive.seek(0)
+        try:
+            mkdir = subprocess.run(
+                [*ssh_base(worker), f"mkdir -p {shlex.quote(remote_workspace)}"],
+                check=False,
+                stdin=subprocess.DEVNULL,
+                timeout=transport_timeout,
+            )
+        except subprocess.TimeoutExpired as error:
+            cleanup_remote_workspace("a timed-out workspace creation")
+            raise RuntimeError("timed out while creating the worker workspace") from error
+        if mkdir.returncode:
+            cleanup_remote_workspace("a failed workspace creation")
+            raise RuntimeError("could not create the managed GB10 workspace")
+        try:
+            extract = subprocess.run(
+                [*ssh_base(worker), f"tar -xf - -C {shlex.quote(remote_workspace)}"],
+                stdin=archive,
+                check=False,
+                timeout=transport_timeout,
+            )
+        except subprocess.TimeoutExpired as error:
+            cleanup_remote_workspace("a timed-out repository transfer")
+            raise RuntimeError("timed out while transferring the repository snapshot") from error
+        if extract.returncode:
+            cleanup_remote_workspace("a failed repository transfer")
+            raise RuntimeError("failed to transfer the exact repository snapshot to GB10")
+
+
+def copy_remote_artifact(
+    worker: str,
+    worker_home: str,
+    slug: str,
+    remote: str,
+    artifact_name: str,
+    destination: pathlib.Path,
+    transport_timeout: int,
+) -> None:
+    prefix = f"{worker_home}/.local/state/borrowedfire-route/{slug}/"
+    relative = remote.removeprefix(prefix)
+    parts = pathlib.PurePosixPath(relative).parts
+    if (
+        not remote.startswith(prefix)
+        or any(part in (".", "..") for part in parts)
+        or len(parts) != 3
+        or parts[1:] != ("artifacts", artifact_name)
+    ):
+        raise RuntimeError(f"worker returned an unsafe artifact path: {remote}")
+    try:
+        run_checked(
+            [
+                "scp", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
+                "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2",
+                f"{worker}:{remote}", str(destination),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=transport_timeout,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(f"timed out while retrieving {artifact_name}") from error
+
+
+def local_attempt(
+    worker: str,
+    repo: pathlib.Path,
+    commit: str,
+    task: str,
+    tier: Tier,
+    mode: str,
+    timeout_seconds: int,
+    transport_timeout: int,
+) -> tuple[int, pathlib.Path | None, pathlib.Path | None, str]:
+    timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_id = f"{timestamp}-{os.getpid()}-{tier.name}"
+    slug = safe_slug(repo)
+    worker_home = remote_home(worker, transport_timeout)
+    remote_workspace = f"{worker_home}/.cache/borrowedfire-route/{slug}/{commit}-{run_id}"
+    output_dir = state_root() / slug / run_id
+    output_dir.mkdir(parents=True, exist_ok=False)
+    controller_log = output_dir / "controller.log"
+    stream_archive(worker, repo, commit, remote_workspace, transport_timeout)
+
+    encoded = base64.b64encode(task.encode()).decode()
+    result_nonce = secrets.token_hex(16)
+    remote_arguments = [
+        remote_workspace,
+        slug,
+        commit,
+        tier.endpoint,
+        tier.model,
+        tier.name,
+        mode,
+        encoded,
+        result_nonce,
+        str(timeout_seconds),
+    ]
+    remote_command = "~/.local/bin/bf-local-agent-remote " + " ".join(
+        shlex.quote(argument) for argument in remote_arguments
+    )
+    command = [*ssh_base(worker), remote_command]
+    try:
+        process = subprocess.run(
+            command,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+            timeout=timeout_seconds + 90,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(f"local worker exceeded its {timeout_seconds}-second task timeout") from error
+    finally:
+        try:
+            subprocess.run(
+                [*ssh_base(worker), f"rm -rf {shlex.quote(remote_workspace)}"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=transport_timeout,
+            )
+        except subprocess.TimeoutExpired:
+            pass
+    controller_log.write_text(process.stdout, encoding="utf-8")
+    sys.stdout.write(process.stdout)
+
+    patch_remote = None
+    final_remote = None
+    patch_marker = f"BF_RESULT_{result_nonce}_PATCH="
+    final_marker = f"BF_RESULT_{result_nonce}_FINAL="
+    for line in process.stdout.splitlines():
+        if line.startswith(patch_marker):
+            patch_remote = line.partition("=")[2]
+        elif line.startswith(final_marker):
+            final_remote = line.partition("=")[2]
+
+    patch = output_dir / "changes.patch" if patch_remote else None
+    final = output_dir / "final.txt" if final_remote else None
+    if patch_remote and patch:
+        copy_remote_artifact(
+            worker, worker_home, slug, patch_remote, "changes.patch", patch, transport_timeout
+        )
+    if final_remote and final:
+        copy_remote_artifact(worker, worker_home, slug, final_remote, "final.txt", final, transport_timeout)
+
+    validate_attempt_artifacts(mode, process.returncode, patch, final)
+
+    return process.returncode, patch, final, run_id
+
+
+def validate_attempt_artifacts(
+    mode: str,
+    status: int,
+    patch: pathlib.Path | None,
+    final: pathlib.Path | None,
+) -> None:
+    if status != 0:
+        return
+    if not final or not final.is_file() or final.stat().st_size == 0:
+        raise RuntimeError("worker reported success without an authenticated final artifact")
+    if mode == "code" and (not patch or not patch.is_file() or patch.stat().st_size == 0):
+        raise RuntimeError("worker reported code success without an authenticated patch artifact")
+
+
+def checkout_is_clean_at(repo: pathlib.Path, commit: str) -> bool:
+    head = git(repo, "rev-parse", "HEAD").stdout.strip()
+    status = git(repo, "status", "--porcelain").stdout
+    return head == commit and not status
+
+
+def patch_paths(repo: pathlib.Path, patch: pathlib.Path) -> list[str]:
+    with tempfile.TemporaryDirectory(prefix="bf-route-index-") as directory:
+        index = pathlib.Path(directory) / "index"
+        environment = os.environ.copy()
+        environment["GIT_INDEX_FILE"] = str(index)
+        try:
+            run_checked(
+                ["git", "-C", str(repo), "read-tree", "HEAD"],
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            run_checked(
+                ["git", "-C", str(repo), "apply", "--cached", str(patch)],
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            process = subprocess.run(
+                [
+                    "git", "-C", str(repo), "diff", "--cached", "--name-status", "-z",
+                    "--find-renames=1%", "HEAD",
+                ],
+                env=environment,
+                check=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except subprocess.CalledProcessError as error:
+            detail = error.stderr or ""
+            message = (
+                detail.decode(errors="replace") if isinstance(detail, bytes) else detail
+            ).strip()
+            raise RuntimeError(f"cannot inspect generated patch: {message}") from error
+
+    fields = process.stdout.split(b"\0")
+    paths: list[str] = []
+    position = 0
+    while position < len(fields) and fields[position]:
+        status = fields[position].decode("ascii", errors="replace")
+        position += 1
+        path_count = 2 if status.startswith(("R", "C")) else 1
+        if position + path_count > len(fields):
+            raise RuntimeError("cannot inspect generated patch paths")
+        for field in fields[position:position + path_count]:
+            if not field:
+                raise RuntimeError("cannot inspect generated patch paths")
+            paths.append(field.decode("utf-8", errors="surrogateescape"))
+        position += path_count
+    return paths
+
+
+def validate_generated_patch(repo: pathlib.Path, patch: pathlib.Path) -> None:
+    paths = patch_paths(repo, patch)
+    path_patterns, content_patterns = authoritative_patch_patterns(repo)
+    risky_paths = [path for path in paths if matches_any(path, path_patterns)]
+    patch_text = patch.read_text(encoding="utf-8", errors="replace")
+    has_binary_content = bool(
+        re.search(r"^(?:GIT binary patch|Binary files .+ differ)$", patch_text, re.MULTILINE)
+    )
+    if risky_paths or has_binary_content or matches_any(patch_text, content_patterns):
+        if risky_paths:
+            detail = ", ".join(risky_paths)
+        elif has_binary_content:
+            detail = "binary content"
+        else:
+            detail = "sensitive content"
+        raise RuntimeError(
+            "refusing to apply an owner-gated generated patch "
+            f"({detail}); paid review and explicit owner action are required"
+        )
+
+
+def apply_patch(repo: pathlib.Path, commit: str, patch: pathlib.Path) -> None:
+    if not checkout_is_clean_at(repo, commit):
+        raise RuntimeError("refusing to apply: checkout is dirty or HEAD moved since routing began")
+    validate_generated_patch(repo, patch)
+    run_checked(["git", "-C", str(repo), "apply", "--check", str(patch)])
+    run_checked(["git", "-C", str(repo), "apply", str(patch)])
+
+
+def paid_runtime_preflight() -> None:
+    if not shutil.which("codex"):
+        raise RuntimeError("Codex CLI is not installed on this controller")
+
+
+def paid_attempt(
+    repo: pathlib.Path,
+    commit: str,
+    task: str,
+    mode: str,
+    timeout_seconds: int,
+) -> tuple[int, pathlib.Path | None, pathlib.Path | None, str]:
+    paid_runtime_preflight()
+    timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_id = f"{timestamp}-{os.getpid()}-codex"
+    slug = safe_slug(repo)
+    output_dir = state_root() / slug / run_id
+    output_dir.mkdir(parents=True, exist_ok=False)
+    final = output_dir / "final.txt"
+    patch = output_dir / "changes.patch"
+    worktree_root = state_root() / "worktrees"
+    worktree_root.mkdir(parents=True, exist_ok=True)
+    worktree = pathlib.Path(tempfile.mkdtemp(prefix=f"{slug}-", dir=worktree_root))
+    worktree.rmdir()
+    try:
+        run_checked(["git", "-C", str(repo), "worktree", "add", "--detach", str(worktree), commit])
+        sandbox = "workspace-write" if mode == "code" else "read-only"
+        try:
+            process = subprocess.run(
+                [
+                    "codex", "exec", "--ephemeral", "--sandbox", sandbox,
+                    "--disable", "multi_agent", "-C", str(worktree),
+                    "-o", str(final), task,
+                ],
+                text=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as error:
+            output = error.stdout or ""
+            if isinstance(output, bytes):
+                output = output.decode(errors="replace")
+            (output_dir / "controller.log").write_text(output, encoding="utf-8")
+            sys.stdout.write(output)
+            print(f"ATTEMPT_ERROR=codex:paid Codex exceeded its {timeout_seconds}-second task timeout")
+            return EXIT_TEMPFAIL, None, None, run_id
+        (output_dir / "controller.log").write_text(process.stdout, encoding="utf-8")
+        sys.stdout.write(process.stdout)
+        if mode == "code":
+            git(worktree, "add", "-N", ".", check=False)
+        diff = git(worktree, "diff", "--binary", commit, check=False)
+        patch.write_text(diff.stdout, encoding="utf-8")
+        if mode == "code" and process.returncode == 0 and not diff.stdout.strip():
+            return 10, patch, final if final.exists() else None, run_id
+        validate_attempt_artifacts(
+            mode,
+            process.returncode,
+            patch if patch.exists() else None,
+            final if final.exists() else None,
+        )
+        return process.returncode, patch, final if final.exists() else None, run_id
+    finally:
+        subprocess.run(
+            ["git", "-C", str(repo), "worktree", "remove", "--force", str(worktree)],
+            check=False,
+            stdin=subprocess.DEVNULL,
+        )
+
+
+def forced_decision(
+    value: str,
+    task: str,
+    files: Sequence[str],
+    repo: pathlib.Path | None = None,
+) -> RouteDecision:
+    policy = classify(task, files, repo)
+    if value == "auto" or policy.tier == "judgment":
+        return policy
+    if value == "volume":
+        return RouteDecision("local-volume", "explicit tier override")
+    if value == "quality":
+        return RouteDecision("local-quality", "explicit tier override")
+    return RouteDecision("judgment", "explicit tier override")
+
+
+def print_decision(decision: RouteDecision) -> None:
+    print(f"ROUTE={decision.tier}")
+    print(f"REASON={decision.reason}")
+    print(f"OWNER_GATED={'yes' if decision.owner_gated else 'no'}")
+    print("CLAUDE_ELIGIBLE=no")
+
+
+def command_decide(args: argparse.Namespace) -> int:
+    repo, commit = repository_state(args.repo, args.ref)
+    decision = forced_decision(args.tier, args.task, args.file, repo)
+    if decision.tier != "judgment":
+        ensure_local_snapshot_supported(repo, commit)
+    print_decision(decision)
+    return 0
+
+
+def command_run(args: argparse.Namespace) -> int:
+    if args.apply and args.mode != "code":
+        raise RuntimeError("--apply requires --mode code")
+    repo, commit = repository_state(args.repo, args.ref)
+    decision = forced_decision(args.tier, args.task, args.file, repo)
+    if decision.tier != "judgment":
+        ensure_local_snapshot_supported(repo, commit)
+    print_decision(decision)
+    if args.dry_run:
+        print(f"REPOSITORY={repo}")
+        print(f"COMMIT_SHA={commit}")
+        print("EXECUTED=no")
+        return 0
+
+    task_hash = hashlib.sha256(args.task.encode()).hexdigest()
+    attempts: list[str] = []
+    final_patch: pathlib.Path | None = None
+    final_message: pathlib.Path | None = None
+    status = 1
+    run_id = ""
+
+    if decision.tier == "judgment":
+        if not args.allow_paid:
+            print("PAID_ESCALATION_REQUIRED=yes")
+            print("No paid model was invoked. Re-run with --allow-paid to use Codex.")
+            status = EXIT_PAID_REQUIRED
+        else:
+            paid_runtime_preflight()
+            timeout_seconds = load_task_timeout()
+            allowed, policy_reason = paid_call_allowed(
+                repo, commit, args.task, task_hash, decision, reserve=True
+            )
+            print(f"PAID_POLICY={policy_reason}")
+            if allowed:
+                attempts.append("codex")
+                status, final_patch, final_message, run_id = paid_attempt(
+                    repo, commit, args.task, args.mode, timeout_seconds
+                )
+            else:
+                print("PAID_POLICY_BLOCKED=yes")
+                status = EXIT_PAID_REQUIRED
+    else:
+        tiers = load_tiers()
+        worker = validate_worker_host(args.worker) if args.worker else load_worker_host()
+        timeout_seconds = load_task_timeout()
+        transport_timeout = load_transport_timeout()
+        route_order = [decision.tier]
+        if decision.tier == "local-volume":
+            route_order.append("local-quality")
+        for tier_name in route_order:
+            attempts.append(tier_name)
+            try:
+                status, final_patch, final_message, run_id = local_attempt(
+                    worker,
+                    repo,
+                    commit,
+                    args.task,
+                    tiers[tier_name],
+                    args.mode,
+                    timeout_seconds,
+                    transport_timeout,
+                )
+            except (RuntimeError, subprocess.CalledProcessError, OSError) as error:
+                status = EXIT_TEMPFAIL
+                print(f"ATTEMPT_ERROR={tier_name}:{error}")
+            if status == 0:
+                break
+            print(f"ATTEMPT_FAILED={tier_name}:{status}")
+        if status and args.allow_paid:
+            paid_runtime_preflight()
+            allowed, policy_reason = paid_call_allowed(
+                repo, commit, args.task, task_hash, decision, reserve=True
+            )
+            print(f"PAID_POLICY={policy_reason}")
+            if allowed:
+                attempts.append("codex")
+                status, final_patch, final_message, run_id = paid_attempt(
+                    repo, commit, args.task, args.mode, timeout_seconds
+                )
+            else:
+                print("PAID_POLICY_BLOCKED=yes")
+        elif status:
+            print("PAID_ESCALATION_REQUIRED=yes")
+
+    if status == 0 and args.apply:
+        if args.mode != "code" or not final_patch or not final_patch.exists() or not final_patch.read_text().strip():
+            raise RuntimeError("there is no code patch to apply")
+        apply_patch(repo, commit, final_patch)
+        print("PATCH_APPLIED=yes")
+    elif final_patch:
+        print(f"PATCH_LOCAL={final_patch}")
+    if final_message:
+        print(f"FINAL_LOCAL={final_message}")
+
+    append_ledger({
+        "event": "run_completed",
+        "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "repository": str(repo),
+        "commit": commit,
+        "task_hash": task_hash,
+        "decision": decision.tier,
+        "reason": decision.reason,
+        "owner_gated": decision.owner_gated,
+        "claude_eligible": False,
+        "attempts": attempts,
+        "status": status,
+        "run_id": run_id,
+        "applied": bool(status == 0 and args.apply),
+    })
+    return status
+
+
+def parser() -> argparse.ArgumentParser:
+    root = argparse.ArgumentParser(description="Route Borrowed Fire work between GB10 and Codex; Claude is excluded.")
+    commands = root.add_subparsers(dest="command", required=True)
+
+    decide = commands.add_parser("decide", help="print the deterministic route without executing")
+    decide.add_argument("--task", required=True)
+    decide.add_argument("--repo", default=".")
+    decide.add_argument("--ref", default="HEAD")
+    decide.add_argument("--file", action="append", default=[])
+    decide.add_argument("--tier", choices=("auto", "volume", "quality", "judgment"), default="auto")
+    decide.set_defaults(handler=command_decide)
+
+    run = commands.add_parser("run", help="execute a routed task in an isolated snapshot")
+    run.add_argument("--repo", required=True)
+    run.add_argument("--task", required=True)
+    run.add_argument("--ref", default="HEAD")
+    run.add_argument("--file", action="append", default=[])
+    run.add_argument("--tier", choices=("auto", "volume", "quality", "judgment"), default="auto")
+    run.add_argument("--worker", help="SSH host override; defaults to the private fleet configuration")
+    run.add_argument("--mode", choices=("code", "advice"), default="code")
+    run.add_argument("--dry-run", action="store_true")
+    run.add_argument("--allow-paid", action="store_true", help="permit Codex escalation; Claude is never used")
+    run.add_argument("--apply", action="store_true", help="apply a clean patch only if HEAD and worktree are unchanged")
+    run.set_defaults(handler=command_run)
+    return root
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parser().parse_args(argv)
+    try:
+        return args.handler(args)
+    except (RuntimeError, subprocess.CalledProcessError, OSError) as error:
+        print(f"ERROR={error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

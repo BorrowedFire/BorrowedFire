@@ -90,6 +90,45 @@ tools/skill-lint.sh   lint (also install.sh's preflight; runs in CI)
 tests/             installer sandbox matrix + brain-protocol live proof (run in CI)
 ```
 
+## Local model routing
+
+`tools/bf-route` is the controller-side entry point for the optional local fleet. It reads model
+endpoints from the private Prometheus `config/fleet.md`, classifies work with deterministic risk
+rules, and runs local implementation in an isolated exact-commit snapshot. The default experiment
+routes routine work to `local-volume`, deeper work to `local-quality`, and paid judgment to Codex
+only when explicitly permitted. Claude is not part of this experimental route.
+Replace the local-tier and router-setting placeholders in the private fleet configuration
+before the first run.
+Legacy `local-volume` / `local-large` rows that contain only an endpoint remain supported: the
+router uses conservative timeout defaults and requires that each legacy endpoint expose exactly
+one model from `/v1/models`. To migrate an existing brain, add a `Controller SSH host` row under
+the `## Router settings` heading, using the SSH host or alias for that worker; model names and
+timeout rows do not need to be added. If only one local tier is configured, it serves both local
+routing roles. Repositories with Git submodules are rejected from local routing because their
+gitlink alone cannot produce an exact, self-contained snapshot.
+
+```sh
+bf-route decide --task "Update these documentation headings"
+bf-route run --repo . --task "Fix the bounded parser bug"
+bf-route run --repo . --task "Fix the bounded parser bug" --apply
+bf-route run --repo . --task "Perform the final independent review" --mode advice --allow-paid
+```
+
+Local jobs return patch and final-message artifacts under
+`~/.local/state/borrowedfire-route/`. `--apply` refuses a dirty or moved checkout. Paid escalation
+requires `--allow-paid`, a matching private paid-task whitelist entry (owner-gated work is handled
+as an explicit escalation), and room under the private escalation cap. The worker never receives
+GitHub credentials or the Docker socket.
+
+An authorized worker is bootstrapped explicitly rather than by the ordinary harness installer:
+
+```sh
+tools/install-local-agent-worker --host <ssh-host>
+```
+
+The agent container has a read-only root filesystem and runs as the worker user. Its internal
+Docker network can reach the selected local model container but has no internet route.
+
 Skills are plain markdown — readable by any agent that can read files, portable to any harness
 that supports the SKILL.md convention.
 
