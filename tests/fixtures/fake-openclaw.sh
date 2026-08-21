@@ -220,6 +220,15 @@ elif "--clear-tools" in lines:
 else:
     tools_allow = last_value("--tools").replace(",", " ").split()
 
+delete_after_run = os.environ.get("FAKE_OPENCLAW_STALE_DELETE_AFTER_RUN") == "1"
+for call in calls:
+    if call[:2] not in (["cron", "add"], ["cron", "edit"]):
+        continue
+    if "--delete-after-run" in call:
+        delete_after_run = True
+    if "--keep-after-run" in call:
+        delete_after_run = False
+
 print(json.dumps({
     "id": sys.argv[4],
     "declarationKey": "borrowedfire.prometheus-learning.v1",
@@ -227,6 +236,7 @@ print(json.dumps({
     "displayName": last_value("--display-name"),
     "description": last_value("--description"),
     "enabled": enabled,
+    "deleteAfterRun": delete_after_run,
     "agentId": last_value("--agent"),
     "sessionTarget": "isolated",
     "sessionKey": "stale-session" if sys.argv[2] == "session" or "--clear-session-key" not in lines else None,

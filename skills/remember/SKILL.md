@@ -69,7 +69,7 @@ the durable items (decisions, people, lessons — not chit-chat) into the brain,
 high-water mark whose filename includes the harness, host, agent, and canonical workspace identity
 (`last_ingested:` in frontmatter). Lowercase and sanitize text identifiers; hash the canonical
 workspace together with stable full host/machine, agent, and effective OpenClaw state directory,
-config path, and profile identity so separate controllers cannot collide. Two controller bindings
+active canonical-or-legacy config path, and profile identity so separate controllers cannot collide. Two controller bindings
 never share a watermark. A missing watermark is a prospective boundary: do not backfill old
 session notes without a separate owner-authorized bounded migration. Push-based: each machine
 pushes its own memory; `digest` never reads other machines' workspaces.

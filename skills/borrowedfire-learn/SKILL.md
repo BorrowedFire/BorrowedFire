@@ -75,7 +75,7 @@ host. It must not pretend to read another machine's private session history.
 2. Derive a controller-binding watermark. For OpenClaw use
    `notes/openclaw-<host>-<agent>-<workspace>-<binding-hash>-ingest.md`, where the hash covers the
    stable full host/machine identity, agent, canonical workspace path, and effective OpenClaw
-   state directory, config path, and profile identity.
+   state directory, active canonical-or-legacy config path, and profile identity.
    Lowercase text components, replace non-alphanumeric runs with `-`, and refuse a blank component.
    Other harnesses must include an equivalent host plus workspace/session-source identity. Read
    only that binding's high-water mark. If it does not exist, capture the UTC cycle-start time as a

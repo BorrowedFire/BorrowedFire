@@ -58,9 +58,11 @@ agent workspace, bind the private brain, and then declare the controller:
 The installer resolves Prometheus with the standard pointer rules and declares one idempotent
 OpenClaw job. It requires an explicit owner-notification destination and sends a one-time live
 route-verification message before enabling the job. It resolves the account from the selected
-agent's effective binding or the channel's runtime default, then pins that same account on the
-probe, job delivery, and failure alert. A private host-local route hash includes the full controller
-binding, resolved redacted channel configuration, account bindings/status, and OpenClaw version, so
+agent's sole channel-wide binding or the channel's runtime default when bindings are scoped or
+ambiguous, then pins that same account on the probe, job delivery, and failure alert. It also
+converges the recurring job as persistent, clearing stale one-shot deletion state. A private
+host-local route hash includes the full controller binding, active canonical-or-legacy config path,
+resolved redacted channel configuration, account bindings/status, and OpenClaw version, so
 included-file, environment-substitution, profile, state/config, runtime, binding, or default-account
 changes require a fresh proof. It does not pin a model/provider; private fleet policy remains
 authoritative. Before it mutates the scheduler, it also asks OpenClaw to prove that

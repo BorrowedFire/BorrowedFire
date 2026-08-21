@@ -45,6 +45,7 @@ check "binds the main agent by default" grep -qx 'main' "$OPENCLAW_ARGS_FILE"
 check "checks effective skill visibility" grep -qx 'skills' "$OPENCLAW_ARGS_FILE"
 check "checks skills for the exact agent" grep -qx -- '--agent' "$OPENCLAW_ARGS_FILE"
 check "creates disabled before alert setup" grep -qx -- '--disabled' "$OPENCLAW_ARGS_FILE"
+check "converges a persistent recurring job" grep -qx -- '--keep-after-run' "$OPENCLAW_ARGS_FILE"
 check "enables only after configuration" grep -qx 'enable' "$OPENCLAW_ARGS_FILE"
 check "removes unsupported expect-final flag" bash -c "! grep -qx -- '--expect-final' '$OPENCLAW_ARGS_FILE'"
 check "resets stale failure-alert policy" grep -qx -- '--no-failure-alert' "$OPENCLAW_ARGS_FILE"
@@ -118,6 +119,24 @@ FAKE_OPENCLAW_BINDINGS='[{"agentId":"main","match":{"channel":"imessage","accoun
 check "selected agent binding pins one account across job, alert, and probe" \
   test "$(grep -c '^ops$' "$OPENCLAW_ARGS_FILE")" -eq 4
 check "selected agent account route receives the live proof" grep -qx 'message' "$OPENCLAW_ARGS_FILE"
+
+rm -f "$OPENCLAW_ARGS_FILE" "$HOME/.config/borrowedfire/prometheus-learning-route.sha256"
+FAKE_OPENCLAW_BINDINGS='[{"agentId":"main","match":{"channel":"imessage","accountId":"ops"},"description":"imessage account=ops"},{"agentId":"main","match":{"channel":"imessage","accountId":"audit","peer":{"kind":"direct","id":"owner-route"}},"description":"imessage account=audit peer=direct:owner-route"}]' \
+  FAKE_OPENCLAW_CHANNEL_STATUS='{"channelDefaultAccountId":{"imessage":"default"},"channelAccounts":{"imessage":[{"accountId":"default","configured":true,"enabled":true},{"accountId":"ops","configured":true,"enabled":true},{"accountId":"audit","configured":true,"enabled":true}]}}' \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+check "ambiguous or scoped bindings use the runtime default account" \
+  test "$(grep -c '^default$' "$OPENCLAW_ARGS_FILE")" -eq 4
+check "ambiguous bindings do not select the first account" \
+  bash -c "! grep -qx 'ops' '$OPENCLAW_ARGS_FILE'"
+
+rm -f "$OPENCLAW_ARGS_FILE"
+FAKE_OPENCLAW_STALE_DELETE_AFTER_RUN=1 \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+check "stale one-shot deletion state is cleared" grep -qx -- '--keep-after-run' "$OPENCLAW_ARGS_FILE"
 
 PHYSICAL_SRC="$(cd "$SRC" && pwd -P)"
 ln -s "$PHYSICAL_SRC" "$SB/source-alias"
@@ -227,6 +246,26 @@ CONFIG_B_WATERMARK="$(grep -Eo 'notes/openclaw-[^ ]+-ingest\.md' "$SB/config-b-a
 check "distinct OpenClaw config paths get distinct watermarks" \
   test -n "$CONFIG_A_WATERMARK" -a -n "$CONFIG_B_WATERMARK" -a \
   "$CONFIG_A_WATERMARK" != "$CONFIG_B_WATERMARK"
+
+LEGACY_CONFIG_HOME="$SB/legacy-config-home"
+mkdir -p "$LEGACY_CONFIG_HOME/.openclaw"
+printf '%s\n' '{}' > "$LEGACY_CONFIG_HOME/.openclaw/clawdbot.json"
+OPENCLAW_ARGS_FILE="$SB/legacy-config-args" OPENCLAW_HOME="$LEGACY_CONFIG_HOME" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+LEGACY_CONFIG_WATERMARK="$(grep -Eo 'notes/openclaw-[^ ]+-ingest\.md' "$SB/legacy-config-args" | head -1)"
+printf '%s\n' '{}' > "$LEGACY_CONFIG_HOME/.openclaw/openclaw.json"
+OPENCLAW_ARGS_FILE="$SB/canonical-config-args" OPENCLAW_HOME="$LEGACY_CONFIG_HOME" \
+  OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null
+CANONICAL_CONFIG_WATERMARK="$(grep -Eo 'notes/openclaw-[^ ]+-ingest\.md' "$SB/canonical-config-args" | head -1)"
+check "active legacy config path gets its own controller watermark" \
+  test -n "$LEGACY_CONFIG_WATERMARK" -a -n "$CANONICAL_CONFIG_WATERMARK" -a \
+  "$LEGACY_CONFIG_WATERMARK" != "$CANONICAL_CONFIG_WATERMARK"
+check "legacy-to-canonical config migration requires a fresh route probe" \
+  grep -qx 'message' "$SB/canonical-config-args"
 
 CONFIG_DIGEST_PATH="$SB/controller-config.json"
 # shellcheck disable=SC2016  # $include is an intentional literal OpenClaw config key

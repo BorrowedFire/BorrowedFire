@@ -93,8 +93,9 @@ It declares one idempotent job at 03:35 America/New_York by default, does not pi
 binds the OpenClaw `main` agent unless overridden with `--agent`, requires a concrete owner route,
 verifies the complete learning stack is visible to that exact agent, migrates the declaration when
 the agent changes, resolves and pins that agent's effective channel account across the probe, job,
-and failure alert, enables only after a one-time live route proof and scheduler-level failure-alert
-verification, and remains silent on routine success or a no-op. See
+and failure alert (using the runtime default when scoped or multiple inbound bindings are
+ambiguous), clears stale one-shot deletion state, enables only after a one-time live route proof
+and scheduler-level failure-alert verification, and remains silent on routine success or a no-op. See
 [`skills/borrowedfire-learn/references/cycle-contract.md`](skills/borrowedfire-learn/references/cycle-contract.md).
 
 ## Repo layout

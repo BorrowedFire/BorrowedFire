@@ -414,20 +414,28 @@ def normalize_account(value):
         return None
     return normalized
 
-bound_account = None
+channel_bindings = []
 for binding in bindings:
     if not isinstance(binding, dict) or binding.get("agentId") != agent_id:
         continue
     match = binding.get("match")
     if not isinstance(match, dict) or str(match.get("channel", "")).strip().lower() != channel:
         continue
+    channel_bindings.append(match)
+
+# Agent bindings route inbound traffic and may be scoped to a peer, guild, or
+# team. Only one channel-wide binding can unambiguously select the account for
+# an outbound owner notification. Multiple or scoped bindings deliberately
+# fall back to the channel runtime default instead of depending on list order.
+bound_account = None
+if len(channel_bindings) == 1:
+    match = channel_bindings[0]
+    scoped = any(match.get(key) is not None for key in ("peer", "guildId", "teamId"))
     candidate = match.get("accountId")
-    if candidate == "*" or not isinstance(candidate, str) or not candidate.strip():
-        continue
-    bound_account = normalize_account(candidate)
-    if not bound_account:
-        raise SystemExit(1)
-    break
+    if not scoped and candidate != "*" and isinstance(candidate, str) and candidate.strip():
+        bound_account = normalize_account(candidate)
+        if not bound_account:
+            raise SystemExit(1)
 
 defaults = status.get("channelDefaultAccountId")
 accounts_by_channel = status.get("channelAccounts")
@@ -568,7 +576,15 @@ else:
     if not suffix and not os.path.exists(state_dir) and os.path.exists(legacy_dir):
         state_dir = legacy_dir
     state_dir = os.path.realpath(state_dir)
-config_path = resolve_openclaw_path(config_override) if config_override else os.path.join(state_dir, "openclaw.json")
+if config_override:
+    config_path = resolve_openclaw_path(config_override)
+else:
+    config_candidates = [
+        os.path.join(state_dir, "openclaw.json"),
+        os.path.join(state_dir, "clawdbot.json"),
+    ]
+    config_path = next((path for path in config_candidates if os.path.exists(path)), config_candidates[0])
+    config_path = os.path.realpath(config_path)
 host = slug(host_name, 64)
 agent = slug(agent_id, 48)
 workspace_name = slug(os.path.basename(workspace), 64)
@@ -641,6 +657,7 @@ checks = [
     job.get("displayName") == expected["name"],
     job.get("description") == expected["description"],
     job.get("enabled") is expected["enabled"],
+    job.get("deleteAfterRun") is False,
     job.get("agentId") == expected["agent_id"],
     job.get("sessionTarget") == "isolated",
     not job.get("sessionKey"),
@@ -680,6 +697,7 @@ ARGS=(
   --description "$DESCRIPTION"
   --declaration-key "$DECLARATION_KEY"
   --disabled
+  --keep-after-run
   --agent "$AGENT_ID"
   --cron "$CRON_EXPR"
   --tz "$TIMEZONE"
@@ -742,6 +760,7 @@ CONVERGE_ARGS=(
   cron edit "$JOB_ID"
   --name "$JOB_NAME"
   --description "$DESCRIPTION"
+  --keep-after-run
   --agent "$AGENT_ID"
   --session isolated
   --clear-session-key
