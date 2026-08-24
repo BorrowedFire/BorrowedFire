@@ -88,5 +88,6 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
   check, the model-visibility gate, the test fixture, and the lint drift contract. A hidden
   writing skill now fails the declaration closed, covered by a new regression.
 - Residual, not fixable from this repo: a controller declared before this rename keeps its stored
-  message until `tools/install-prometheus-cycle.sh` is re-run on that host. Selene needs that run.
+  message until `tools/install-prometheus-cycle.sh` is re-run on that host. Every host running a
+  controller needs that run; the affected hosts are tracked in the brain, not here.
 - Outcome: driven to clean + proven, merge stopped at the owner gate.
