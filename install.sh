@@ -19,8 +19,16 @@ MANIFEST_NAME=".borrowedfire-manifest"
 MARK_BEGIN="<!-- BEGIN BORROWEDFIRE DOCTRINE -->"
 MARK_END="<!-- END BORROWEDFIRE DOCTRINE -->"
 # Skill names from older revisions of this repo; eligible for --adopt cleanup.
-LEGACY_NAMES="takeoff autoland orbit repo-quality-audit blackbox debrief learn"
-LEARNING_SKILLS="borrowedfire-learn remember recall digest"
+LEGACY_NAMES="takeoff autoland orbit repo-quality-audit blackbox debrief learn borrowedfire-learn"
+# Skills the full doctrine mandates by name. The installer must verify every one of them before it
+# writes that doctrine, or an agent follows foreign instructions under our banner. Learning carries
+# brain-write authority and writing does not, so the error text names the class, but either class
+# failing drops the harness to the reduced doctrine: one reduced document beats four variants that
+# drift apart, and the install stops loudly with exit 1 rather than settling into a quiet degraded
+# state.
+LEARNING_SKILLS="reflect remember recall digest"
+WRITING_SKILLS="unslop technical-writing"
+DOCTRINE_SKILLS="$LEARNING_SKILLS $WRITING_SKILLS"
 
 COPY=0 DRY=0 UNINSTALL=0 ADOPT=0 BRAIN="" OPENCLAW_WS="" INSTALL_ERRORS=0
 while [ $# -gt 0 ]; do
@@ -171,6 +179,13 @@ skill_has_unmanaged_collision() { # skill_has_unmanaged_collision <skilldir> <ma
     *) return 0 ;;
   esac
   return 1
+}
+
+doctrine_skill_class() { # doctrine_skill_class <name>: which capability the skill backs
+  case " $LEARNING_SKILLS " in
+    *" $1 "*) echo "automatic-learning"; return ;;
+  esac
+  echo "writing"
 }
 
 copy_skill() { # copy_skill <src> <tgt>: copy + drop the ownership marker inside
@@ -395,10 +410,10 @@ for row in "${HARNESSES[@]}"; do
   mf="$sd/$MANIFEST_NAME"
   say "== $label ($sd)"
   [ "$DRY" -eq 1 ] || mkdir -p "$sd"
-  learning_collision=""
-  for learning_name in $LEARNING_SKILLS; do
-    if skill_has_unmanaged_collision "$sd" "$mf" "$learning_name"; then
-      learning_collision="$learning_name"
+  doctrine_collision=""
+  for doctrine_skill in $DOCTRINE_SKILLS; do
+    if skill_has_unmanaged_collision "$sd" "$mf" "$doctrine_skill"; then
+      doctrine_collision="$doctrine_skill"
       break
     fi
   done
@@ -450,21 +465,22 @@ for row in "${HARNESSES[@]}"; do
     install_skill "$sd" "$mf" "$(basename "$src_dir")"
   done
 
-  learning_unmanaged=""
+  doctrine_unmanaged=""
   if [ "$DRY" -eq 0 ]; then
-    for learning_name in $LEARNING_SKILLS; do
-      if ! skill_is_managed "$sd" "$mf" "$learning_name"; then
-        learning_unmanaged="$learning_name"
+    for doctrine_skill in $DOCTRINE_SKILLS; do
+      if ! skill_is_managed "$sd" "$mf" "$doctrine_skill"; then
+        doctrine_unmanaged="$doctrine_skill"
         break
       fi
     done
   fi
-  if { [ -n "$learning_collision" ] && [ "$ADOPT" -eq 0 ]; } || [ -n "$learning_unmanaged" ]; then
-    learning_problem="${learning_collision:-$learning_unmanaged}"
+  if { [ -n "$doctrine_collision" ] && [ "$ADOPT" -eq 0 ]; } || [ -n "$doctrine_unmanaged" ]; then
+    doctrine_problem="${doctrine_collision:-$doctrine_unmanaged}"
+    doctrine_problem_class="$(doctrine_skill_class "$doctrine_problem")"
     if update_safe_doctrine "$cf"; then
-      echo "error: $label has an unmanaged automatic-learning dependency ($learning_problem); automatic learning disabled while non-learning doctrine remains active" >&2
+      echo "error: $label has an unmanaged $doctrine_problem_class dependency ($doctrine_problem); the reduced doctrine is active - automatic learning disabled, writing skills not mandated" >&2
     else
-      echo "error: $label has an unmanaged automatic-learning dependency ($learning_problem), and the safe doctrine could not be verified; inspect $cf before the next task" >&2
+      echo "error: $label has an unmanaged $doctrine_problem_class dependency ($doctrine_problem), and the reduced doctrine could not be verified; inspect $cf before the next task" >&2
     fi
     INSTALL_ERRORS=$((INSTALL_ERRORS + 1))
   else
@@ -476,7 +492,7 @@ for row in "${HARNESSES[@]}"; do
 done
 
 if [ "$INSTALL_ERRORS" -gt 0 ]; then
-  echo "operation failed closed: the automatic-learning stack is not safe in $INSTALL_ERRORS harness(es)" >&2
+  echo "operation failed closed: the doctrine-mandated skill stack is not safe in $INSTALL_ERRORS harness(es)" >&2
   exit 1
 fi
 

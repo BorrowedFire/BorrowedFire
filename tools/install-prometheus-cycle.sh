@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Declare the unattended Prometheus learning cycle on one always-on OpenClaw host.
 # Uses OpenClaw's declaration key so re-running updates one job instead of creating duplicates.
+#
+# Skill renames do not reach an already-declared controller: its message is stored by the
+# scheduler, not read from this checkout. After any Borrowed Fire skill rename, re-run this script
+# on every host that has a controller, or that host keeps requesting the old skill name.
 set -u
 
 SRC="$(cd "$(dirname "$0")/.." && pwd -P)"
@@ -42,7 +46,9 @@ from pathlib import Path
 
 source_root = Path(sys.argv[1]).resolve()
 workspace = Path(sys.argv[2]).resolve()
-skills = ("borrowedfire-learn", "remember", "recall", "digest")
+# Every skill the doctrine mandates, not just the four the job executes: this same run
+# activates that doctrine, so an unverified writing skill would be followed nightly.
+skills = ("reflect", "remember", "recall", "digest", "unslop", "technical-writing")
 manifest_path = workspace / "skills" / ".borrowedfire-manifest"
 
 try:
@@ -376,7 +382,7 @@ import os
 import sys
 
 expected_agent, expected_workspace = sys.argv[1:]
-required = {"borrowedfire-learn", "remember", "recall", "digest"}
+required = {"reflect", "remember", "recall", "digest", "unslop", "technical-writing"}
 try:
     payload = json.load(sys.stdin)
 except (json.JSONDecodeError, OSError):
@@ -393,7 +399,7 @@ if (
 ):
     raise SystemExit(1)
 ' "$AGENT_ID" "$AGENT_WORKSPACE"; then
-  fail_declaration_safely 'The requested agent cannot see the complete learning skill stack; use a copy install or configure trusted symlink targets and agent skill visibility.'
+  fail_declaration_safely 'The requested agent cannot see every doctrine-mandated skill; use a copy install or configure trusted symlink targets and agent skill visibility.'
 fi
 
 AGENT_BINDINGS_OUTPUT="$("$OPENCLAW_BIN" agents bindings --agent "$AGENT_ID" --json)" ||
@@ -641,7 +647,7 @@ if [ -z "$WATERMARK_FILE" ] ||
   fail_declaration_safely 'Host/machine/agent/workspace/controller watermark identity could not be derived; no job was declared.'
 fi
 
-MESSAGE="Run the installed borrowedfire-learn skill in fleet mode. The Prometheus root is $BRAIN. Follow the skill and its cycle-contract reference exactly. Use only $WATERMARK_FILE as this controller binding's high-water mark. If it is absent, use the exact prospective-bootstrap behavior in the skill: do not backfill pre-existing session notes, but still inspect pending outboxes and exact-current project status. Otherwise ingest only verified durable deltas visible in this agent workspace since that mark. Deduplicate before using remember; advance the mark only after durable commit/push; and invoke digest only when seven days have elapsed since its last completed run or inbox backlog exceeds 15. Never claim access to another host, agent, or workspace's private session history. Do not mutate product repositories, accounts, credentials, deployments, releases, stores, skills, doctrine, or scheduler configuration, except to delete one exact local-only .brain-outbox/<file> after its capture is committed and pushed to Prometheus; never delete the directory, another item, or a pending item. Do not announce routine success or a no-op. Use the configured message target only for one concise material-digest summary, an actionable owner decision, conflicting evidence, a sync/push failure, or a concrete prevention follow-up."
+MESSAGE="Run the installed reflect skill in fleet mode. The Prometheus root is $BRAIN. Follow the skill and its cycle-contract reference exactly. Use only $WATERMARK_FILE as this controller binding's high-water mark. If it is absent, use the exact prospective-bootstrap behavior in the skill: do not backfill pre-existing session notes, but still inspect pending outboxes and exact-current project status. Otherwise ingest only verified durable deltas visible in this agent workspace since that mark. Deduplicate before using remember; advance the mark only after durable commit/push; and invoke digest only when seven days have elapsed since its last completed run or inbox backlog exceeds 15. Never claim access to another host, agent, or workspace's private session history. Do not mutate product repositories, accounts, credentials, deployments, releases, stores, skills, doctrine, or scheduler configuration, except to delete one exact local-only .brain-outbox/<file> after its capture is committed and pushed to Prometheus; never delete the directory, another item, or a pending item. Do not announce routine success or a no-op. Use the configured message target only for one concise material-digest summary, an actionable owner decision, conflicting evidence, a sync/push failure, or a concrete prevention follow-up."
 
 fail_job_safely() {
   local reason="$1"

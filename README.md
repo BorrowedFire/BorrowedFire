@@ -7,7 +7,7 @@ private, git-authoritative markdown brain (in the lineage of
 Borrowed Fire is the system; Prometheus, the one who borrowed the fire, is its memory.
 
 - **Memory** compounds: every agent captures decisions, people, meetings, and hard-won lessons
-  into the brain; every agent reads them back before it works. `borrowedfire-learn` runs automatically at
+  into the brain; every agent reads them back before it works. `reflect` runs automatically at
   substantive checkpoints, and one always-on host performs a bounded nightly consolidation pass.
 - **Development** is orchestrated: a control-plane skill works the queue across all registered
   repos, delegating to a review-gated landing loop, with humans only answering decision-ready
@@ -40,7 +40,7 @@ deleted).
 
 | Skill | What it does |
 |---|---|
-| [borrowedfire-learn](skills/borrowedfire-learn/SKILL.md) | Automatic learning pass: extract verified durable deltas from completed work, dedupe, connect them to prevention, and capture through Prometheus; includes a safe scheduled fleet mode. |
+| [reflect](skills/reflect/SKILL.md) | Automatic learning pass: extract verified durable deltas from completed work, dedupe, connect them to prevention, and capture through Prometheus; includes a safe scheduled fleet mode. |
 | [remember](skills/remember/SKILL.md) | Capture decisions, people, meetings, lessons, ideas into the brain — typed pages, wikilink graph, fleet-safe git sync. Owns the [schema](skills/remember/references/brain-schema.md). |
 | [recall](skills/recall/SKILL.md) | Answer from the brain with page citations and honest gaps; preflight lessons before any repo work. |
 | [digest](skills/digest/SKILL.md) | The dream cycle: promote inbox, ingest outboxes, dedupe entities, repair the graph, distill lessons, refresh the index. Locked, safe to schedule. |
@@ -60,6 +60,8 @@ deleted).
 | [bootstrap](skills/bootstrap/SKILL.md) | Wire a new repo/app/idea into the system and register it in the brain. |
 | [qa-audit](skills/qa-audit/SKILL.md) | Bounded QA loop: feature inventory, test matrix, defects, safe fixes, confidence report. |
 | [signal](skills/signal/SKILL.md) | Marketing front door: route customer-facing copy through the Corey Haines Marketing Skills. |
+| [technical-writing](skills/technical-writing/SKILL.md) | The four-layer standard for engineering prose: Diataxis modes, Google developer style, ASD-STE100 instruction rules, Global English syntax. |
+| [unslop](skills/unslop/SKILL.md) | The slop-pattern catalog. Cuts AI tells from any prose before it ships; every other skill cites it by name. |
 | [session-closeout](skills/session-closeout/SKILL.md) | Five-line honesty audit of requested, completed, missing, unasked, and unverified work. |
 
 ### How they fit together
@@ -73,7 +75,7 @@ brain projects/ registry ─────────────┘        │
                                                │
                           store-release ◀──────┘ (mobile)   changelog / signal (words)
 
-completed work ──▶ borrowedfire-learn (verify + dedupe) ──▶ remember ──▶ digest ──▶ recall
+completed work ──▶ reflect (verify + dedupe) ──▶ remember ──▶ digest ──▶ recall
 ```
 
 The shared rules every agent follows — brain sync protocol, capture triggers, safety rails, tier
@@ -101,12 +103,12 @@ disabled, transient command job that is force-run through the OpenClaw Gateway, 
 the scheduler's real privacy and credential context. Redacted OpenClaw configuration cannot safely
 identify credential-only changes, so the installer never substitutes a cached route hash for that
 live check. The nightly job remains silent on routine success or a no-op. See
-[`skills/borrowedfire-learn/references/cycle-contract.md`](skills/borrowedfire-learn/references/cycle-contract.md).
+[`skills/reflect/references/cycle-contract.md`](skills/reflect/references/cycle-contract.md).
 
 ## Repo layout
 
 ```
-skills/            16 SKILL.md skills (+ agents/openai.yaml metadata, references/)
+skills/            18 SKILL.md skills (+ agents/openai.yaml metadata, references/)
 doctrine/          the managed context block install.sh distributes
 prometheus-template/  starting tree for your private brain repo
 install.sh         manifest-owned cross-harness installer

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Technical Writing"
+  short_description: "Layered standard for docs, RFCs, READMEs, PR descriptions, and commit messages"
+  default_prompt: "Use $technical-writing to write or review this document against the four-layer standard, then run the checklist."
+
+policy:
+  allow_implicit_invocation: true

@@ -69,7 +69,7 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
 Weekly, or when inbox exceeds ~15 items. Claude Code: `/loop /digest` or a cron job; other
 harnesses: their scheduled-task mechanism. Digest is safe to run unattended — locked,
 non-deleting, atomic commits. A direct or standalone scheduled digest always reports to the owner.
-When `borrowedfire-learn` invokes digest inside its nightly fleet pass, report material changes or actionable
+When `reflect` invokes digest inside its nightly fleet pass, report material changes or actionable
 problems; a clean no-op remains in scheduler run history without notifying the owner.
 
 ## Related
