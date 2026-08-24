@@ -443,6 +443,7 @@ contract_lint_case "audit-only-mode" "skills/qa-audit/SKILL.md" \
   "s/When \`--no-fix\`/When audit-only mode/"
 contract_lint_case "writing-doctrine" "doctrine/DOCTRINE.md" \
   's/\*\*Writing\.\*\*/**Prose.**/'
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
 contract_lint_case "writing-safe-doctrine" "doctrine/DOCTRINE_NO_LEARNING.md" \
   's/`unslop` on prose before it ships/unslop sometimes/'
 
