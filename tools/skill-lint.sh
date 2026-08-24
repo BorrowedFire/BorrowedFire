@@ -99,13 +99,19 @@ fi
 
 # writing contract: both doctrine variants carry the always-on prose rule and its routing.
 # Without this, an edit can silently drop the mandate and every harness stops applying it.
-for _d in "$DOCTRINE" "$SAFE_DOCTRINE"; do
-  _dn="$(basename "$_d")"
-  grep -qF '**Writing.**' "$_d" || err "$_dn: the always-on writing contract is missing"
+# Matched against a whitespace-flattened copy on purpose: these sentences are hard-wrapped for
+# reading, and re-wrapping a paragraph must not silently drop a contract. A line-anchored
+# `grep -F` on prose breaks the first time a word moves across the wrap.
+doctrine_has() { # doctrine_has <file> <literal phrase>
+  tr '\n' ' ' < "$1" | tr -s ' ' | grep -qF "$2"
+}
+for doctrine_file in "$DOCTRINE" "$SAFE_DOCTRINE"; do
+  doctrine_name="$(basename "$doctrine_file")"
+  doctrine_has "$doctrine_file" '**Writing.**' || err "$doctrine_name: the always-on writing contract is missing"
   # shellcheck disable=SC2016  # backticks are intentional literal contract text
-  grep -qF 'Run `unslop` on prose before' "$_d" || err "$_dn: unslop is not mandated before prose ships"
+  doctrine_has "$doctrine_file" 'Run `unslop` on prose before it ships' || err "$doctrine_name: unslop is not mandated before prose ships"
   # shellcheck disable=SC2016  # backticks are intentional literal contract text
-  grep -qF 'Use `technical-writing` for docs' "$_d" || err "$_dn: technical-writing routing is missing"
+  doctrine_has "$doctrine_file" 'Use `technical-writing` for docs' || err "$doctrine_name: technical-writing routing is missing"
 done
 if ! body "$SKILLS_DIR/technical-writing/SKILL.md" | grep -qF 'ASD-STE100'; then
   err "technical-writing: the ASD-STE100 instruction layer is missing"

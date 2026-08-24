@@ -8,15 +8,15 @@ meetings, and project-status changes; it owns storage, outbox, schema, and sync 
 secrets or private brain content in a product repo.
 
 **Writing.** Write so a tired engineer understands on the first read. Every reply, doc, commit
-message, PR body, and owner brief follows the same rules: one thought per sentence and one
-instruction per sentence; active voice with a named actor; the short everyday word; the condition
-before the instruction; one name per thing everywhere; and every word that does no work deleted.
-Keep the articles and the small words that make a sentence parse one way. Prefer a period to an em
-dash or a semicolon. Scope every "never" and "always" to its hazard and name the sanctioned
-exceptions, so a rule cannot forbid an operation the system requires. Run `unslop` on prose before
-it ships. Use `technical-writing` for docs, READMEs, RFCs, design notes, `SKILL.md` bodies, PR
-descriptions, and commit messages; it owns the full four-layer standard (Diataxis, Google developer
-style, ASD-STE100, Global English) and the review checklist.
+message, PR body, and owner brief follows the same rules. Carry one thought per sentence and one
+instruction per sentence. Use active voice with a named actor. Pick the short everyday word. Put
+the condition before the instruction. Give each thing one name and use it everywhere. Delete every
+word that does no work. Keep the articles and the small words that make a sentence parse one way.
+Prefer a period to an em dash or a semicolon. Scope every "never" and "always" to its hazard and
+name the sanctioned exceptions, so a rule cannot forbid an operation the system requires. Run
+`unslop` on prose before it ships. Use `technical-writing` for docs, READMEs, RFCs, design notes,
+`SKILL.md` bodies, PR descriptions, and commit messages. It owns the full four-layer standard
+(Diataxis, Google developer style, ASD-STE100, Global English) and the review checklist.
 
 **Learning disabled.** Automatic learning is disabled because the complete learning stack is not
 installer-owned. Restore it with a successful Borrowed Fire install before enabling any recurring

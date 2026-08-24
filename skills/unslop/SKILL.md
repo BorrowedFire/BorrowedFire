@@ -1,6 +1,6 @@
 ---
 name: unslop
-description: Cut AI tells from any prose and put a human voice back in. Owns the slop-pattern catalog every other skill cites. Applies to every reply, doc, commit message, PR body, brief, and marketing draft before it ships; run it without being asked. Use when the user says "/unslop", "unslop this", "cut the AI tells", "this reads like AI", "make this sound human", or "de-slop it". NOT the document standard - mode, structure, and instruction rules live in `technical-writing`, which calls this skill. NOT marketing strategy or positioning (`signal`).
+description: Cut AI tells from any prose and put a human voice back in. Owns the slop-pattern catalog every other skill cites. Applies to every reply, doc, commit message, PR body, brief, and marketing draft before it ships. Run it without being asked. Use when the user says "/unslop", "unslop this", "cut the AI tells", "this reads like AI", "make this sound human", or "de-slop it". NOT the document standard - mode, structure, and instruction rules live in `technical-writing`, which calls this skill. NOT marketing strategy or positioning (`signal`).
 ---
 
 # Unslop
