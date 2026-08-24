@@ -56,8 +56,8 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
   received it at all.
 - Gates: adversarial (gate 1) 4 findings, all fixed — a Writing paragraph that broke its own
   no-semicolon rule, a missing contract regression, the deployed-controller rename gap, and
-  loop-variable style. Codex (gate 2) 2 × P2 open, both escalated as design calls. CI green on
-  `c6839ba`. Live proof recorded.
+  loop-variable style. Codex (gate 2) 2 × P2, escalated as design calls, owner expanded scope,
+  both then fixed. CI green. Live proof recorded.
 - Bug in a fix (the review loop earning its keep): rewriting the Writing paragraph moved
   `` `unslop` `` across a hard wrap and broke the line-anchored `grep -F` enforcing it. Fixed at
   the mechanism, not the wrap: prose contracts now match a whitespace-flattened copy via
@@ -70,8 +70,18 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
   component that owns it, before it becomes active. Doctrine mandates 6 skills; `install.sh`
   verifies only the 4 in `LEARNING_SKILLS`. Stored OpenClaw job declarations on other hosts are
   refreshed by no one. Full consumer matrix posted on the PR.
-- Mitigation shipped: `reflect`'s description carries `borrowedfire-learn` as a legacy trigger,
-  which `skill-lint.sh` explicitly permits for descriptions, so a stale controller prompt still
-  resolves under description matching.
-- Outcome: driven to clean + proven, merge stopped at the owner gate. Owner ask: land as-is with
-  the two P2s filed as follow-ups, or expand scope to rework the installer's verification model.
+- Resolution after the owner expanded scope: `DOCTRINE_SKILLS` is now the union of
+  `LEARNING_SKILLS` and the new `WRITING_SKILLS`, and both the collision and ownership passes
+  verify that union before the full doctrine is written. One reduced doctrine rather than four
+  variants: either capability class failing drops the harness to it and exits 1. The writing
+  RULES survive degradation because they are self-contained prose; only the two skill mandates
+  drop, so the installer never mandates a skill it could not verify.
+- Stored-controller resolution: the cycle installer already fails closed before declaring a job
+  when the agent cannot see the whole learning stack, so a NEW declaration can never name a
+  missing skill. Its two Python skill literals are now held to `install.sh`'s `LEARNING_SKILLS`
+  by lint, and its header documents that a rename cannot reach an already-declared controller.
+  `reflect`'s description also carries `borrowedfire-learn` as a legacy trigger, which
+  `skill-lint.sh` permits for descriptions, so a stale controller prompt still resolves.
+- Residual, not fixable from this repo: a controller declared before this rename keeps its stored
+  message until `tools/install-prometheus-cycle.sh` is re-run on that host. Selene needs that run.
+- Outcome: driven to clean + proven, merge stopped at the owner gate.
