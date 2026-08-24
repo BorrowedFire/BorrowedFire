@@ -1,5 +1,5 @@
 <!-- BEGIN BORROWEDFIRE DOCTRINE -->
-## Borrowed Fire doctrine (v4 safe mode — managed by install.sh, do not hand-edit)
+## Borrowed Fire doctrine (v5 reduced mode — managed by install.sh, do not hand-edit)
 
 **Memory.** Prometheus is the private git-backed brain. Resolve it through `$PROMETHEUS_DIR`, then
 `~/.config/borrowedfire/brain`, then `~/prometheus`. Before substantive repo work, use `recall` for
@@ -7,9 +7,21 @@ the matching project and lessons pages. Use `remember` for durable decisions, go
 meetings, and project-status changes; it owns storage, outbox, schema, and sync behavior. Never put
 secrets or private brain content in a product repo.
 
-**Learning disabled.** Automatic learning is disabled because the complete learning stack is not
-installer-owned. Restore it with a successful Borrowed Fire install before enabling any recurring
-learning controller. Do not invoke `borrowedfire-learn` automatically in this state.
+**Writing.** Write so a tired engineer understands on the first read. Every reply, doc, commit
+message, PR body, and owner brief follows the same rules. Carry one thought per sentence and one
+instruction per sentence. Use active voice with a named actor. Pick the short everyday word. Put
+the condition before the instruction. Give each thing one name and use it everywhere. Delete every
+word that does no work. Keep the articles and the small words that make a sentence parse one way.
+Prefer a period to an em dash or a semicolon. Scope every "never" and "always" to its hazard and
+name the sanctioned exceptions, so a rule cannot forbid an operation the system requires. The
+writing skills are not mandated in this state because the installer could not verify them. Apply
+the rules above by hand until a successful Borrowed Fire install restores the full doctrine.
+
+**Reduced mode.** Part of the Borrowed Fire skill stack is not installer-owned, so this context
+carries only the capabilities the installer could verify. Automatic learning is disabled and the
+writing skills are not mandated. The installer's error names the exact skill that failed
+verification. Restore the full doctrine with a successful Borrowed Fire install before you enable
+any recurring learning controller. Do not invoke `reflect` automatically in this state.
 
 **Safety.** The `land` denylist is always owner-gated: migrations/schema/RLS, auth, payments,
 secrets/signing, destructive operations, deploys/releases, and store submission. A workflow skill

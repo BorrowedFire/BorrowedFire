@@ -13,7 +13,7 @@ err() { echo "ERROR: $*" >&2; ERRORS=$((ERRORS + 1)); }
 
 # Names of skills that no longer exist; must not be referenced in any SKILL.md body.
 # (Frontmatter descriptions may keep old names as trigger phrases - bodies may not.)
-STALE_NAMES="takeoff autoland orbit repo-quality-audit blackbox debrief reentry resupply flightplan postcard launchpad afterglow ember rekindle tend hearth"
+STALE_NAMES="takeoff autoland orbit repo-quality-audit blackbox debrief reentry resupply flightplan postcard launchpad afterglow ember rekindle tend hearth borrowedfire-learn"
 
 # --- collect skill names ---
 SKILL_NAMES=""
@@ -69,26 +69,26 @@ for dir in "$SKILLS_DIR"/*/; do
 done
 
 # 7. memory system installs together
-for m in remember recall digest borrowedfire-learn; do
+for m in remember recall digest reflect; do
   [ -d "$SKILLS_DIR/$m" ] || err "memory system incomplete: missing '$m'"
 done
 [ -f "$SKILLS_DIR/remember/references/brain-schema.md" ] || err "missing remember/references/brain-schema.md (recall + digest depend on it)"
 
-LEARN_SKILL="$SKILLS_DIR/borrowedfire-learn/SKILL.md"
+LEARN_SKILL="$SKILLS_DIR/reflect/SKILL.md"
 DOCTRINE="$ROOT/doctrine/DOCTRINE.md"
 SAFE_DOCTRINE="$ROOT/doctrine/DOCTRINE_NO_LEARNING.md"
 if ! body "$LEARN_SKILL" | grep -qF 'Run without a user prompt'; then
-  err "borrowedfire-learn: automatic checkpoint invocation is missing"
+  err "reflect: automatic checkpoint invocation is missing"
 fi
 if ! body "$LEARN_SKILL" | grep -qF 'No autonomous self-rewrite'; then
-  err "borrowedfire-learn: self-modification boundary is missing"
+  err "reflect: self-modification boundary is missing"
 fi
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
-if ! grep -qF 'run `borrowedfire-learn` automatically' "$DOCTRINE"; then
+if ! grep -qF 'run `reflect` automatically' "$DOCTRINE"; then
   err "doctrine: automatic learning checkpoint is missing"
 fi
 # shellcheck disable=SC2016  # backticks are intentional literal contract text
-if grep -qF 'run `borrowedfire-learn` automatically' "$SAFE_DOCTRINE"; then
+if grep -qF 'run `reflect` automatically' "$SAFE_DOCTRINE"; then
   err "safe doctrine: automatic learning checkpoint must be disabled"
 fi
 # shellcheck disable=SC2016  # backticks are intentional literal contract text
@@ -96,22 +96,76 @@ if ! grep -qF '**Safety.** The `land` denylist is always owner-gated' "$SAFE_DOC
    ! grep -qF '**Memory.** Prometheus is the private git-backed brain.' "$SAFE_DOCTRINE"; then
   err "safe doctrine: non-learning memory and safety contracts are missing"
 fi
+
+# writing contract: both doctrine variants carry the always-on prose rule and its routing.
+# Without this, an edit can silently drop the mandate and every harness stops applying it.
+# Matched against a whitespace-flattened copy on purpose: these sentences are hard-wrapped for
+# reading, and re-wrapping a paragraph must not silently drop a contract. A line-anchored
+# `grep -F` on prose breaks the first time a word moves across the wrap.
+doctrine_has() { # doctrine_has <file> <literal phrase>
+  tr '\n' ' ' < "$1" | tr -s ' ' | grep -qF "$2"
+}
+# The writing RULES are self-contained prose and must survive degradation, so both variants carry
+# them. The skill MANDATES must not appear in the reduced doctrine: the installer falls back to it
+# precisely when it could not verify those skills, and mandating an unverified skill is the defect
+# this contract exists to prevent.
+for doctrine_file in "$DOCTRINE" "$SAFE_DOCTRINE"; do
+  doctrine_name="$(basename "$doctrine_file")"
+  doctrine_has "$doctrine_file" '**Writing.**' || err "$doctrine_name: the always-on writing contract is missing"
+done
+# shellcheck disable=SC2016  # backticks are intentional literal contract text
+doctrine_has "$DOCTRINE" 'Run `unslop` on prose before it ships' || err "doctrine: unslop is not mandated before prose ships"
+# shellcheck disable=SC2016  # backticks are intentional literal contract text
+doctrine_has "$DOCTRINE" 'Use `technical-writing` for docs' || err "doctrine: technical-writing routing is missing"
+# shellcheck disable=SC2016  # backticks are intentional literal contract text
+if doctrine_has "$SAFE_DOCTRINE" 'Run `unslop` on prose before it ships' || doctrine_has "$SAFE_DOCTRINE" 'Use `technical-writing` for docs'; then
+  err "reduced doctrine: writing skills must not be mandated when the installer could not verify them"
+fi
+
+# The installer must verify every skill the full doctrine mandates by name.
+for mandated in unslop technical-writing; do
+  grep -q "^WRITING_SKILLS=.*$mandated" "$ROOT/install.sh" ||
+    err "install.sh: WRITING_SKILLS omits '$mandated', so the doctrine would mandate an unverified skill"
+done
+# shellcheck disable=SC2016  # the literal \$VAR text in install.sh is the thing being matched
+grep -q '^DOCTRINE_SKILLS="\$LEARNING_SKILLS \$WRITING_SKILLS"' "$ROOT/install.sh" ||
+  err "install.sh: DOCTRINE_SKILLS must be the union of LEARNING_SKILLS and WRITING_SKILLS"
+
+# The cycle installer repeats the learning stack in two Python literals, and it gates the scheduler
+# declaration on them. A rename that updates only install.sh leaves that gate checking stale names,
+# which is exactly how a stored controller ends up naming a skill that no longer exists.
+CYCLE_INSTALLER="$ROOT/tools/install-prometheus-cycle.sh"
+if [ -f "$CYCLE_INSTALLER" ]; then
+  mandated_list="$(sed -n 's/^LEARNING_SKILLS="\(.*\)"$/\1/p' "$ROOT/install.sh") $(sed -n 's/^WRITING_SKILLS="\(.*\)"$/\1/p' "$ROOT/install.sh")"
+  for mandated_skill in $mandated_list; do
+    grep -q "^skills = (.*\"$mandated_skill\"" "$CYCLE_INSTALLER" ||
+      err "install-prometheus-cycle.sh: 'skills' integrity check omits '$mandated_skill'; the nightly job would activate a doctrine mandating an unverified skill"
+    grep -q "^required = {.*\"$mandated_skill\"" "$CYCLE_INSTALLER" ||
+      err "install-prometheus-cycle.sh: 'required' visibility gate omits '$mandated_skill'; the nightly job would activate a doctrine mandating an unverified skill"
+  done
+fi
+if ! body "$SKILLS_DIR/technical-writing/SKILL.md" | grep -qF 'ASD-STE100'; then
+  err "technical-writing: the ASD-STE100 instruction layer is missing"
+fi
+if ! body "$SKILLS_DIR/unslop/SKILL.md" | grep -qF 'Established domain terms win'; then
+  err "unslop: the established-domain-terms carve-out is missing"
+fi
 if ! body "$LEARN_SKILL" | grep -qF 'notes/openclaw-<host>-<agent>-<workspace>-<binding-hash>-ingest.md'; then
-  err "borrowedfire-learn: host-scoped watermark contract is missing"
+  err "reflect: host-scoped watermark contract is missing"
 fi
 if ! body "$LEARN_SKILL" | grep -qF 'effective OpenClaw' ||
    ! body "$LEARN_SKILL" | grep -qF 'do not backfill pre-existing session notes'; then
-  err "borrowedfire-learn: controller identity and prospective bootstrap contracts are missing"
+  err "reflect: controller identity and prospective bootstrap contracts are missing"
 fi
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
 if ! body "$LEARN_SKILL" | grep -qF 'exact local-only `.brain-outbox/<file>`'; then
-  err "borrowedfire-learn: narrow outbox cleanup contract is missing"
+  err "reflect: narrow outbox cleanup contract is missing"
 fi
 if ! body "$LEARN_SKILL" | grep -qF 'keep the pending capture in output only'; then
-  err "borrowedfire-learn: unavailable-brain fallback must remain output-only without repo-write authority"
+  err "reflect: unavailable-brain fallback must remain output-only without repo-write authority"
 fi
 if ! body "$LEARN_SKILL" | grep -qF 'fleet mode never creates a fallback outbox in a product repository'; then
-  err "borrowedfire-learn: fleet mode must not write a product-repo fallback outbox"
+  err "reflect: fleet mode must not write a product-repo fallback outbox"
 fi
 
 # 8. workflow contracts that must survive review-loop edits

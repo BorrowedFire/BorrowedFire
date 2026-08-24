@@ -43,3 +43,51 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
   template → new test 3 red on both checks while origin/main's test 3 stays green — the exact
   blind spot issue #11 named.
 - Outcome: PR opened, driven to review-clean; merge stopped at the owner gate per instruction.
+
+## 2026-08-24 — writing standard into doctrine + bare skill names (PR #3)
+- Item: https://github.com/BorrowedFire/BorrowedFire/pull/3 — adopt `technical-writing` and
+  `unslop` (adapted from pstack, MIT), move the writing mandate into a new doctrine **Writing**
+  section (v4 → v5, both variants), guard it with a fail-closed `skill-lint.sh` contract, derive
+  the manifest count in `test-install.sh`, revert `borrowedfire-triage` to `triage`, and rename
+  `borrowedfire-learn` to `reflect`.
+- Class: Autonomous (skills, doctrine, lint, tests; 21 files; denylist: no match;
+  `denylist_extra: []`). Root cause: the old `Always talk in ASD-STE100` line named a standard
+  instead of stating rules, and `~/.codex/AGENTS.md` has no hand-written preamble, so Codex never
+  received it at all.
+- Gates: adversarial (gate 1) 4 findings, all fixed — a Writing paragraph that broke its own
+  no-semicolon rule, a missing contract regression, the deployed-controller rename gap, and
+  loop-variable style. Codex (gate 2) 2 × P2, escalated as design calls, owner expanded scope,
+  both then fixed. CI green. Live proof recorded.
+- Bug in a fix (the review loop earning its keep): rewriting the Writing paragraph moved
+  `` `unslop` `` across a hard wrap and broke the line-anchored `grep -F` enforcing it. Fixed at
+  the mechanism, not the wrap: prose contracts now match a whitespace-flattened copy via
+  `doctrine_has`, proven by re-wrapping the paragraph to 72 columns and confirming the lint holds.
+- Gotcha: CI runs `shellcheck` over four shell files and the local gate set does not. A backtick
+  inside a single-quoted `sed` expression tripped SC2016 and reddened CI after all local suites
+  were green. Run CI's exact five-step sequence locally before declaring gates green.
+- Invariant audit (circuit breaker, two validated findings in one design area): every stored
+  instruction naming a Borrowed Fire skill must be verified against, or refreshed by, the
+  component that owns it, before it becomes active. Doctrine mandates 6 skills; `install.sh`
+  verifies only the 4 in `LEARNING_SKILLS`. Stored OpenClaw job declarations on other hosts are
+  refreshed by no one. Full consumer matrix posted on the PR.
+- Resolution after the owner expanded scope: `DOCTRINE_SKILLS` is now the union of
+  `LEARNING_SKILLS` and the new `WRITING_SKILLS`, and both the collision and ownership passes
+  verify that union before the full doctrine is written. One reduced doctrine rather than four
+  variants: either capability class failing drops the harness to it and exits 1. The writing
+  RULES survive degradation because they are self-contained prose; only the two skill mandates
+  drop, so the installer never mandates a skill it could not verify.
+- Stored-controller resolution: the cycle installer already fails closed before declaring a job
+  when the agent cannot see the whole learning stack, so a NEW declaration can never name a
+  missing skill. Its two Python skill literals are now held to `install.sh`'s `LEARNING_SKILLS`
+  by lint, and its header documents that a rename cannot reach an already-declared controller.
+  `reflect`'s description also carries `borrowedfire-learn` as a legacy trigger, which
+  `skill-lint.sh` permits for descriptions, so a stale controller prompt still resolves.
+- Second sweep (Codex round 3): the same invariant was fixed in `install.sh` but not in
+  `tools/install-prometheus-cycle.sh`, which activates that doctrine and validated only the four
+  learning skills. Every enumeration site now carries the doctrine-mandated six: the integrity
+  check, the model-visibility gate, the test fixture, and the lint drift contract. A hidden
+  writing skill now fails the declaration closed, covered by a new regression.
+- Residual, not fixable from this repo: a controller declared before this rename keeps its stored
+  message until `tools/install-prometheus-cycle.sh` is re-run on that host. Every host running a
+  controller needs that run; the affected hosts are tracked in the brain, not here.
+- Outcome: driven to clean + proven, merge stopped at the owner gate.

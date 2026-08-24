@@ -5,7 +5,7 @@ defined in `../SKILL.md` and needs no scheduler.
 
 ## Cadence
 
-- **Every substantive task:** the shared Borrowed Fire doctrine invokes `borrowedfire-learn` before final
+- **Every substantive task:** the shared Borrowed Fire doctrine invokes `reflect` before final
   closeout. A verified no-op is acceptable.
 - **Nightly fleet pass:** one always-on OpenClaw host runs at 03:35 in the owner's timezone. It
   ingests only new local-harness notes/outboxes and exact-current project status into Prometheus.
@@ -71,7 +71,7 @@ host-local route hash records the full controller binding, OpenClaw-reported act
 resolved redacted channel configuration, account bindings/status, and OpenClaw version as an audit
 identity. It does not pin a model/provider; private fleet policy remains
 authoritative. Before it mutates the scheduler, it also asks OpenClaw to prove that
-`borrowedfire-learn`, `remember`, `recall`, and `digest` are visible to the exact configured agent.
+`reflect`, `remember`, `recall`, and `digest` are visible to the exact configured agent.
 Copy mode is the portable default for OpenClaw; a symlink install is accepted only when OpenClaw's
 effective trusted-target and agent-skill policies expose the same complete stack. Changing agents
 disables, removes, and verifies removal of the prior declaration before creating the replacement,

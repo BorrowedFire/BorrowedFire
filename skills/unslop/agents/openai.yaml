@@ -1,0 +1,7 @@
+interface:
+  display_name: "Unslop"
+  short_description: "Cut AI tells from any prose and put a human voice back in"
+  default_prompt: "Use $unslop to cut the AI tells from this text and give it a human voice."
+
+policy:
+  allow_implicit_invocation: true
