@@ -90,4 +90,13 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
 - Residual, not fixable from this repo: a controller declared before this rename keeps its stored
   message until `tools/install-prometheus-cycle.sh` is re-run on that host. Every host running a
   controller needs that run; the affected hosts are tracked in the brain, not here.
-- Outcome: driven to clean + proven, merge stopped at the owner gate.
+- Rounds: 5 Codex rounds, each surfacing one real and progressively smaller defect (2 x P2 design
+  -> P3 stale log -> P2 incomplete sweep -> P1 public-repo policy). `--max-rounds 4` was exceeded
+  by one verification-only pass to obtain a verdict on the final head.
+- Codex re-anchoring hit again: after the first push, both original P2 comments carried the new
+  head in `commit_id`. Gating on `created_at` and `original_commit_id` per
+  [[lessons/github-review-comment-reanchoring]] correctly showed the round as still pending.
+- Outcome: squash-merged as `4874b57`. Gates at merge: adversarial clean (4 found, 4 fixed),
+  Codex clean at `c3f0eae5d6` with the sha matching head, CI green, live proof recorded. Verified
+  on merged main: skill-lint 18, test-install 135/135, test-brain 46/46,
+  test-prometheus-cycle 164/164, and both harnesses serve doctrine v5 from this checkout.
