@@ -1,7 +1,0 @@
-interface:
-  display_name: "Learn"
-  short_description: "Turn completed work into durable Prometheus improvements"
-  default_prompt: "Use $borrowedfire-learn to extract verified lessons, decisions, and project-status changes from this work, deduplicate them, and persist only durable improvements to Prometheus."
-
-policy:
-  allow_implicit_invocation: true

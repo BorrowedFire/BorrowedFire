@@ -126,7 +126,7 @@ if [ "${1:-}" = "skills" ] && [ "${2:-}" = "check" ]; then
   if [ "${FAKE_OPENCLAW_SKILLS_HIDDEN:-0}" -eq 1 ]; then
     visible='["recall","digest"]'
   else
-    visible='["borrowedfire-learn","remember","recall","digest"]'
+    visible='["reflect","remember","recall","digest"]'
   fi
   python3 - "$agent" "$workspace" "$visible" <<'PY'
 import json

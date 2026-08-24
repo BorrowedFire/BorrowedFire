@@ -1,9 +1,9 @@
 ---
-name: borrowedfire-learn
-description: Turn completed work into durable, verified improvement in Prometheus. Run automatically at the end of every substantive task or meaningful checkpoint—implementation, diagnosis, review, merge, release, rollback, planning decision, or owner correction—and in scheduled fleet-maintenance mode. Extract reusable lessons, decisions, owner preferences, and exact-current project-status changes; deduplicate against the brain; persist them through `remember`; and let `digest` consolidate recurring patterns. No-op when nothing durable changed. NOT for speculative conclusions, routine success logs, secrets, autonomous product-repo edits, or self-modifying skills without normal review.
+name: reflect
+description: Turn completed work into durable, verified improvement in Prometheus. Use when the user says "/reflect", "reflect on this", or "capture what we learned". Otherwise run automatically at the end of every substantive task or meaningful checkpoint—implementation, diagnosis, review, merge, release, rollback, planning decision, or owner correction—and in scheduled fleet-maintenance mode. Extract reusable lessons, decisions, owner preferences, and exact-current project-status changes; deduplicate against the brain; persist them through `remember`; and let `digest` consolidate recurring patterns. No-op when nothing durable changed. NOT for speculative conclusions, routine success logs, secrets, autonomous product-repo edits, or self-modifying skills without normal review.
 ---
 
-# Borrowed Fire Learn
+# Reflect
 
 Make completed work improve the next run. This is Prometheus's automatic learning pass: inspect
 what was actually established, retain only durable signal, connect it to prevention, and write it

@@ -19,8 +19,8 @@ MANIFEST_NAME=".borrowedfire-manifest"
 MARK_BEGIN="<!-- BEGIN BORROWEDFIRE DOCTRINE -->"
 MARK_END="<!-- END BORROWEDFIRE DOCTRINE -->"
 # Skill names from older revisions of this repo; eligible for --adopt cleanup.
-LEGACY_NAMES="takeoff autoland orbit repo-quality-audit blackbox debrief learn"
-LEARNING_SKILLS="borrowedfire-learn remember recall digest"
+LEGACY_NAMES="takeoff autoland orbit repo-quality-audit blackbox debrief learn borrowedfire-learn"
+LEARNING_SKILLS="reflect remember recall digest"
 
 COPY=0 DRY=0 UNINSTALL=0 ADOPT=0 BRAIN="" OPENCLAW_WS="" INSTALL_ERRORS=0
 while [ $# -gt 0 ]; do

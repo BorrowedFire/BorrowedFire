@@ -86,7 +86,7 @@ check "pins the resolved account on failure alerts" \
   grep -qx -- '--failure-alert-account-id' "$OPENCLAW_ARGS_FILE"
 check "alerts after repeated failures" grep -qx -- '--failure-alert-after' "$OPENCLAW_ARGS_FILE"
 check "alerts on skipped runs" grep -qx -- '--failure-alert-include-skipped' "$OPENCLAW_ARGS_FILE"
-check "prompt requires namespaced learning mode" grep -q 'borrowedfire-learn skill in fleet mode' "$OPENCLAW_ARGS_FILE"
+check "prompt requires namespaced learning mode" grep -q 'reflect skill in fleet mode' "$OPENCLAW_ARGS_FILE"
 check "prompt uses binding-scoped watermark" grep -Eq 'notes/openclaw-.+-main-openclaw-workspace-[0-9a-f]{12}-ingest.md' "$OPENCLAW_ARGS_FILE"
 check "prompt defines prospective first-run behavior" \
   grep -q 'do not backfill pre-existing session notes' "$OPENCLAW_ARGS_FILE"
@@ -170,8 +170,8 @@ ln -s "$PHYSICAL_SRC" "$SB/source-alias"
 mkdir -p "$SB/openclaw-symlink-install"
 "$SB/source-alias/install.sh" --openclaw-workspace "$SB/openclaw-symlink-install" >/dev/null 2>&1
 check "symlink-invoked installer records canonical skill targets" \
-  test "$(readlink "$SB/openclaw-symlink-install/skills/borrowedfire-learn")" = \
-  "$PHYSICAL_SRC/skills/borrowedfire-learn"
+  test "$(readlink "$SB/openclaw-symlink-install/skills/reflect")" = \
+  "$PHYSICAL_SRC/skills/reflect"
 rm -f "$OPENCLAW_ARGS_FILE"
 if FAKE_OPENCLAW_WORKSPACE="$SB/openclaw-symlink-install" \
   OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
@@ -391,8 +391,8 @@ check "bounded watermark retains binding hash" \
   grep -Eq '^notes/openclaw-.+-[0-9a-f]{12}-ingest\.md$' <<<"$LONG_WATERMARK"
 
 FOREIGN_WORKSPACE="$SB/openclaw-foreign"
-mkdir -p "$FOREIGN_WORKSPACE/skills/borrowedfire-learn"
-printf '%s\n' '---' 'name: borrowedfire-learn' '---' > "$FOREIGN_WORKSPACE/skills/borrowedfire-learn/SKILL.md"
+mkdir -p "$FOREIGN_WORKSPACE/skills/reflect"
+printf '%s\n' '---' 'name: reflect' '---' > "$FOREIGN_WORKSPACE/skills/reflect/SKILL.md"
 rm -f "$OPENCLAW_ARGS_FILE"
 if FAKE_OPENCLAW_WORKSPACE="$FOREIGN_WORKSPACE" \
   OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \

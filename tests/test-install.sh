@@ -2,6 +2,8 @@
 # Sandbox verification for install.sh. Runs against a fake HOME.
 set -u
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
+# Derived, never hardcoded: a literal count goes stale the next time a skill is added.
+SKILL_COUNT="$(find "$SRC/skills" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d " ")"
 SB="$(mktemp -d)"
 export HOME="$SB/home"
 PASS=0 FAIL=0
@@ -23,22 +25,22 @@ check "claude: closeout linked"        test -L "$HOME/.claude/skills/session-clo
 check "codex: closeout linked"         test -L "$HOME/.codex/skills/session-closeout"
 check "qwen: maintainer linked"        test -L "$HOME/.qwen/skills/maintainer"
 check "openclaw: digest linked"        test -L "$SB/openclaw-ws/skills/digest"
-check "claude: learning linked"        test -L "$HOME/.claude/skills/borrowedfire-learn"
-check "codex: learning linked"         test -L "$HOME/.codex/skills/borrowedfire-learn"
-check "openclaw: learning linked"      test -L "$SB/openclaw-ws/skills/borrowedfire-learn"
+check "claude: learning linked"        test -L "$HOME/.claude/skills/reflect"
+check "codex: learning linked"         test -L "$HOME/.codex/skills/reflect"
+check "openclaw: learning linked"      test -L "$SB/openclaw-ws/skills/reflect"
 check "claude: manifest written"       grep -q '^remember link$' "$HOME/.claude/skills/.borrowedfire-manifest"
 check "claude: doctrine block present" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md"
 check "openclaw: doctrine in AGENTS.md" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$SB/openclaw-ws/AGENTS.md"
-check "manifest has 16 entries"        test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 16
+check "manifest has every skill"       test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq "$SKILL_COUNT"
 
 # --- 2. idempotence: re-run, doctrine is byte-identical and appears exactly once ---
 cp "$HOME/.claude/CLAUDE.md" "$SB/claude-doctrine-before"
 "$SRC/install.sh" --openclaw-workspace "$SB/openclaw-ws" >/dev/null 2>&1
 check "doctrine idempotent (byte-identical)" cmp -s "$SB/claude-doctrine-before" "$HOME/.claude/CLAUDE.md"
 check "doctrine idempotent (1 block)"  test "$(grep -c 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md")" -eq 1
-check "still 16 manifest entries"      test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq 16
+check "manifest unchanged on re-run"   test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq "$SKILL_COUNT"
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
-check "doctrine invokes namespaced learning" grep -q 'run `borrowedfire-learn` automatically' "$HOME/.claude/CLAUDE.md"
+check "doctrine invokes namespaced learning" grep -q 'run `reflect` automatically' "$HOME/.claude/CLAUDE.md"
 
 # --- 3. legacy unowned dir warns, --adopt retires it ---
 mkdir -p "$HOME/.codex/skills/takeoff"; echo x > "$HOME/.codex/skills/takeoff/SKILL.md"
@@ -102,8 +104,8 @@ check "invalid explicit brain installs no skills" test ! -e "$INVALID_BRAIN_HOME
 check "invalid explicit brain installs no doctrine" test ! -e "$INVALID_BRAIN_HOME/.codex/AGENTS.md"
 
 PARTIAL_HOME="$SB/partial-install-home"
-mkdir -p "$PARTIAL_HOME/.codex/skills/borrowedfire-learn" "$PARTIAL_HOME/.config/borrowedfire"
-echo foreign > "$PARTIAL_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
+mkdir -p "$PARTIAL_HOME/.codex/skills/reflect" "$PARTIAL_HOME/.config/borrowedfire"
+echo foreign > "$PARTIAL_HOME/.codex/skills/reflect/SKILL.md"
 printf '%s\n' "$SB/old-brain" > "$PARTIAL_HOME/.config/borrowedfire/brain"
 CANONICAL_TEST_BRAIN="$(cd "$HOME/prometheus" && pwd -P)"
 if HOME="$PARTIAL_HOME" "$SRC/install.sh" --brain "$CANONICAL_TEST_BRAIN" >/dev/null 2>&1; then
@@ -114,7 +116,7 @@ fi
 check "valid requested brain is bound before partial harness failure" \
   grep -qxF "$CANONICAL_TEST_BRAIN" "$PARTIAL_HOME/.config/borrowedfire/brain"
 check "partial harness failure never retains stale automatic doctrine" bash -c \
-  "! grep -q 'run \`borrowedfire-learn\` automatically' '$PARTIAL_HOME/.codex/AGENTS.md'"
+  "! grep -q 'run \`reflect\` automatically' '$PARTIAL_HOME/.codex/AGENTS.md'"
 
 NESTED_HOME="$SB/nested-brain-home"
 mkdir -p "$NESTED_HOME/.codex" "$NESTED_HOME/prometheus/config" "$NESTED_HOME/prometheus/projects"
@@ -128,42 +130,42 @@ check "nested automatic brain root is rejected" test ! -e "$NESTED_HOME/.config/
 
 # --- 7b. an unmanaged automatic-learning collision fails closed before doctrine install ---
 COLLISION_HOME="$SB/collision-home"
-mkdir -p "$COLLISION_HOME/.codex/skills/borrowedfire-learn"
-echo foreign > "$COLLISION_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
+mkdir -p "$COLLISION_HOME/.codex/skills/reflect"
+echo foreign > "$COLLISION_HOME/.codex/skills/reflect/SKILL.md"
 if HOME="$COLLISION_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
   fail "unmanaged learning collision fails closed"
 else
   ok "unmanaged learning collision fails closed"
 fi
-check "foreign learning skill remains intact" grep -q foreign "$COLLISION_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
-check "collision harness gets no learning doctrine" bash -c "! grep -q 'run \`borrowedfire-learn\` automatically' '$COLLISION_HOME/.codex/AGENTS.md'"
+check "foreign learning skill remains intact" grep -q foreign "$COLLISION_HOME/.codex/skills/reflect/SKILL.md"
+check "collision harness gets no learning doctrine" bash -c "! grep -q 'run \`reflect\` automatically' '$COLLISION_HOME/.codex/AGENTS.md'"
 check "collision harness retains safety doctrine" grep -q '^\*\*Safety\.\*\*' "$COLLISION_HOME/.codex/AGENTS.md"
 check "collision harness retains memory doctrine" grep -q '^\*\*Memory\.\*\*' "$COLLISION_HOME/.codex/AGENTS.md"
 
 STALE_HOME="$SB/stale-owned-home"
-mkdir -p "$STALE_HOME/.codex/skills/borrowedfire-learn"
-echo foreign > "$STALE_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
-echo 'borrowedfire-learn link' > "$STALE_HOME/.codex/skills/.borrowedfire-manifest"
+mkdir -p "$STALE_HOME/.codex/skills/reflect"
+echo foreign > "$STALE_HOME/.codex/skills/reflect/SKILL.md"
+echo 'reflect link' > "$STALE_HOME/.codex/skills/.borrowedfire-manifest"
 if HOME="$STALE_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
   fail "stale ownership shape fails closed"
 else
   ok "stale ownership shape fails closed"
 fi
-check "stale ownership does not install doctrine" bash -c "! grep -q 'run \`borrowedfire-learn\` automatically' '$STALE_HOME/.codex/AGENTS.md'"
+check "stale ownership does not install doctrine" bash -c "! grep -q 'run \`reflect\` automatically' '$STALE_HOME/.codex/AGENTS.md'"
 check "stale ownership retains safety doctrine" grep -q '^\*\*Safety\.\*\*' "$STALE_HOME/.codex/AGENTS.md"
 
 REPLACED_HOME="$SB/replaced-owned-home"
 mkdir -p "$REPLACED_HOME/.codex"
 HOME="$REPLACED_HOME" "$SRC/install.sh" >/dev/null 2>&1
-unlink "$REPLACED_HOME/.codex/skills/borrowedfire-learn"
-mkdir "$REPLACED_HOME/.codex/skills/borrowedfire-learn"
-echo foreign > "$REPLACED_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
+unlink "$REPLACED_HOME/.codex/skills/reflect"
+mkdir "$REPLACED_HOME/.codex/skills/reflect"
+echo foreign > "$REPLACED_HOME/.codex/skills/reflect/SKILL.md"
 if HOME="$REPLACED_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
   fail "replaced managed learning skill fails closed"
 else
   ok "replaced managed learning skill fails closed"
 fi
-check "stale automatic learning trigger is removed" bash -c "! grep -q 'run \`borrowedfire-learn\` automatically' '$REPLACED_HOME/.codex/AGENTS.md'"
+check "stale automatic learning trigger is removed" bash -c "! grep -q 'run \`reflect\` automatically' '$REPLACED_HOME/.codex/AGENTS.md'"
 check "replaced learning skill retains safety doctrine" grep -q '^\*\*Safety\.\*\*' "$REPLACED_HOME/.codex/AGENTS.md"
 if HOME="$REPLACED_HOME" "$SRC/install.sh" --dry-run >/dev/null 2>&1; then
   fail "collision dry-run reports failure"
@@ -174,9 +176,9 @@ fi
 READ_ONLY_HOME="$SB/read-only-context-home"
 mkdir -p "$READ_ONLY_HOME/.codex"
 HOME="$READ_ONLY_HOME" "$SRC/install.sh" >/dev/null 2>&1
-unlink "$READ_ONLY_HOME/.codex/skills/borrowedfire-learn"
-mkdir "$READ_ONLY_HOME/.codex/skills/borrowedfire-learn"
-echo foreign > "$READ_ONLY_HOME/.codex/skills/borrowedfire-learn/SKILL.md"
+unlink "$READ_ONLY_HOME/.codex/skills/reflect"
+mkdir "$READ_ONLY_HOME/.codex/skills/reflect"
+echo foreign > "$READ_ONLY_HOME/.codex/skills/reflect/SKILL.md"
 chmod 444 "$READ_ONLY_HOME/.codex/AGENTS.md"
 if HOME="$READ_ONLY_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
   fail "read-only stale doctrine collision fails closed"
@@ -186,7 +188,7 @@ fi
 check "read-only context gets atomic safe doctrine replacement" \
   grep -q 'Automatic learning is disabled' "$READ_ONLY_HOME/.codex/AGENTS.md"
 check "read-only context no longer invokes automatic learning" bash -c \
-  "! grep -q 'run \`borrowedfire-learn\` automatically' '$READ_ONLY_HOME/.codex/AGENTS.md'"
+  "! grep -q 'run \`reflect\` automatically' '$READ_ONLY_HOME/.codex/AGENTS.md'"
 
 SYMLINK_HOME="$SB/symlink-context-home"
 mkdir -p "$SYMLINK_HOME/.codex" "$SYMLINK_HOME/shared"
@@ -196,7 +198,7 @@ HOME="$SYMLINK_HOME" "$SRC/install.sh" >/dev/null 2>&1
 check "symlinked context remains a symlink" test -L "$SYMLINK_HOME/.codex/AGENTS.md"
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
 check "symlinked context target receives doctrine" \
-  grep -q 'run `borrowedfire-learn` automatically' "$SYMLINK_HOME/shared/AGENTS.md"
+  grep -q 'run `reflect` automatically' "$SYMLINK_HOME/shared/AGENTS.md"
 HOME="$SYMLINK_HOME" "$SRC/install.sh" --uninstall >/dev/null 2>&1
 check "symlinked context survives uninstall" test -L "$SYMLINK_HOME/.codex/AGENTS.md"
 check "symlinked context target retains owner content" \
@@ -210,7 +212,7 @@ mkdir -p "$STALE_COPY_HOME/.codex"
 HOME="$STALE_COPY_HOME" "$SRC/install.sh" --copy >/dev/null 2>&1
 cp -R "$SRC" "$STALE_COPY_SOURCE"
 printf '%s\n' '<!-- copied-learning-contract-v2 -->' >> \
-  "$STALE_COPY_SOURCE/skills/borrowedfire-learn/SKILL.md"
+  "$STALE_COPY_SOURCE/skills/reflect/SKILL.md"
 mkdir -p "$SB/failing-copy-bin"
 # shellcheck disable=SC2016  # write a fixture that expands its own argv
 printf '%s\n' '#!/usr/bin/env bash' \
@@ -224,9 +226,9 @@ else
   ok "stale copied learning dependency fails closed"
 fi
 check "failed copy refresh leaves prior skill intact" bash -c \
-  "! grep -q 'copied-learning-contract-v2' '$STALE_COPY_HOME/.codex/skills/borrowedfire-learn/SKILL.md'"
+  "! grep -q 'copied-learning-contract-v2' '$STALE_COPY_HOME/.codex/skills/reflect/SKILL.md'"
 check "stale copied learning dependency disables automatic doctrine" bash -c \
-  "! grep -q 'run \`borrowedfire-learn\` automatically' '$STALE_COPY_HOME/.codex/AGENTS.md'"
+  "! grep -q 'run \`reflect\` automatically' '$STALE_COPY_HOME/.codex/AGENTS.md'"
 check "stale copied learning dependency retains safety doctrine" \
   grep -q '^\*\*Safety\.\*\*' "$STALE_COPY_HOME/.codex/AGENTS.md"
 
@@ -246,10 +248,10 @@ else
   ok "failed doctrine rewrite fails uninstall"
 fi
 check "failed doctrine removal leaves learning skill installed" \
-  test -e "$UNINSTALL_FAILURE_HOME/.codex/skills/borrowedfire-learn"
+  test -e "$UNINSTALL_FAILURE_HOME/.codex/skills/reflect"
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
 check "failed doctrine removal leaves matching automatic doctrine" \
-  grep -q 'run `borrowedfire-learn` automatically' "$UNINSTALL_FAILURE_HOME/.codex/AGENTS.md"
+  grep -q 'run `reflect` automatically' "$UNINSTALL_FAILURE_HOME/.codex/AGENTS.md"
 
 for dependency in remember recall digest; do
   DEPENDENCY_HOME="$SB/foreign-$dependency-home"
@@ -261,7 +263,7 @@ for dependency in remember recall digest; do
     ok "unmanaged $dependency dependency fails closed"
   fi
   check "unmanaged $dependency suppresses doctrine" bash -c \
-    "! grep -q 'run \`borrowedfire-learn\` automatically' '$DEPENDENCY_HOME/.codex/AGENTS.md'"
+    "! grep -q 'run \`reflect\` automatically' '$DEPENDENCY_HOME/.codex/AGENTS.md'"
   check "unmanaged $dependency retains safety doctrine" grep -q '^\*\*Safety\.\*\*' \
     "$DEPENDENCY_HOME/.codex/AGENTS.md"
 done
@@ -269,7 +271,7 @@ done
 MOVED_HOME="$SB/moved-learning-home"
 mkdir -p "$MOVED_HOME/.codex"
 HOME="$MOVED_HOME" "$SRC/install.sh" >/dev/null 2>&1
-for dependency in borrowedfire-learn remember recall digest; do
+for dependency in reflect remember recall digest; do
   unlink "$MOVED_HOME/.codex/skills/$dependency"
   ln -s "$SB/old-borrowedfire/skills/$dependency" "$MOVED_HOME/.codex/skills/$dependency"
 done
@@ -279,10 +281,10 @@ else
   fail "moved-checkout learning links are repointed"
 fi
 check "repointed learning link uses current checkout" \
-  test "$(readlink "$MOVED_HOME/.codex/skills/borrowedfire-learn")" = "$SRC/skills/borrowedfire-learn"
+  test "$(readlink "$MOVED_HOME/.codex/skills/reflect")" = "$SRC/skills/reflect"
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
 check "repointed stack retains automatic doctrine" \
-  grep -q 'run `borrowedfire-learn` automatically' "$MOVED_HOME/.codex/AGENTS.md"
+  grep -q 'run `reflect` automatically' "$MOVED_HOME/.codex/AGENTS.md"
 
 MOVED_COPY_HOME="$SB/moved-copy-home"
 mkdir -p "$MOVED_COPY_HOME/.codex"
@@ -302,7 +304,7 @@ check "moved-link conversion installs the exact current skill" \
   diff -qr -x .borrowedfire-copy "$SRC/skills/remember" "$MOVED_COPY_HOME/.codex/skills/remember"
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
 check "moved-link conversion retains automatic doctrine" \
-  grep -q 'run `borrowedfire-learn` automatically' "$MOVED_COPY_HOME/.codex/AGENTS.md"
+  grep -q 'run `reflect` automatically' "$MOVED_COPY_HOME/.codex/AGENTS.md"
 
 # --- 8. uninstall: removes owned, leaves unowned, strips doctrine ---
 mkdir -p "$HOME/.claude/skills/my-own-skill"; echo mine > "$HOME/.claude/skills/my-own-skill/SKILL.md"
@@ -401,7 +403,7 @@ else
 fi
 check "adopted-link: in manifest"      grep -q '^recall link$' "$HOME/.claude/skills/.borrowedfire-manifest"
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
-check "adopted-link: doctrine retained" grep -q 'run `borrowedfire-learn` automatically' "$HOME/.claude/CLAUDE.md"
+check "adopted-link: doctrine retained" grep -q 'run `reflect` automatically' "$HOME/.claude/CLAUDE.md"
 "$SRC/install.sh" --uninstall >/dev/null 2>&1
 check "adopted-link: uninstallable"    test ! -L "$HOME/.claude/skills/recall"
 
