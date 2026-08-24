@@ -105,14 +105,45 @@ fi
 doctrine_has() { # doctrine_has <file> <literal phrase>
   tr '\n' ' ' < "$1" | tr -s ' ' | grep -qF "$2"
 }
+# The writing RULES are self-contained prose and must survive degradation, so both variants carry
+# them. The skill MANDATES must not appear in the reduced doctrine: the installer falls back to it
+# precisely when it could not verify those skills, and mandating an unverified skill is the defect
+# this contract exists to prevent.
 for doctrine_file in "$DOCTRINE" "$SAFE_DOCTRINE"; do
   doctrine_name="$(basename "$doctrine_file")"
   doctrine_has "$doctrine_file" '**Writing.**' || err "$doctrine_name: the always-on writing contract is missing"
-  # shellcheck disable=SC2016  # backticks are intentional literal contract text
-  doctrine_has "$doctrine_file" 'Run `unslop` on prose before it ships' || err "$doctrine_name: unslop is not mandated before prose ships"
-  # shellcheck disable=SC2016  # backticks are intentional literal contract text
-  doctrine_has "$doctrine_file" 'Use `technical-writing` for docs' || err "$doctrine_name: technical-writing routing is missing"
 done
+# shellcheck disable=SC2016  # backticks are intentional literal contract text
+doctrine_has "$DOCTRINE" 'Run `unslop` on prose before it ships' || err "doctrine: unslop is not mandated before prose ships"
+# shellcheck disable=SC2016  # backticks are intentional literal contract text
+doctrine_has "$DOCTRINE" 'Use `technical-writing` for docs' || err "doctrine: technical-writing routing is missing"
+# shellcheck disable=SC2016  # backticks are intentional literal contract text
+if doctrine_has "$SAFE_DOCTRINE" 'Run `unslop` on prose before it ships' || doctrine_has "$SAFE_DOCTRINE" 'Use `technical-writing` for docs'; then
+  err "reduced doctrine: writing skills must not be mandated when the installer could not verify them"
+fi
+
+# The installer must verify every skill the full doctrine mandates by name.
+for mandated in unslop technical-writing; do
+  grep -q "^WRITING_SKILLS=.*$mandated" "$ROOT/install.sh" ||
+    err "install.sh: WRITING_SKILLS omits '$mandated', so the doctrine would mandate an unverified skill"
+done
+# shellcheck disable=SC2016  # the literal \$VAR text in install.sh is the thing being matched
+grep -q '^DOCTRINE_SKILLS="\$LEARNING_SKILLS \$WRITING_SKILLS"' "$ROOT/install.sh" ||
+  err "install.sh: DOCTRINE_SKILLS must be the union of LEARNING_SKILLS and WRITING_SKILLS"
+
+# The cycle installer repeats the learning stack in two Python literals, and it gates the scheduler
+# declaration on them. A rename that updates only install.sh leaves that gate checking stale names,
+# which is exactly how a stored controller ends up naming a skill that no longer exists.
+CYCLE_INSTALLER="$ROOT/tools/install-prometheus-cycle.sh"
+if [ -f "$CYCLE_INSTALLER" ]; then
+  learning_list="$(sed -n 's/^LEARNING_SKILLS="\(.*\)"$/\1/p' "$ROOT/install.sh")"
+  for learning_skill in $learning_list; do
+    grep -q "^skills = (.*\"$learning_skill\"" "$CYCLE_INSTALLER" ||
+      err "install-prometheus-cycle.sh: 'skills' tuple omits '$learning_skill'; a stored controller would name a stale skill"
+    grep -q "^required = {.*\"$learning_skill\"" "$CYCLE_INSTALLER" ||
+      err "install-prometheus-cycle.sh: 'required' gate omits '$learning_skill'; a stored controller would name a stale skill"
+  done
+fi
 if ! body "$SKILLS_DIR/technical-writing/SKILL.md" | grep -qF 'ASD-STE100'; then
   err "technical-writing: the ASD-STE100 instruction layer is missing"
 fi

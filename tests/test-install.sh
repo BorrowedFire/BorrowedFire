@@ -142,6 +142,33 @@ check "collision harness gets no learning doctrine" bash -c "! grep -q 'run \`re
 check "collision harness retains safety doctrine" grep -q '^\*\*Safety\.\*\*' "$COLLISION_HOME/.codex/AGENTS.md"
 check "collision harness retains memory doctrine" grep -q '^\*\*Memory\.\*\*' "$COLLISION_HOME/.codex/AGENTS.md"
 
+# --- 7c. an unmanaged WRITING collision fails closed the same way ---
+# The doctrine mandates unslop and technical-writing by name, so an unverified copy of either must
+# never be activated. The reduced doctrine keeps the writing RULES (self-contained prose) and drops
+# only the skill mandates.
+WRITING_COLLISION_HOME="$SB/writing-collision-home"
+mkdir -p "$WRITING_COLLISION_HOME/.codex/skills/unslop"
+echo foreign > "$WRITING_COLLISION_HOME/.codex/skills/unslop/SKILL.md"
+if HOME="$WRITING_COLLISION_HOME" "$SRC/install.sh" >/dev/null 2>&1; then
+  fail "unmanaged writing collision fails closed"
+else
+  ok "unmanaged writing collision fails closed"
+fi
+check "foreign writing skill remains intact" \
+  grep -q foreign "$WRITING_COLLISION_HOME/.codex/skills/unslop/SKILL.md"
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+check "writing collision harness does not mandate unslop" bash -c \
+  "! grep -q '\`unslop\` on prose before it ships' '$WRITING_COLLISION_HOME/.codex/AGENTS.md'"
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+check "writing collision harness does not mandate technical-writing" bash -c \
+  "! grep -q 'Use \`technical-writing\` for docs' '$WRITING_COLLISION_HOME/.codex/AGENTS.md'"
+check "writing collision harness keeps the writing rules" \
+  grep -q '^\*\*Writing\.\*\*' "$WRITING_COLLISION_HOME/.codex/AGENTS.md"
+check "writing collision harness retains safety doctrine" \
+  grep -q '^\*\*Safety\.\*\*' "$WRITING_COLLISION_HOME/.codex/AGENTS.md"
+check "writing collision harness reports reduced mode" \
+  grep -q '^\*\*Reduced mode\.\*\*' "$WRITING_COLLISION_HOME/.codex/AGENTS.md"
+
 STALE_HOME="$SB/stale-owned-home"
 mkdir -p "$STALE_HOME/.codex/skills/reflect"
 echo foreign > "$STALE_HOME/.codex/skills/reflect/SKILL.md"
@@ -444,8 +471,15 @@ contract_lint_case "audit-only-mode" "skills/qa-audit/SKILL.md" \
 contract_lint_case "writing-doctrine" "doctrine/DOCTRINE.md" \
   's/\*\*Writing\.\*\*/**Prose.**/'
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
-contract_lint_case "writing-safe-doctrine" "doctrine/DOCTRINE_NO_LEARNING.md" \
+contract_lint_case "writing-doctrine-mandate" "doctrine/DOCTRINE.md" \
   's/`unslop` on prose before it ships/unslop sometimes/'
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+contract_lint_case "reduced-doctrine-mandates-nothing-unverified" "doctrine/DOCTRINE_NO_LEARNING.md" \
+  's/The$/Run `unslop` on prose before it ships. The/'
+contract_lint_case "installer-verifies-writing-skills" "install.sh" \
+  's/^WRITING_SKILLS=.*/WRITING_SKILLS="unslop"/'
+contract_lint_case "cycle-installer-skill-drift" "tools/install-prometheus-cycle.sh" \
+  's/^required = {"reflect", /required = {"stale-name", /'
 
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"

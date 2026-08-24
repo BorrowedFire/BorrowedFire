@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Declare the unattended Prometheus learning cycle on one always-on OpenClaw host.
 # Uses OpenClaw's declaration key so re-running updates one job instead of creating duplicates.
+#
+# Skill renames do not reach an already-declared controller: its message is stored by the
+# scheduler, not read from this checkout. After any Borrowed Fire skill rename, re-run this script
+# on every host that has a controller, or that host keeps requesting the old skill name.
 set -u
 
 SRC="$(cd "$(dirname "$0")/.." && pwd -P)"
