@@ -125,8 +125,11 @@ if [ "${1:-}" = "skills" ] && [ "${2:-}" = "check" ]; then
   fi
   if [ "${FAKE_OPENCLAW_SKILLS_HIDDEN:-0}" -eq 1 ]; then
     visible='["recall","digest"]'
-  else
+  elif [ "${FAKE_OPENCLAW_WRITING_HIDDEN:-0}" -eq 1 ]; then
+    # the whole learning stack is visible; only the doctrine-mandated writing skills are not
     visible='["reflect","remember","recall","digest"]'
+  else
+    visible='["reflect","remember","recall","digest","unslop","technical-writing"]'
   fi
   python3 - "$agent" "$workspace" "$visible" <<'PY'
 import json

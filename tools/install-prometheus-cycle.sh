@@ -46,7 +46,9 @@ from pathlib import Path
 
 source_root = Path(sys.argv[1]).resolve()
 workspace = Path(sys.argv[2]).resolve()
-skills = ("reflect", "remember", "recall", "digest")
+# Every skill the doctrine mandates, not just the four the job executes: this same run
+# activates that doctrine, so an unverified writing skill would be followed nightly.
+skills = ("reflect", "remember", "recall", "digest", "unslop", "technical-writing")
 manifest_path = workspace / "skills" / ".borrowedfire-manifest"
 
 try:
@@ -380,7 +382,7 @@ import os
 import sys
 
 expected_agent, expected_workspace = sys.argv[1:]
-required = {"reflect", "remember", "recall", "digest"}
+required = {"reflect", "remember", "recall", "digest", "unslop", "technical-writing"}
 try:
     payload = json.load(sys.stdin)
 except (json.JSONDecodeError, OSError):
@@ -397,7 +399,7 @@ if (
 ):
     raise SystemExit(1)
 ' "$AGENT_ID" "$AGENT_WORKSPACE"; then
-  fail_declaration_safely 'The requested agent cannot see the complete learning skill stack; use a copy install or configure trusted symlink targets and agent skill visibility.'
+  fail_declaration_safely 'The requested agent cannot see every doctrine-mandated skill; use a copy install or configure trusted symlink targets and agent skill visibility.'
 fi
 
 AGENT_BINDINGS_OUTPUT="$("$OPENCLAW_BIN" agents bindings --agent "$AGENT_ID" --json)" ||

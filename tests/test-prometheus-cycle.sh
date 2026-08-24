@@ -128,6 +128,17 @@ else
 fi
 check "hidden learning skill declares no job" bash -c "! grep -qx 'add' '$OPENCLAW_ARGS_FILE'"
 check "hidden learning skill disables the stale declaration" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+
+rm -f "$OPENCLAW_ARGS_FILE"
+if FAKE_OPENCLAW_WRITING_HIDDEN=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null 2>&1; then
+  fail "agent-hidden writing skill fails closed"
+else
+  ok "agent-hidden writing skill fails closed"
+fi
+check "hidden writing skill declares no job" bash -c "! grep -qx 'add' '$OPENCLAW_ARGS_FILE'"
+check "hidden writing skill disables the stale declaration" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
 check "hidden learning skill verifies the stale declaration" grep -qx 'get' "$OPENCLAW_ARGS_FILE"
 
 rm -f "$OPENCLAW_ARGS_FILE"

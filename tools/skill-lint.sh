@@ -136,12 +136,12 @@ grep -q '^DOCTRINE_SKILLS="\$LEARNING_SKILLS \$WRITING_SKILLS"' "$ROOT/install.s
 # which is exactly how a stored controller ends up naming a skill that no longer exists.
 CYCLE_INSTALLER="$ROOT/tools/install-prometheus-cycle.sh"
 if [ -f "$CYCLE_INSTALLER" ]; then
-  learning_list="$(sed -n 's/^LEARNING_SKILLS="\(.*\)"$/\1/p' "$ROOT/install.sh")"
-  for learning_skill in $learning_list; do
-    grep -q "^skills = (.*\"$learning_skill\"" "$CYCLE_INSTALLER" ||
-      err "install-prometheus-cycle.sh: 'skills' tuple omits '$learning_skill'; a stored controller would name a stale skill"
-    grep -q "^required = {.*\"$learning_skill\"" "$CYCLE_INSTALLER" ||
-      err "install-prometheus-cycle.sh: 'required' gate omits '$learning_skill'; a stored controller would name a stale skill"
+  mandated_list="$(sed -n 's/^LEARNING_SKILLS="\(.*\)"$/\1/p' "$ROOT/install.sh") $(sed -n 's/^WRITING_SKILLS="\(.*\)"$/\1/p' "$ROOT/install.sh")"
+  for mandated_skill in $mandated_list; do
+    grep -q "^skills = (.*\"$mandated_skill\"" "$CYCLE_INSTALLER" ||
+      err "install-prometheus-cycle.sh: 'skills' integrity check omits '$mandated_skill'; the nightly job would activate a doctrine mandating an unverified skill"
+    grep -q "^required = {.*\"$mandated_skill\"" "$CYCLE_INSTALLER" ||
+      err "install-prometheus-cycle.sh: 'required' visibility gate omits '$mandated_skill'; the nightly job would activate a doctrine mandating an unverified skill"
   done
 fi
 if ! body "$SKILLS_DIR/technical-writing/SKILL.md" | grep -qF 'ASD-STE100'; then
