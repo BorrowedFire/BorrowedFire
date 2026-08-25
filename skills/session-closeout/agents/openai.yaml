@@ -4,4 +4,4 @@ interface:
   default_prompt: "Use $session-closeout to audit this task before ending the session."
 
 policy:
-  allow_implicit_invocation: true
+  allow_implicit_invocation: false
