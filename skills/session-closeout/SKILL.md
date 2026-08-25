@@ -1,9 +1,13 @@
 ---
 name: session-closeout
-description: Audit a task at session closeout against what the user explicitly requested and what the agent can prove it completed. Use when the user says "/session-closeout", "session closeout", "wrap up this session", "before you wrap up", "what did you actually do", or asks for a final requested/completed/missing/unasked/unverified accounting. Return exactly five evidence-based lines with honest gaps and verification commands. NOT for performing missing work or shipping changes (`ship`).
+description: Audit a task against what the user requested and what the agent can prove it completed. Use only when the user explicitly invokes `$session-closeout`, says "session closeout", or directly asks for the requested/completed/missing/unasked/unverified five-line audit. Never invoke it automatically for routine handoffs, task completion, shipping, reflection, or a normal final response. NOT for performing missing work or shipping changes (`ship`).
 ---
 
 # Session Closeout
+
+Run this skill only after the user explicitly asks for the five-line session audit. A task ending,
+a request to be honest, a reflection pass, or a generic "final honesty audit" does not activate
+this skill. Give the user a normal outcome-focused response in those cases.
 
 Run a final, read-only honesty audit of the current task. Do not perform missing work, run new
 verification, or make any mutation after invocation unless the user separately asks.
