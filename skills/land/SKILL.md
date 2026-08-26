@@ -156,8 +156,23 @@ works through its real changed path. **Never infer a waiver from "review clean" 
 - Re-run proof after **any** fix that touches the runtime path. Record concrete evidence
   (command + observed state) in the PR + summary; redact secrets.
 
+**Proof ladder — every recorded proof names the rung it reached:**
+1. Claimed it. Worthless on its own.
+2. Pointed at the line: a real `file:line`, or the library's own source.
+3. Walked the failure step by step and showed the bad case cannot reach.
+4. Ran it: a command, script, or test that exercises the exact changed path and fails loud if
+   the claim is wrong. A generic green suite does not reach this rung.
+5. Reproduced it on the real changed surface (sim, app, browser, or live system).
+
+A runtime-path claim passes this gate at rung 4 or higher. The class bullets above pick the
+surface: where a bullet names a live system or a drivable surface, that class's floor is rung 5.
+The docs/metadata/CI bullet is already a rung-4 path: the built artifact or workflow run is the
+executed check. A claim stuck below rung 4 is **unproven**. Record it as unproven in the PR and
+the summary, and treat the gate as not passed. Never round up.
+
 **10 · Merge gate.** Squash-merge **only when ALL hold:** adversarial-clean · Codex-clean on the
-current head (or `review_bot: none` acknowledged) · **live proof recorded** · CI/tests green where
+current head (or `review_bot: none` acknowledged) · **live proof recorded and passed at the
+rung floor for its class** · CI/tests green where
 a lane exists · diff **not** in the denylist. If `--no-auto-merge`, stop here with a brief.
 
 **11 · Close out.** Post the summary; append a dated entry to the land log (`tasks/land-log.md` in
@@ -202,7 +217,7 @@ Class: <Autonomous|Needs-owner> · Gates: adversarial <…> · Codex <clean@sha,
 - Auto-merged <non-trivial PR>                                (revert: git revert <sha>)
 
 ### Live proof
-- <command/path → observed result; redacted>
+- <command/path → observed result · rung N; redacted>
 
 ### Routine (collapsed) · Lessons written back
 ```

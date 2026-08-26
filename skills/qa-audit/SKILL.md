@@ -92,6 +92,12 @@ unstated, keep them on the audit branch/PR and ask once in the report.
    surfaces, open defects by severity, and decision-ready next steps. Capture recurring defect
    patterns via `remember` to `lessons/`.
 
+**Evidence rungs.** Grade every piece of recorded evidence on the proof ladder in `land`'s Live
+Proof Gate, and write the rung next to the evidence in `test-matrix.md` and `defects.md`. In
+`coverage-summary.md`, "proven" means rung 4 or higher: the check ran real code or drove the real
+surface. Rungs 1-3 (a claim, a cited line, a walked-through argument) are review notes. List them
+under "not proven" with the rung each reached.
+
 ## Defect-Class Circuit Breaker
 
 The **second validated defect with the same root invariant** stops isolated fixes. Before another
