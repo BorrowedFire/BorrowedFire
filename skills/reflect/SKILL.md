@@ -85,10 +85,16 @@ host. It must not pretend to read another machine's private session history.
 3. Inspect only new harness-local notes, pending `.brain-outbox/` captures in explicitly
    registered/accessible repos, and project-status evidence created since that mark. An outbox
    source file may be removed only after its exact capture is durably committed and pushed.
-4. Run Session mode over those deltas, then advance the high-water mark only after captures are
-   durably committed. Never skip failed or ambiguous inputs by moving the mark past them.
-5. Run `digest` only when its cadence/backlog threshold is due. Its fleet lock decides whether
-   this worker may restructure.
+4. Run Session mode over those deltas. When captures occurred, advance the high-water mark only
+   after every capture is durably committed and pushed. When the run found no durable delta and
+   nothing pending, still advance the mark to the cycle-start time — frontmatter only
+   (`last_ingested`, `updated`), with no log bullet. Append a watermark log bullet only for a
+   material event: the baseline recording, an actual ingest, a digest invocation, or a failure.
+   Never advance the mark past a failed or ambiguous item.
+5. Run `digest` only when its cadence/backlog threshold is due: at least seven days since the
+   last completed digest — the date on INDEX.md's `Last generated` line; a scoped lock cycle does
+   not reset it — or more than 15 inbox items. Its fleet lock decides whether this worker may
+   restructure.
 6. Stay quiet on routine success or no-op. A due digest that materially changes Prometheus sends
    one concise summary; also surface a push/sync failure, conflicting evidence, an owner decision,
    or a concrete prevention follow-up.

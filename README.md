@@ -113,6 +113,7 @@ doctrine/          the managed context block install.sh distributes
 prometheus-template/  starting tree for your private brain repo
 install.sh         manifest-owned cross-harness installer
 tools/skill-lint.sh   lint (also install.sh's local preflight)
+tools/brain-lint.sh   brain integrity check (digest's inventory gate; CI lints the template)
 tests/             local installer sandbox matrix + brain-protocol live proof
 ```
 

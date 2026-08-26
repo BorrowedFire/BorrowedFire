@@ -77,7 +77,10 @@ Rules:
 - **Append, don't rewrite.** Dated `## Log` bullets preserve the timeline. Only `digest`
   restructures or merges pages; every other writer appends.
 - **Every log bullet ends with a writer tag** `[<harness>@<host>]` (e.g. `[openclaw@controlnode]`)
-  so a bad merge can be traced.
+  so a bad merge can be traced. When the machine is listed in `config/fleet.md` §Writer
+  identities, use that exact spelling. Otherwise pick one stable lowercase host name and keep it.
+  Spelling drift (`Host`, `host.local`, `host-2`) breaks audit greps and the fleet-cycle
+  watermark binding.
 - **One entity, one page.** Search existing slugs before creating; knowingly duplicate pages are
   never created — near-misses are `digest`'s dedup job.
 - **No secrets, ever.** Keys, tokens, passwords never enter the brain — reference where a
@@ -152,10 +155,13 @@ only by `digest`, under the digest lock, one page per commit:
    batch first — or defer the reconcile.
 1. `git pull --rebase` immediately before the edit.
 2. Touch only settled content — frontmatter, the summary above `## Relations`/`## Log`,
-   `## Relations` edge lines, or an existing log bullet needing link repair. Never delete a log
-   bullet, and never touch a **live append point**: the final log bullet (end of file), on
-   `projects/` pages the line after `## Queue` where claims land — and on any union page, the
-   file's last content line, whatever it is.
+   `## Relations` edge lines, an existing log bullet needing link repair, or a dead `## Queue`
+   claim line (see the queue sweep below). Never delete a log bullet in place — the log archival
+   below is the one sanctioned relocation — and never touch a **live append point**: the final
+   log bullet (end of file), on `projects/` pages the line after the last `## Queue` claim where
+   new claims land — and on any union page, the file's last content line, whatever it is. The
+   queue sweep is exempt from the append-point rule for dead claim lines only; drop-and-redo
+   (step 4) is what makes that exemption safe.
 3. Commit the edit alone — `brain: digest reconcile <path> [<harness>@<host>]` — and `git push`
    immediately, before any other digest work.
 4. On push rejection, drop the edit (`git reset --hard HEAD~1`), `git pull --rebase`, and redo it
@@ -176,6 +182,28 @@ protocol. Union-merged pages are never stubbed in place during dedup or restruct
 a duplicate registry page is listed under INDEX.md's needs-review instead. Inbox promotion's
 archived stub is different and stays as-is: a sanctioned whole-file `git mv` off the live path,
 per the caveat above.
+
+**Queue sweep (digest-only):** a `## Queue` claim line is **dead** once a later `## Log` bullet
+releases it, or once it is older than 24 hours (the maintainer claim TTL). digest removes dead
+claim lines under this same reconcile protocol — lock held, one page per commit, pushed
+immediately, dropped and redone on rejection. No other writer removes a claim line, its own
+included; `maintainer` releases a claim by appending a `## Log` bullet. Residual union risk: a
+concurrent claim append that rebases over the sweep can resurrect a removed line (union keeps
+both sides). The resurrected line is still dead by its own timestamp, readers ignore it, and the
+next sweep removes it again — the failure mode is clutter, not loss.
+
+**Log archival (digest-only):** when a `projects/` page's `## Log` grows past roughly 60 bullets
+or 15 KB, digest moves the oldest settled bullets — never the final bullet, never a bullet
+younger than 90 days — to `projects/archive/<name>.md`, verbatim and in order, writer tags
+intact. The archive page is created on first use (`type: project`, `status: archived`, a one-line
+summary pointing back to the live page). It sits outside the `projects/*.md` union rule and only
+digest writes it. The live page keeps one marker bullet in place of the moved run:
+`- <first-date>..<last-date>: earlier log archived to [[projects/archive/<name>]]. [<harness>@<host>]`
+Each archival is two reconcile-protocol commits in strict order: first append the bullets to the
+archive page and push; then remove them from the live page, leave the marker, and push. A failure
+between the two leaves the bullets duplicated, never lost, and the next digest finishes the
+removal. `recall` and `maintainer` read archive pages only when the live page's marker points
+there.
 
 ## Degradation ladder (brain unreachable)
 
@@ -210,6 +238,10 @@ Only one digest runs fleet-wide at a time. Cooperative lock via push-wins arbitr
 3. **Staleness:** a lock whose *committer date* (not local clock) is older than 2 hours may be
    deleted (commit + push the deletion, then re-claim from step 1).
 4. **Release:** delete the lock file, commit, push — in the same run that took it, even on failure.
+
+A **completed digest** is a full consolidation pass that ends by regenerating `INDEX.md`; its
+date is INDEX.md's `Last generated` line. A lock cycle taken for a scoped edit — one reconcile, a
+config change — is not a completed digest and does not reset any digest-cadence clock.
 
 ## Retrieval without a database
 
