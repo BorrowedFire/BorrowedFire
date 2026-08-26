@@ -36,9 +36,12 @@ err() { echo "ERROR: $*" >&2; ERRORS=$((ERRORS + 1)); }
 
 frontmatter() { awk '/^---$/{n++; next} n==1{print} n>=2{exit}' "$1"; }
 
-# Epoch seconds for a YYYY-MM-DD date; GNU date first, BSD date second. Empty on failure.
+# Epoch seconds for a YYYY-MM-DD date or ISO timestamp; GNU date parses both with -d, BSD date
+# needs an explicit format per shape. Empty on failure.
 to_epoch() {
-  date -d "$1" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$1" +%s 2>/dev/null || true
+  date -d "$1" +%s 2>/dev/null ||
+    date -ju -f "%Y-%m-%dT%H:%M:%SZ" "$1" +%s 2>/dev/null ||
+    date -j -f "%Y-%m-%d" "$1" +%s 2>/dev/null || true
 }
 NOW="$(date +%s)"
 
@@ -158,22 +161,36 @@ while IFS=: read -r file link; do
     err "${file#"$BRAIN"/}: broken wikilink [[$target]]"
 done < <(grep -roE '\[\[[^]]+\]\]' --include='*.md' "$BRAIN" | grep -v '_template.md:')
 
-# --- queue claims past the 24h TTL (digest sweep due) ---
+# --- dead queue claims: released in a later log bullet, or past the 24h TTL ---
 if [ "$TEMPLATE" -eq 0 ]; then
   while IFS=: read -r file line text; do
-    stamp="$(printf '%s' "$text" | awk '{print $NF}' | cut -c1-10)"
-    if ! printf '%s' "$stamp" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+    # A claim released per maintainer's format leaves a 'released claim on <item>' log bullet
+    # on the same page; such a claim is dead regardless of age.
+    item="$(printf '%s' "$text" | awk '{print $3}')"
+    if [ -n "$item" ] && grep -qF "released claim on $item" "$file"; then
+      err "${file#"$BRAIN"/}:$line: dead queue claim (released in a log bullet) — digest queue sweep due"
+      continue
+    fi
+    last_field="$(printf '%s' "$text" | awk '{print $NF}')"
+    day="$(printf '%s' "$last_field" | cut -c1-10)"
+    if ! printf '%s' "$day" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
       err "${file#"$BRAIN"/}:$line: claim has no trailing timestamp"
       continue
     fi
-    epoch="$(to_epoch "$stamp")"
-    [ -n "$epoch" ] || continue
-    # Date-only stamps anchor at midnight: allow 48h before calling one dead. Full ISO stamps
-    # get the TTL plus an hour of grace.
+    # A full ISO stamp gets the TTL plus an hour of grace, measured from the claim time. A
+    # date-only stamp anchors at midnight, so allow 48h before calling it dead.
+    epoch=""
     limit=172800
-    case "$text" in *"${stamp}T"*) limit=90000 ;; esac
+    case "$last_field" in
+      *T*)
+        epoch="$(to_epoch "$last_field")"
+        [ -n "$epoch" ] && limit=90000
+        ;;
+    esac
+    [ -n "$epoch" ] || epoch="$(to_epoch "$day")"
+    [ -n "$epoch" ] || continue
     if [ $((NOW - epoch)) -gt "$limit" ]; then
-      err "${file#"$BRAIN"/}:$line: dead queue claim from $stamp — digest queue sweep due"
+      err "${file#"$BRAIN"/}:$line: dead queue claim from $day — digest queue sweep due"
     fi
   done < <(grep -rnE '^- claimed ' --include='*.md' "$BRAIN/projects" 2>/dev/null)
 fi
@@ -185,7 +202,10 @@ if [ "$TEMPLATE" -eq 0 ] && [ -f "$BRAIN/INDEX.md" ]; then
     err "INDEX.md: no 'Last generated:' line — run digest"
   else
     gen_epoch="$(to_epoch "$gen")"
-    if [ -n "$gen_epoch" ] && [ $((NOW - gen_epoch)) -gt $((8 * 86400)) ]; then
+    # 'Last generated' is date-only, so the anchor is midnight. Seven days plus six hours of
+    # grace clears the nightly pass's own window (03:35 on day seven) without masking a missed
+    # run past the same morning.
+    if [ -n "$gen_epoch" ] && [ $((NOW - gen_epoch)) -gt $((7 * 86400 + 6 * 3600)) ]; then
       err "INDEX.md: last completed digest was $gen — over the 7-day cadence, digest due"
     fi
   fi
