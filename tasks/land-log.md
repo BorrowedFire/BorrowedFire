@@ -100,3 +100,23 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
   Codex clean at `c3f0eae5d6` with the sha matching head, CI green, live proof recorded. Verified
   on merged main: skill-lint 18, test-install 135/135, test-brain 46/46,
   test-prometheus-cycle 164/164, and both harnesses serve doctrine v5 from this checkout.
+
+## 2026-08-26 — proof ladder in the Live Proof Gate (PR #6)
+- Item: https://github.com/BorrowedFire/BorrowedFire/pull/6 — grade live proof on a five-rung
+  ladder (adapted from pstack's blast-radius, MIT). `land` step 9 defines the ladder; every proof
+  names its rung; runtime claims pass at rung 4+, class bullets naming a live or drivable surface
+  set a rung-5 floor; the step-10 merge predicate requires the floor, not a record. `qa-audit`
+  grades evidence on the same ladder; "proven" means rung 4 or higher.
+- Class: Autonomous (2 skill bodies + lint + tests; 4 files, +48/−3; denylist: no match).
+- Gates: adversarial 2 findings pre-push, both fixed (rung 4 admitted a generic green suite; the
+  rung-4 floor undercut the live-system class bullets). Codex round 1: 2×P1 (one mechanism: the
+  merge predicate consumed a record, not the threshold) + 1×P2 (lint guarded the label, not the
+  threshold) — circuit breaker fired, consumer matrix posted on the PR, one coherent fix. Codex
+  round 2: clean @ `6ec12f4` (sha == head). CI green.
+- Gotcha (mirror of [[lessons/prose-contracts-break-on-rewrap]]): a fail-closed regression's sed
+  was line-anchored while its target phrase hard-wraps, so the mutation no-opped and the case
+  failed vacuously. Mutate the sub-phrase that sits on one line, or flatten before matching.
+- Outcome: squash-merged as `bfc73a6`. Live proof at final head, rung 4 for a docs/CI diff: the
+  executed lint suite (skill-lint 18, test-install 139/139, test-brain 46/46, cycle 164/164,
+  shellcheck clean), four contracts proven to fail closed, and the installed skills serving the
+  ladder, threshold, and predicate in both harnesses.
