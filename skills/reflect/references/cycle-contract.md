@@ -10,8 +10,10 @@ defined in `../SKILL.md` and needs no scheduler.
 - **Nightly fleet pass:** one always-on OpenClaw host runs at 03:35 in the owner's timezone. It
   ingests only new local-harness notes/outboxes and exact-current project status into Prometheus.
 - **Digest:** the nightly pass invokes `digest` only when at least seven days have elapsed since
-  the last completed digest or the inbox exceeds 15 items. The digest lock prevents overlapping
-  restructurers.
+  the last completed digest or the inbox exceeds 15 items. A completed digest is a full
+  consolidation that regenerated `INDEX.md`; read its date from INDEX.md's `Last generated` line.
+  A scoped lock cycle — one reconcile, a config edit — does not reset the seven-day clock. The
+  digest lock prevents overlapping restructurers.
 
 Nightly timing is deliberately separate from harness-local memory curation. Override the cron
 expression when the host has a different maintenance window.
@@ -28,6 +30,9 @@ The fleet worker must:
    pre-existing session notes, but still inspect pending outboxes and exact-current project status;
 3. retain only verified durable deltas and deduplicate before capture;
 4. leave ambiguous items pending rather than advancing past them;
+   on a run with no capture and nothing pending, advance the mark to the cycle-start time in the
+   watermark page's frontmatter only, appending no log bullet — watermark log bullets record
+   material events (baseline, ingest, digest, failure), never per-run no-ops;
 5. use `remember` for writes and `digest` for restructuring;
 6. avoid product-repo, account, credential, deployment, release, store, skill, doctrine, and
    scheduler mutations, except deleting the exact local-only `.brain-outbox/<file>` whose content
@@ -43,7 +48,8 @@ The fleet worker must:
     fleet authority never includes a repo-local fallback write.
 
 The scheduler's own run history is the audit trail for successful no-op runs. Prometheus pages are
-the audit trail for material captures. Do not add “ran successfully” journal noise.
+the audit trail for material captures. Do not add “ran successfully” journal noise — the
+watermark page included: a no-op run bumps its frontmatter and writes no bullet.
 
 ## Installation
 

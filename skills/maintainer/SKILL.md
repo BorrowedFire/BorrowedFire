@@ -58,8 +58,10 @@ current harness and note it.
 4. **Claim before delegating** (fleet-safe): append to the project page's `## Queue` —
    `- claimed <item-url> by maintainer [<harness>@<host>] <ISO timestamp>` — commit, push per the
    brain sync protocol. Push rejected → pull, re-read claims, **skip items claimed by others**.
-   Claims older than 24h are stale and may be re-claimed. One maintainer at a time is the norm;
-   the claim protocol is the safety net, not an invitation to run several.
+   A claim is live only while it is under 24h old and no later `## Log` bullet releases it; a
+   dead claim line may sit on the page until `digest` sweeps it — ignore it and re-claim. One
+   maintainer at a time is the norm; the claim protocol is the safety net, not an invitation to
+   run several.
 5. **Delegate** (only when delegation is authorized — see Authorization):
    - **Autonomous PR** → fire a `land` worker on its branch.
    - **Autonomous issue (no PR)** → a worker investigates root cause, implements the best
@@ -72,7 +74,9 @@ current harness and note it.
    alternative rather than blocking.
 7. **Monitor** (below). Continue until: every autonomous item is **merged with proof**, every
    needs-owner item is a **decision-ready brief**, the effective queue is empty, or CI is green
-   with a documented reason no work remains. Release claims for anything you stop working.
+   with a documented reason no work remains. Release every claim you stop working: append a
+   `## Log` bullet — `- <date>: released claim on <item-url> — <reason>. [<harness>@<host>]`.
+   Never delete the claim line yourself (union path); `digest` sweeps released and stale claims.
 
 ## Delegation model
 
