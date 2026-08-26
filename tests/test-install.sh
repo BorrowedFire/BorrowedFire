@@ -482,6 +482,11 @@ contract_lint_case "cycle-installer-skill-drift" "tools/install-prometheus-cycle
   's/^required = {"reflect", /required = {"stale-name", /'
 contract_lint_case "land-proof-ladder" "skills/land/SKILL.md" \
   's/every recorded proof names the rung/a proof may name the rung/'
+contract_lint_case "land-rung-threshold" "skills/land/SKILL.md" \
+  's/passes this gate at rung 4 or higher/passes this gate at any rung/'
+# the predicate phrase hard-wraps; mutate the sub-phrase that sits on one line
+contract_lint_case "land-merge-rung-floor" "skills/land/SKILL.md" \
+  's/rung floor for its class/record/'
 contract_lint_case "qa-audit-proven-threshold" "skills/qa-audit/SKILL.md" \
   's/means rung 4 or higher/means any recorded evidence/'
 

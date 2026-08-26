@@ -171,7 +171,8 @@ executed check. A claim stuck below rung 4 is **unproven**. Record it as unprove
 the summary, and treat the gate as not passed. Never round up.
 
 **10 · Merge gate.** Squash-merge **only when ALL hold:** adversarial-clean · Codex-clean on the
-current head (or `review_bot: none` acknowledged) · **live proof recorded** · CI/tests green where
+current head (or `review_bot: none` acknowledged) · **live proof recorded and passed at the
+rung floor for its class** · CI/tests green where
 a lane exists · diff **not** in the denylist. If `--no-auto-merge`, stop here with a brief.
 
 **11 · Close out.** Post the summary; append a dated entry to the land log (`tasks/land-log.md` in

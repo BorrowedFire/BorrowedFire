@@ -196,6 +196,12 @@ fi
 if ! body "$LAND_SKILL" | tr '\n' ' ' | tr -s ' ' | grep -qF 'every recorded proof names the rung'; then
   err "land: the proof-ladder rung requirement is missing"
 fi
+if ! body "$LAND_SKILL" | tr '\n' ' ' | tr -s ' ' | grep -qF 'passes this gate at rung 4 or higher'; then
+  err "land: the rung-4 passing threshold is missing"
+fi
+if ! body "$LAND_SKILL" | tr '\n' ' ' | tr -s ' ' | grep -qF 'passed at the rung floor for its class'; then
+  err "land: the merge predicate must require the class rung floor, not a mere record"
+fi
 if ! body "$QA_AUDIT_SKILL" | tr '\n' ' ' | tr -s ' ' | grep -qF 'means rung 4 or higher'; then
   err "qa-audit: the rung-4 proven threshold is missing"
 fi
