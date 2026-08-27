@@ -21,9 +21,21 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 def _default_skill_root() -> Path:
-    """First installed agent skills directory, following the same harness list
-    install.sh distributes to (claude, codex, qwen, openclaw). This skill ships
-    to every harness, so the default must not assume one of them."""
+    """Skills directory of the harness that is running this skill.
+
+    Resolve siblings from this file's own install location rather than a fixed
+    preference order: on a machine with several harnesses installed, a Claude
+    invocation must report Claude's skills, not whichever directory happens to
+    sort first. Running from a repo checkout reports that checkout's skills/
+    directory, which is the honest answer for "what is installed beside me";
+    --skill-root overrides either way.
+    """
+    installed_root = ROOT.parent
+    if installed_root.name == "skills" and installed_root.is_dir():
+        return installed_root
+
+    # Not running from a skills/ tree (an ad-hoc copy, say): fall back to the
+    # harness list install.sh distributes to.
     candidates: list[Path] = []
     codex_home = os.environ.get("CODEX_HOME")
     if codex_home:
@@ -35,13 +47,12 @@ def _default_skill_root() -> Path:
         Path.home() / ".codex" / "skills",
         Path.home() / ".claude" / "skills",
         Path.home() / ".qwen" / "skills",
-        Path.cwd() / "skills",
     ]
     for candidate in candidates:
         if candidate.is_dir():
             return candidate
     # Nothing installed locally is not an error: a dependency absorbed into the
-    # Spark registry still satisfies the check, and --skill-root overrides.
+    # Spark registry still satisfies the check.
     return Path.home() / ".claude" / "skills"
 
 
