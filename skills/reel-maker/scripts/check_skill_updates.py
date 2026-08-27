@@ -20,17 +20,22 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
+# install.sh symlinks skills into each harness by default, and resolve()
+# follows that link back to the shared repo. Keep an unresolved view so the
+# harness that invoked this skill stays identifiable.
+INVOCATION_ROOT = Path(__file__).absolute().parents[1]
 def _default_skill_root() -> Path:
     """Skills directory of the harness that is running this skill.
 
-    Resolve siblings from this file's own install location rather than a fixed
+    Resolve siblings from this file's own invocation path — unresolved, since
+    the default install symlinks into each harness — rather than a fixed
     preference order: on a machine with several harnesses installed, a Claude
     invocation must report Claude's skills, not whichever directory happens to
     sort first. Running from a repo checkout reports that checkout's skills/
     directory, which is the honest answer for "what is installed beside me";
     --skill-root overrides either way.
     """
-    installed_root = ROOT.parent
+    installed_root = INVOCATION_ROOT.parent
     if installed_root.name == "skills" and installed_root.is_dir():
         return installed_root
 
