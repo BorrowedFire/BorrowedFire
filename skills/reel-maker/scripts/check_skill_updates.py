@@ -21,16 +21,27 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 def _default_skill_root() -> Path:
-    """First installed agent skills directory. This skill ships to every
-    harness, so the default must not assume Codex."""
-    candidates = [
-        Path(os.environ["CODEX_HOME"]) / "skills" if os.environ.get("CODEX_HOME") else None,
+    """First installed agent skills directory, following the same harness list
+    install.sh distributes to (claude, codex, qwen, openclaw). This skill ships
+    to every harness, so the default must not assume one of them."""
+    candidates: list[Path] = []
+    codex_home = os.environ.get("CODEX_HOME")
+    if codex_home:
+        candidates.append(Path(codex_home) / "skills")
+    openclaw_workspace = os.environ.get("OPENCLAW_WORKSPACE") or os.environ.get("OPENCLAW_WS")
+    if openclaw_workspace:
+        candidates.append(Path(openclaw_workspace) / "skills")
+    candidates += [
         Path.home() / ".codex" / "skills",
         Path.home() / ".claude" / "skills",
+        Path.home() / ".qwen" / "skills",
+        Path.cwd() / "skills",
     ]
     for candidate in candidates:
-        if candidate and candidate.is_dir():
+        if candidate.is_dir():
             return candidate
+    # Nothing installed locally is not an error: a dependency absorbed into the
+    # Spark registry still satisfies the check, and --skill-root overrides.
     return Path.home() / ".claude" / "skills"
 
 
@@ -170,6 +181,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
                 "local_skill": local_skill,
                 "local_path": str(skill_md),
                 "local_installed": skill_md.exists(),
+                "registry_absorbed": bool(registry_entry),
                 "local_version": local_meta.get("version"),
                 "upstream_skill": upstream_skill,
                 "upstream_source_path": source_path,
@@ -209,7 +221,12 @@ def print_markdown(report: dict[str, Any]) -> None:
     print()
     for dep in report["dependencies"]:
         marker = "required" if dep["required"] else "optional"
-        installed = "installed" if dep["local_installed"] else "missing"
+        if dep["local_installed"]:
+            installed = "installed"
+        elif dep.get("registry_absorbed"):
+            installed = "not installed; absorbed in the Spark registry"
+        else:
+            installed = "missing"
         print(f"## {dep['local_skill']} ({marker})")
         print(f"- role: {dep['role']}")
         print(f"- local: {installed}; version: {dep.get('local_version') or 'unknown'}")
@@ -243,13 +260,22 @@ def main() -> int:
     else:
         print_markdown(report)
 
+    # A required dependency is satisfied by a local install or by an absorbed
+    # entry in the Spark registry. Harnesses that deliberately do not install
+    # the upstream marketing skills are not broken.
     missing_required = [
         dep["local_skill"]
         for dep in report["dependencies"]
-        if dep["required"] and not dep["local_installed"]
+        if dep["required"]
+        and not dep["local_installed"]
+        and not dep.get("registry_absorbed")
     ]
     if missing_required:
-        print(f"Missing required local skills: {', '.join(missing_required)}", file=sys.stderr)
+        print(
+            "Missing required skills (neither installed locally nor absorbed in "
+            f"the Spark registry): {', '.join(missing_required)}",
+            file=sys.stderr,
+        )
         return 1
     return 0
 
