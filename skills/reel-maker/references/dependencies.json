@@ -1,0 +1,77 @@
+{
+  "skill_name": "reel-maker",
+  "upstream": {
+    "repository": "coreyhaines31/marketingskills",
+    "url": "https://github.com/coreyhaines31/marketingskills",
+    "policy": "report-only; never auto-update local skills or Spark policy"
+  },
+  "dependencies": [
+    {
+      "role": "foundational product context",
+      "local_skill": "product-marketing",
+      "upstream_skill": "product-marketing",
+      "upstream_source_path": "skills/product-marketing/SKILL.md",
+      "required": true,
+      "previous_upstream_skill": "product-marketing-context"
+    },
+    {
+      "role": "voice-of-customer language",
+      "local_skill": "customer-research",
+      "upstream_skill": "customer-research",
+      "upstream_source_path": "skills/customer-research/SKILL.md",
+      "required": true
+    },
+    {
+      "role": "launch or release framing",
+      "local_skill": "launch",
+      "upstream_skill": "launch",
+      "upstream_source_path": "skills/launch/SKILL.md",
+      "required": true,
+      "previous_upstream_skill": "launch-strategy"
+    },
+    {
+      "role": "short-form social structure",
+      "local_skill": "social",
+      "upstream_skill": "social",
+      "upstream_source_path": "skills/social/SKILL.md",
+      "required": true,
+      "previous_upstream_skill": "social-content"
+    },
+    {
+      "role": "persuasive overlay and CTA copy",
+      "local_skill": "copywriting",
+      "upstream_skill": "copywriting",
+      "upstream_source_path": "skills/copywriting/SKILL.md",
+      "required": true
+    },
+    {
+      "role": "copy quality gate",
+      "local_skill": "copy-editing",
+      "upstream_skill": "copy-editing",
+      "upstream_source_path": "skills/copy-editing/SKILL.md",
+      "required": true
+    },
+    {
+      "role": "video production and render workflow",
+      "local_skill": "video",
+      "upstream_skill": "video",
+      "upstream_source_path": "skills/video/SKILL.md",
+      "required": true
+    },
+    {
+      "role": "angle sharpening",
+      "local_skill": "marketing-psychology",
+      "upstream_skill": "marketing-psychology",
+      "upstream_source_path": "skills/marketing-psychology/SKILL.md",
+      "required": false
+    },
+    {
+      "role": "paid creative variants",
+      "local_skill": "ad-creative",
+      "upstream_skill": "ad-creative",
+      "upstream_source_path": "skills/ad-creative/SKILL.md",
+      "required": false
+    }
+  ],
+  "spark_registry": "config/marketing-skills-index.json"
+}

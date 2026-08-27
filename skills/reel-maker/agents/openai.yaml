@@ -1,0 +1,7 @@
+interface:
+  display_name: "Reel Maker"
+  short_description: "Plan, script, render, and validate short-form reels."
+  default_prompt: "Use $reel-maker to create a short-form video package from product context, screenshots, copy gates, and repo-native rendering."
+
+policy:
+  allow_implicit_invocation: true
