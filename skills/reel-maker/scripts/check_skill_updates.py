@@ -20,10 +20,42 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-# install.sh symlinks skills into each harness by default, and resolve()
-# follows that link back to the shared repo. Keep an unresolved view so the
-# harness that invoked this skill stays identifiable.
-INVOCATION_ROOT = Path(__file__).absolute().parents[1]
+def _invocation_path() -> Path:
+    """This file's path as the caller reached it, with symlinks intact.
+
+    install.sh symlinks skills into each harness, and every obvious way of
+    locating this file rewrites the path back to the shared repo, losing the
+    harness identity: resolve() follows the link, and Python absolutizes
+    __file__ with the already-canonicalized cwd, so even the relative
+    invocation SKILL.md documents arrives here fully resolved. sys.argv[0]
+    still holds the path as typed, and the shell's logical PWD keeps the link,
+    so reconstruct from those and fall back only when they do not agree.
+    """
+    raw = Path(sys.argv[0]) if sys.argv and sys.argv[0] else Path(__file__)
+    logical_pwd = os.environ.get("PWD")
+
+    if not raw.is_absolute():
+        if logical_pwd:
+            candidate = Path(logical_pwd) / raw
+            if candidate.exists():
+                return candidate
+        return raw.absolute()
+
+    # Invoked by absolute path: honor it, but if it is the canonicalized form
+    # of a logical path the caller is standing in, prefer the caller's view.
+    if logical_pwd:
+        try:
+            tail = raw.relative_to(Path(os.getcwd()))
+        except ValueError:
+            tail = None
+        if tail is not None:
+            candidate = Path(logical_pwd) / tail
+            if candidate.exists() and candidate.resolve() == raw.resolve():
+                return candidate
+    return raw
+
+
+INVOCATION_ROOT = _invocation_path().parents[1]
 def _default_skill_root() -> Path:
     """Skills directory of the harness that is running this skill.
 
