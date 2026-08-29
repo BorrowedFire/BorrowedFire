@@ -72,7 +72,32 @@ done
 for m in remember recall digest reflect; do
   [ -d "$SKILLS_DIR/$m" ] || err "memory system incomplete: missing '$m'"
 done
-[ -f "$SKILLS_DIR/remember/references/brain-schema.md" ] || err "missing remember/references/brain-schema.md (recall + digest depend on it)"
+BRAIN_SCHEMA="$SKILLS_DIR/remember/references/brain-schema.md"
+[ -f "$BRAIN_SCHEMA" ] || err "missing remember/references/brain-schema.md (recall + digest depend on it)"
+
+# follow-up ledger contracts: the schema owns the format, digest sweeps it, reflect writes the
+# canonical token, brain-lint enforces the INDEX section. Matched wrap-proof where the phrase
+# is prose (a re-wrap must not silently drop a contract).
+if [ -f "$BRAIN_SCHEMA" ]; then
+  grep -q '^## Follow-ups' "$BRAIN_SCHEMA" ||
+    err "brain-schema: the §Follow-ups ledger contract is missing"
+  grep -qF '## Open follow-ups' "$BRAIN_SCHEMA" ||
+    err "brain-schema: the INDEX 'Open follow-ups' section contract is missing"
+fi
+if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'Sweep follow-ups'; then
+  err "digest: the follow-up sweep step is missing"
+fi
+if ! body "$SKILLS_DIR/digest/SKILL.md" | grep -qF 'no-trigger'; then
+  err "digest: the no-trigger rot tag is missing"
+fi
+# shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+if ! body "$SKILLS_DIR/reflect/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'canonical token `follow-up:`'; then
+  err "reflect: the canonical follow-up token rule is missing"
+fi
+grep -qF 'Open follow-ups' "$ROOT/tools/brain-lint.sh" ||
+  err "brain-lint: the INDEX follow-up ledger check is missing"
+grep -qF '## Open follow-ups' "$ROOT/prometheus-template/INDEX.md" ||
+  err "template INDEX: the 'Open follow-ups' section skeleton is missing"
 
 LEARN_SKILL="$SKILLS_DIR/reflect/SKILL.md"
 DOCTRINE="$ROOT/doctrine/DOCTRINE.md"

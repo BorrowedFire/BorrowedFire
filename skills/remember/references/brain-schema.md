@@ -102,6 +102,30 @@ denylist_extra: []          # repo-specific additions to land's denylist
 
 Body sections: `## Queue` (maintainer's claim lines), `## Log` (status changes, lands, decisions).
 
+## Follow-ups (the deferred-work ledger)
+
+A follow-up is prevention or operational work the current task could not do: warranted, but
+outside its authority or scope. `reflect` produces them; this section owns their format so
+deferred work stays greppable and cannot rot into "later means never".
+
+- **One spelling.** A new follow-up carries the lowercase token `follow-up:` plus the smallest
+  concrete action and the condition that triggers it. The sweep still reads legacy spellings
+  ("Open follow-up", "OPEN FOLLOW-UP", "owner follow-up") in old bullets; new writes use the
+  token.
+- **Where they live.** A lesson records prevention debt as a line-start
+  ``Prevention: `follow-up`.`` line whose paragraph names the action and the trigger. A project
+  page records operational debt as a dated log bullet containing `follow-up:`.
+- **What closes one.** On a lesson, `digest` rewrites the Prevention line to `encoded` or
+  `memory-only` once the prevention lands (lessons are not union paths, so a locked digest may
+  edit them). On a project page, closure is a later dated log bullet that names the follow-up
+  and states it is done or superseded — the queue-claim release pattern; the original bullet is
+  never edited.
+- **The ledger.** `INDEX.md` carries a generated `## Open follow-ups` section: one line per open
+  item, `- [<title>](<page path>): <action> (since <date>)`, or `(none)` when the set is empty.
+  `digest` owns the section (its sweep builds it); `recall` and `maintainer` read it as the
+  deferred-work ledger. An entry whose text names no trigger gets a trailing `no-trigger` tag —
+  those are the ones that rot first, and the digest report calls them out.
+
 ## Sync protocol (multi-writer, multi-machine)
 
 Several agents on several machines write concurrently. The protocol is git-native — no server.

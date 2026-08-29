@@ -225,6 +225,26 @@ if [ "$TEMPLATE" -eq 0 ] && [ -f "$BRAIN/INDEX.md" ]; then
   fi
 fi
 
+# --- follow-up ledger (schema §Follow-ups) ---
+# The section must exist in every INDEX, template included. The listing check runs live-only
+# and covers the lessons half: a line-start Prevention follow-up must appear in the ledger.
+# Project-bullet follow-ups close via prose in later bullets, so their sweep stays with digest.
+if [ -f "$BRAIN/INDEX.md" ]; then
+  if ! grep -q '^## Open follow-ups' "$BRAIN/INDEX.md"; then
+    err "INDEX.md: missing '## Open follow-ups' section — digest refresh due"
+  elif [ "$TEMPLATE" -eq 0 ]; then
+    FOLLOWUP_SECTION="$(awk '/^## Open follow-ups/{f=1; next} /^## /{f=0} f' "$BRAIN/INDEX.md")"
+    for page in "$BRAIN"/lessons/*.md; do
+      [ -e "$page" ] || continue
+      case "$(basename "$page")" in _template.md) continue ;; esac
+      # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
+      grep -q '^Prevention: `follow-up`' "$page" || continue
+      printf '%s\n' "$FOLLOWUP_SECTION" | grep -qF "lessons/$(basename "$page")" ||
+        err "${page#"$BRAIN"/}: open follow-up not listed in INDEX.md — digest follow-up sweep due"
+    done
+  fi
+fi
+
 if [ "$ERRORS" -gt 0 ]; then
   echo "brain-lint: $ERRORS error(s) in $BRAIN" >&2
   exit 1

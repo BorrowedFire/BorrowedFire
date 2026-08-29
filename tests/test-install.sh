@@ -518,6 +518,20 @@ contract_lint_case "readme-links-point-at-real-skills" "README.md" \
 contract_lint_case "routing-cells-reject-malformed-names" "doctrine/DOCTRINE.md" \
   's/`signal`/`Signal`/'
 
+# --- 14. follow-up ledger contracts fail closed ---
+contract_lint_case "schema-owns-followup-ledger" "skills/remember/references/brain-schema.md" \
+  's/^## Follow-ups.*/## Deferred things/'
+contract_lint_case "digest-sweeps-followups" "skills/digest/SKILL.md" \
+  's/Sweep follow-ups/Consider follow-ups/'
+contract_lint_case "digest-tags-no-trigger" "skills/digest/SKILL.md" \
+  's/no-trigger/untriggered/g'
+contract_lint_case "reflect-writes-canonical-token" "skills/reflect/SKILL.md" \
+  's/canonical token/usual token/'
+contract_lint_case "brain-lint-enforces-ledger" "tools/brain-lint.sh" \
+  's/Open follow-ups/Open followups/g'
+contract_lint_case "template-index-has-ledger" "prometheus-template/INDEX.md" \
+  's/^## Open follow-ups$/## Followups/'
+
 # a skill added without a routing row or README entry is the drift this contract exists to catch
 drift_clone="$SB/contract-new-skill-unrouted"
 cp -R "$SRC" "$drift_clone"

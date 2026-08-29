@@ -202,6 +202,55 @@ check "guard: pull after drop stays clean"     gA pull -q --rebase
 check "guard: single updated: key"             test "$(grep -c '^updated:' "$SB/A/$SLAB")" -eq 1
 check "guard: remote reconcile preserved"      grep -q '^updated: 2026-07-13' "$SB/A/$SLAB"
 
+# --- brain-lint: the follow-up ledger (schema §Follow-ups) ---
+# Scratch trees per case; only the targeted error string is asserted, because a template copy in
+# live mode reddens on unrelated checks by design.
+mk_ledger_brain() { # mk_ledger_brain <dir> — template copy plus one open follow-up lesson
+  cp -R "$SRC/prometheus-template" "$1"
+  cat > "$1/lessons/sample-open-item.md" << 'PAGE'
+---
+type: lesson
+created: 2026-07-01
+updated: 2026-07-01
+tags: [fixture]
+source: agent-run
+status: active
+---
+
+# Sample open item
+
+Prevention: `follow-up`. Add the guard when the next release branch opens.
+PAGE
+}
+
+mk_ledger_brain "$SB/L1"
+sed -i.bak '/^## Open follow-ups$/,/^(none)$/d' "$SB/L1/INDEX.md" && rm -f "$SB/L1/INDEX.md.bak"
+OUT="$(bash "$SRC/tools/brain-lint.sh" "$SB/L1" 2>&1)" || true
+check "ledger: missing INDEX section is flagged" \
+  grep -qF "missing '## Open follow-ups' section" <<<"$OUT"
+
+mk_ledger_brain "$SB/L2"
+OUT="$(bash "$SRC/tools/brain-lint.sh" "$SB/L2" 2>&1)" || true
+check "ledger: unlisted open follow-up is flagged" \
+  grep -qF 'follow-up sweep due' <<<"$OUT"
+
+mk_ledger_brain "$SB/L3"
+sed -i.bak 's|^(none)$|- [Sample open item](lessons/sample-open-item.md): add the guard (since 2026-07-01)|' "$SB/L3/INDEX.md" && rm -f "$SB/L3/INDEX.md.bak"
+OUT="$(bash "$SRC/tools/brain-lint.sh" "$SB/L3" 2>&1)" || true
+if grep -qF 'follow-up sweep due' <<<"$OUT"; then
+  fail "ledger: listed follow-up passes the sweep check"
+else
+  ok "ledger: listed follow-up passes the sweep check"
+fi
+
+cp -R "$SRC/prometheus-template" "$SB/L4"
+sed -i.bak '/^## Open follow-ups$/,/^(none)$/d' "$SB/L4/INDEX.md" && rm -f "$SB/L4/INDEX.md.bak"
+if bash "$SRC/tools/brain-lint.sh" --template "$SB/L4" >/dev/null 2>&1; then
+  fail "ledger: template mode requires the section skeleton"
+else
+  ok "ledger: template mode requires the section skeleton"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 rm -rf "$SB"
