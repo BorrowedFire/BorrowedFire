@@ -54,7 +54,7 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
    frontmatter keys; INDEX carries its `## Open follow-ups` section and every open follow-up
    lesson appears there. From a Borrowed Fire checkout, `tools/brain-lint.sh <brain-root>` runs
    these checks. Fix each deviation in this run or file it under INDEX.md's needs-review. The
-   two ledger deviations are cleared by this run's own steps 7 and 9, so record them and move
+   two ledger deviations are cleared by this run's own steps 7 and 10, so record them and move
    on rather than filing them.
 3. **Ingest outboxes.** Any `.brain-outbox/` files in repos you can see, and fenced
    `BRAIN CAPTURE` blocks the owner has queued: file them as normal captures. Delete only the
@@ -67,30 +67,41 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
    (rules above); repoint inbound wikilinks (`rg -l '\[\[<old-slug>\]\]'` → edit).
 6. **Repair the graph.** Dangling wikilinks (`rg -o '\[\[[^]]+\]\]'` targets with no file):
    obvious typo → fix; missing entity mentioned ≥2 times → stub page; else log it.
-7. **Sweep queues, archive old logs, reconcile frontmatter.** Remove dead `## Queue` claims
-   (released in a log bullet, or older than 24h) per the schema's queue sweep. Move log runs past
-   the archival threshold to `projects/archive/<name>.md`, archive page first, live page second.
-   Bring stale `updated:` fields level with each page's last dated log bullet. All of these are
-   reconcile-protocol edits: lock held, one page per commit, pushed immediately.
+7. **Sweep queues and archive old logs.** Remove dead `## Queue` claims (released in a log
+   bullet, or older than 24h) per the schema's queue sweep. Move log runs past the archival
+   threshold to `projects/archive/<name>.md`, archive page first, live page second. Both are
+   reconcile-protocol edits: lock held, one page per commit, pushed immediately. Archival also
+   respects the schema's 90-day floor, so a page can sit far past the size threshold with
+   nothing eligible; that is a no-op, not a deferral.
    **Normalize follow-ups** (schema §Follow-ups) in the same pass: on lessons, rewrite a legacy
    Prevention spelling to the canonical form, and rewrite the classification to `encoded` or
    `memory-only` once its prevention has landed. Lessons are not a union-merged path, so a
    digest holding the lock may edit them in place; no other writer may. Project pages stay
-   append-only: closure there is a new log bullet, never an edit. Step 9 collects the open set —
+   append-only: closure there is a new log bullet, never an edit. Step 10 collects the open set —
    normalizing here only makes that scan cheap.
 8. **Distill lessons.** Read log entries across `projects/` and other pages — plus `journal/`
    when it has entries — since the last digest; recurring gotchas or themes get promoted into
    `lessons/` or `notes/` pages — this compounding step is the point of the whole system.
-9. **Refresh `INDEX.md`** (generated-only; rewrite wholesale): per-type counts, notable recent
-   pages, active projects, the `## Open follow-ups` ledger, open `needs-review` items. Collect
-   the open set **here**, after step 8, so a follow-up created by this run's own distillation
-   reaches the ledger: lessons whose line-start `Prevention:` still marks a follow-up in any
-   spelling, plus project log bullets carrying `follow-up:` (legacy spellings included) with no
-   later closing bullet. Write them in the schema §Follow-ups format (`(none)` when empty), and
-   tag any entry whose text names no trigger with `no-trigger`.
-10. **Release the lock. Commit + report:** promoted N · ingested M outbox items · merged K
-    duplicates · fixed J links · swept Q claims · archived A bullets · F open follow-ups
-    (G tagged `no-trigger`) · new/updated lessons · what needs the owner's eyes.
+9. **Record the run, then reconcile `updated:`.** Append every log bullet this pass owes: a
+   closing bullet on each project page whose follow-up this run resolved, and the run's own
+   completion bullet. Only then bring stale `updated:` fields level with each page's last dated
+   log bullet, one page per commit under the reconcile protocol.
+   **Reconcile last.** Every append in steps 4, 7, 8, and this one re-stales the `updated:`
+   field of the page it touches, so a reconcile performed before them leaves the brain red the
+   moment the lock is released. If a later step still has to append to a page, reconcile that
+   page after it, not before.
+10. **Refresh `INDEX.md`** (generated-only; rewrite wholesale): per-type counts, notable recent
+    pages, active projects, the `## Open follow-ups` ledger, open `needs-review` items. Collect
+    the open set **here**, after steps 8 and 9, so a follow-up created or closed by this run
+    reaches the ledger in its final state: lessons whose line-start `Prevention:` still marks a
+    follow-up in any spelling, plus project log bullets carrying `follow-up:` (legacy spellings
+    included) with no later closing bullet. Write them in the schema §Follow-ups format
+    (`(none)` when empty), and tag any entry whose text names no trigger with `no-trigger`.
+11. **Verify, release the lock, report.** Re-run the step 2 integrity check and confirm it is
+    clean before releasing: the run owns whatever it dirtied. Then release the lock and report:
+    promoted N · ingested M outbox items · merged K duplicates · fixed J links · swept Q claims ·
+    archived A bullets · F open follow-ups (G tagged `no-trigger`) · new/updated lessons · what
+    needs the owner's eyes.
 
 ## Scheduling
 

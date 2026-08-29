@@ -105,8 +105,16 @@ for role_skill in recall maintainer land; do
     body "$SKILLS_DIR/$role_skill/SKILL.md" | grep -qF 'follow-up:' ||
     err "$role_skill: the schema names it in the follow-up lifecycle, but it never reads or writes the ledger"
 done
-if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'Collect the open set **here**, after step 8'; then
-  err "digest: the ledger must be collected after distillation, or a run hides its own follow-ups"
+if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'Collect the open set **here**, after steps 8 and 9'; then
+  err "digest: the ledger must be collected after distillation and the run's own bullets, or a run hides its own follow-ups"
+fi
+# The reconcile must be the last write. Every append re-stales the `updated:` field of the page
+# it touches, so reconciling before the appends leaves the brain red the moment the lock drops.
+if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'Reconcile last.'; then
+  err "digest: the reconcile-last ordering rule is missing"
+fi
+if body "$SKILLS_DIR/digest/SKILL.md" | grep -qF 'Sweep queues, archive old logs, reconcile frontmatter'; then
+  err "digest: the frontmatter reconcile must not sit in the sweep step; it runs after every append"
 fi
 
 # 11. eval harness: the isolation contract is the whole value. An eval that can silently run

@@ -540,7 +540,12 @@ contract_lint_case "land-produces-canonical-followups" "skills/land/SKILL.md" \
   's/`follow-up:` token/an informal note/'
 # the contract phrase hard-wraps; mutate the sub-phrase that sits on one line
 contract_lint_case "digest-collects-after-distillation" "skills/digest/SKILL.md" \
-  's/the open set \*\*here\*\*, after step 8/the open set back in step 7/'
+  's/the open set \*\*here\*\*, after steps 8 and 9/the open set back in step 7/'
+contract_lint_case "digest-reconciles-last" "skills/digest/SKILL.md" \
+  's/\*\*Reconcile last\.\*\*/**Reconcile whenever.**/'
+# reverting the reconcile back into the sweep step is the exact regression this ordering fixes
+contract_lint_case "digest-reconcile-not-in-sweep-step" "skills/digest/SKILL.md" \
+  's/\*\*Sweep queues and archive old logs\.\*\*/**Sweep queues, archive old logs, reconcile frontmatter.**/'
 
 # --- 15. eval-harness isolation contracts fail closed ---
 contract_lint_case "evals-require-a-key" "evals/run.sh" \
