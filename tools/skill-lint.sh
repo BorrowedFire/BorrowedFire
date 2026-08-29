@@ -426,10 +426,13 @@ fi
 # names, home paths, and brain page counts are the shapes that leaked before this guard: they
 # arrive inside otherwise-legitimate evidence in the land log and review notes, where prose
 # review reads them as detail rather than disclosure.
+# Coverage is deliberately wide, because a guard narrower than its claim is the defect class it
+# exists to catch: both macOS and Linux home paths, both YAML spellings, and the public
+# prometheus-template tree, which is a plausible place for a real value to replace a placeholder.
 # shellcheck disable=SC2016  # the literal $HOME text is an intentional exclusion pattern
-PRIVATE_HITS="$(grep -rnE '/Users/[a-z]+|[0-9]+ lessons, (the )?tree has|INDEX (says|reports) [0-9]+' \
-  --include='*.md' --include='*.sh' --include='*.py' --include='*.yml' "$ROOT" 2>/dev/null |
-  grep -vE '/(\.git|node_modules)/|prometheus-template/|\$HOME|<path>|/Users/<|example|fixture|leak_case' || true)"
+PRIVATE_HITS="$(grep -rnE '/(Users|home)/[a-z][a-z0-9._-]*|[0-9]+ lessons, (the )?tree has|INDEX (says|reports) [0-9]+' \
+  --include='*.md' --include='*.sh' --include='*.py' --include='*.yml' --include='*.yaml' "$ROOT" 2>/dev/null |
+  grep -vE '/(\.git|node_modules)/|\$HOME|/(Users|home)/(<|\$|\{)|<path>|example|fixture|leak_[a-z_]*case' || true)"
 if [ -n "$PRIVATE_HITS" ]; then
   printf '%s\n' "$PRIVATE_HITS" | head -5 | while IFS= read -r hit; do echo "       $hit" >&2; done
   err "private content: a home path or brain page count appears in tracked files; keep host and brain specifics in the private brain"

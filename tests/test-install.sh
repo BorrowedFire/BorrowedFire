@@ -682,7 +682,23 @@ leak_case() { # leak_case <label> <line to append to the land log>
   fi
 }
 leak_case "brain-page-counts" "- 2026-01-01: INDEX says 27 lessons, the tree has 45."
-leak_case "owner-home-path" "- 2026-01-01: ran the installer from /Users/someone/prometheus."
+leak_case "macos-home-path" "- 2026-01-01: ran the installer from /Users/someone/prometheus."
+# A guard narrower than its claim is the defect it exists to catch, so each widening has a case.
+leak_case "linux-home-path" "- 2026-01-01: the controller runs from /home/someone/prometheus."
+
+# The same shapes must be caught in the other tracked file types the guard claims to scan.
+leak_file_case() { # leak_file_case <label> <repo-relative file> <line>
+  local label="$1" rel="$2" line="$3" clone="$SB/leakfile-$1"
+  cp -R "$SRC" "$clone"
+  printf '\n%s\n' "$line" >> "$clone/$rel"
+  if "$clone/tools/skill-lint.sh" >/dev/null 2>&1; then
+    fail "leak guard: $label"
+  else
+    ok "leak guard: $label"
+  fi
+}
+leak_file_case "tracked-yaml" "skills/bootstrap/agents/openai.yaml" "# note: /home/someone/prometheus"
+leak_file_case "public-template" "prometheus-template/README.md" "Ran from /Users/someone/prometheus."
 
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
