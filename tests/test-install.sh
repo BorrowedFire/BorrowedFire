@@ -542,6 +542,22 @@ contract_lint_case "land-produces-canonical-followups" "skills/land/SKILL.md" \
 contract_lint_case "digest-collects-after-distillation" "skills/digest/SKILL.md" \
   's/the open set \*\*here\*\*, after step 8/the open set back in step 7/'
 
+# --- 15. eval-harness isolation contracts fail closed ---
+contract_lint_case "evals-require-a-key" "evals/run.sh" \
+  's/ANTHROPIC_API_KEY/ANTHROPIC_KEY_OPTIONAL/g'
+contract_lint_case "evals-refuse-un-isolated" "evals/run.sh" \
+  's/no un-isolated mode/a fallback mode/'
+contract_lint_case "evals-exclude-user-settings" "evals/run.sh" \
+  's/--setting-sources project,local/--setting-sources user,project,local/'
+contract_lint_case "evals-arms-differ-by-skills" "evals/run.sh" \
+  's/a HOME with no skills/a HOME/'
+contract_lint_case "evals-score-mechanically" "evals/run.sh" \
+  's|evals/score.py|evals/judge-by-model.py|g'
+contract_lint_case "ci-runs-the-eval-scorer" ".github/workflows/skill-lint.yml" \
+  '\#tests/test-evals.sh#d'
+contract_lint_case "ci-does-not-run-live-cells" ".github/workflows/skill-lint.yml" \
+  's|run: bash tests/test-evals.sh|run: bash evals/run.sh|'
+
 # a skill added without a routing row or README entry is the drift this contract exists to catch
 drift_clone="$SB/contract-new-skill-unrouted"
 cp -R "$SRC" "$drift_clone"

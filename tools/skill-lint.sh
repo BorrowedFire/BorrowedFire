@@ -109,6 +109,36 @@ if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'Co
   err "digest: the ledger must be collected after distillation, or a run hides its own follow-ups"
 fi
 
+# 11. eval harness: the isolation contract is the whole value. An eval that can silently run
+# against the operator's own HOME measures the doctrine in both arms and reports a lie.
+EVAL_RUNNER="$ROOT/evals/run.sh"
+if [ -f "$EVAL_RUNNER" ]; then
+  grep -qF 'ANTHROPIC_API_KEY' "$EVAL_RUNNER" ||
+    err "evals/run.sh: the API-key requirement is missing, so a cell could run un-isolated"
+  grep -qF 'no un-isolated mode' "$EVAL_RUNNER" ||
+    err "evals/run.sh: the refusal to run un-isolated must stay stated in the error"
+  grep -qF -- '--setting-sources project,local' "$EVAL_RUNNER" ||
+    err "evals/run.sh: cells must exclude user-level settings"
+  for arm_marker in 'install.sh" --copy' 'a HOME with no skills'; do
+    grep -qF "$arm_marker" "$EVAL_RUNNER" ||
+      err "evals/run.sh: the two arms must differ only by the installed skill set ('$arm_marker' missing)"
+  done
+  grep -qF 'evals/score.py' "$EVAL_RUNNER" ||
+    err "evals/run.sh: cells must be scored mechanically"
+  [ -f "$ROOT/evals/score.py" ] || err "evals: score.py is missing"
+  [ -f "$ROOT/tests/test-evals.sh" ] || err "evals: tests/test-evals.sh is missing"
+  grep -qF 'tests/test-evals.sh' "$ROOT/.github/workflows/skill-lint.yml" ||
+    err "CI: the eval scorer suite is not run"
+  grep -qF 'evals/run.sh' "$ROOT/.github/workflows/skill-lint.yml" ||
+    err "CI: evals/run.sh must at least be syntax-checked and shellchecked"
+  # Live cells cost money and are noisy at small N, so CI may only check the script, never run
+  # it. A `run:` step naming evals/run.sh outside a shellcheck or bash -n invocation does that.
+  if grep -E '^[[:space:]]*run:.*evals/run\.sh' "$ROOT/.github/workflows/skill-lint.yml" |
+     grep -qvE 'shellcheck|bash -n'; then
+    err "CI: live eval cells must not run in CI (a run: step invokes evals/run.sh directly)"
+  fi
+fi
+
 LEARN_SKILL="$SKILLS_DIR/reflect/SKILL.md"
 DOCTRINE="$ROOT/doctrine/DOCTRINE.md"
 SAFE_DOCTRINE="$ROOT/doctrine/DOCTRINE_NO_LEARNING.md"
