@@ -699,6 +699,10 @@ leak_file_case() { # leak_file_case <label> <repo-relative file> <line>
 }
 leak_file_case "tracked-yaml" "skills/bootstrap/agents/openai.yaml" "# note: /home/someone/prometheus"
 leak_file_case "public-template" "prometheus-template/README.md" "Ran from /Users/someone/prometheus."
+# The word-based exemptions used to hide real leaks: any line containing "example", and every
+# line of any path containing "fixture".
+leak_case "word-example-does-not-exempt" "- 2026-01-01: for example, production runs from /home/alice/prometheus."
+leak_file_case "fixture-path-does-not-exempt" "tests/fixtures/fake-openclaw.sh" "# ran from /Users/someone/prometheus"
 
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
