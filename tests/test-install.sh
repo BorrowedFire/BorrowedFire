@@ -502,6 +502,21 @@ contract_lint_case "readme-count-matches-tree" "README.md" \
   's/[0-9][0-9]* SKILL\.md skills/999 SKILL.md skills/'
 contract_lint_case "readme-count-line-present" "README.md" \
   '/SKILL\.md skills/d'
+# swapping signal for unslop in the reduced table drops a required row AND routes a
+# dropped-mandate skill. The lint must fail on both sides of the exemption.
+# shellcheck disable=SC2016  # backticks are intentional literal table text
+contract_lint_case "reduced-doctrine-routes-no-dropped-mandate" "doctrine/DOCTRINE_NO_LEARNING.md" \
+  's/`signal`/`unslop`/'
+contract_lint_case "route-proof-literal-agreement" "install.sh" \
+  's/prometheus-learning-route\.sha256/prometheus-learning-route.v2.sha256/'
+# shellcheck disable=SC2016  # backticks are intentional literal table text
+contract_lint_case "routing-rows-point-at-real-skills" "doctrine/DOCTRINE.md" \
+  's/`signal`/`ghost-skill`/'
+contract_lint_case "readme-links-point-at-real-skills" "README.md" \
+  's#skills/signal/SKILL\.md#skills/ghost-skill/SKILL.md#'
+# shellcheck disable=SC2016  # backticks are intentional literal table text
+contract_lint_case "routing-cells-reject-malformed-names" "doctrine/DOCTRINE.md" \
+  's/`signal`/`Signal`/'
 
 # a skill added without a routing row or README entry is the drift this contract exists to catch
 drift_clone="$SB/contract-new-skill-unrouted"
@@ -525,13 +540,38 @@ OUT="$("$SRC/install.sh" --uninstall 2>&1)"
 check "uninstall names install-prometheus-cycle.sh --remove" \
   grep -q 'install-prometheus-cycle.sh --remove' <<<"$OUT"
 rm -f "$XDG_CONFIG_HOME/borrowedfire/prometheus-learning-route.sha256"
-"$SRC/install.sh" >/dev/null 2>&1
 OUT="$("$SRC/install.sh" --uninstall 2>&1)"
 if grep -q -- 'install-prometheus-cycle.sh --remove' <<<"$OUT"; then
   fail "uninstall stays quiet with no controller trace"
 else
   ok "uninstall stays quiet with no controller trace"
 fi
+
+# The note must survive a partly failed uninstall. A messy host is exactly when it matters.
+touch "$XDG_CONFIG_HOME/borrowedfire/prometheus-learning-route.sha256"
+chmod 555 "$HOME/.claude"
+if OUT="$("$SRC/install.sh" --uninstall 2>&1)"; then
+  fail "unwritable harness fails the uninstall closed"
+else
+  ok "unwritable harness fails the uninstall closed"
+fi
+chmod 755 "$HOME/.claude"
+check "failed uninstall still names the controller removal step" \
+  grep -q 'install-prometheus-cycle.sh --remove' <<<"$OUT"
+rm -f "$XDG_CONFIG_HOME/borrowedfire/prometheus-learning-route.sha256"
+
+# A headless controller host has no CLI harness dirs at all. The no-harness exit must still
+# print the reminder, and on stderr: a scripted uninstall that discards stdout must see it.
+mkdir -p "$SB/bare-home/.config/borrowedfire"
+touch "$SB/bare-home/.config/borrowedfire/prometheus-learning-route.sha256"
+if OUT="$(HOME="$SB/bare-home" XDG_CONFIG_HOME="$SB/bare-home/.config" \
+  CODEX_HOME="$SB/bare-home/.codex" "$SRC/install.sh" --uninstall 2>&1 >/dev/null)"; then
+  fail "no-harness uninstall exits nonzero"
+else
+  ok "no-harness uninstall exits nonzero"
+fi
+check "no-harness uninstall names the removal step on stderr" \
+  grep -q 'install-prometheus-cycle.sh --remove' <<<"$OUT"
 
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"

@@ -745,8 +745,12 @@ else
 fi
 check "flag rejection makes no CLI call" test ! -e "$OPENCLAW_ARGS_FILE"
 
-OUT="$(OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
-  "$SRC/tools/install-prometheus-cycle.sh" --remove --dry-run)"
+if OUT="$(OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" --remove --dry-run)"; then
+  ok "--remove --dry-run exits zero"
+else
+  fail "--remove --dry-run exits zero"
+fi
 check "--remove --dry-run states the plan" grep -q 'would remove' <<<"$OUT"
 check "--remove --dry-run makes no CLI call" test ! -e "$OPENCLAW_ARGS_FILE"
 
@@ -765,13 +769,18 @@ if OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
 else
   fail "--remove succeeds against a declared controller"
 fi
-check "--remove disables before removing" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "--remove disables the learning job before removing it" \
+  test "$(recorded_call_count cron disable fixture-job)" -eq 1
 check "--remove removes the learning job" \
   test "$(recorded_call_count cron rm fixture-job)" -eq 1
 check "--remove deletes the route-proof file" test ! -e "$ROUTE_PROOF"
 
-OUT="$(OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
-  "$SRC/tools/install-prometheus-cycle.sh" --remove)"
+if OUT="$(OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" --remove)"; then
+  ok "second --remove exits zero"
+else
+  fail "second --remove exits zero"
+fi
 check "second --remove reports the job absent" grep -q 'no borrowedfire.prometheus-learning.v1 job present' <<<"$OUT"
 check "second --remove removes nothing further" \
   test "$(recorded_call_count cron rm fixture-job)" -eq 1
@@ -791,6 +800,18 @@ else
   ok "--remove fails closed when the job cannot be disabled"
 fi
 check "failed --remove keeps the route-proof file" test -f "$ROUTE_PROOF"
+
+# The route proof is one host-wide file. A scheduler with no learning job must not delete it:
+# the trace may belong to another OpenClaw profile's controller on this host.
+printf '%s\n' 'CALL' 'cron' 'rm' 'fixture-job' >> "$OPENCLAW_ARGS_FILE"
+if OUT="$(OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" --remove)"; then
+  ok "--remove without a learning job exits zero"
+else
+  fail "--remove without a learning job exits zero"
+fi
+check "--remove without a learning job keeps the route proof" test -f "$ROUTE_PROOF"
+check "--remove says why the proof was kept" grep -q 'may belong to another OpenClaw profile' <<<"$OUT"
 
 printf '%s\n' "----" "PASS=$PASS FAIL=$FAIL"
 rm -rf "$SB"

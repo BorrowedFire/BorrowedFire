@@ -15,10 +15,12 @@ jobs:
       - name: Lint the brain template
         run: bash tools/brain-lint.sh --template prometheus-template
       - name: Syntax-check shell scripts
-        run: bash -n install.sh && bash -n tools/skill-lint.sh && bash -n tools/brain-lint.sh
+        run: bash -n install.sh && bash -n tools/skill-lint.sh && bash -n tools/brain-lint.sh && bash -n tools/install-prometheus-cycle.sh
       - name: shellcheck
-        run: shellcheck install.sh tools/skill-lint.sh tools/brain-lint.sh tests/test-install.sh tests/test-brain.sh
+        run: shellcheck install.sh tools/skill-lint.sh tools/brain-lint.sh tools/install-prometheus-cycle.sh tests/test-install.sh tests/test-brain.sh tests/test-prometheus-cycle.sh tests/fixtures/fake-openclaw.sh
       - name: Installer test matrix (sandbox HOME)
         run: bash tests/test-install.sh
       - name: Brain protocol live proof (two clones, bare remote)
         run: bash tests/test-brain.sh
+      - name: Cycle installer contract suite (fake OpenClaw)
+        run: bash tests/test-prometheus-cycle.sh
