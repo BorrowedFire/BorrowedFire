@@ -507,4 +507,18 @@ if [ "$UNINSTALL" -eq 0 ]; then
   fi
 fi
 
+# Uninstall removes skills and doctrine only. A Prometheus learning controller declared by
+# tools/install-prometheus-cycle.sh lives in the OpenClaw scheduler and survives this uninstall;
+# its stored job would keep requesting skills that no longer exist. The route-proof file is the
+# local trace that a controller was installed on this host.
+if [ "$UNINSTALL" -eq 1 ]; then
+  route_proof="${XDG_CONFIG_HOME:-$HOME/.config}/borrowedfire/prometheus-learning-route.sha256"
+  if [ -e "$route_proof" ] || [ -L "$route_proof" ] || [ -n "$OPENCLAW_WS" ]; then
+    say "note: this uninstall does not touch the OpenClaw scheduler. If this host runs the"
+    say "      Prometheus learning controller, run tools/install-prometheus-cycle.sh --remove"
+    say "      before deleting this checkout, or the nightly job keeps requesting skills that"
+    say "      no longer exist."
+  fi
+fi
+
 say "done."

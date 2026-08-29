@@ -223,6 +223,36 @@ DUPES=$(awk '{p=$0; sub(/ [^ ]+$/, "", p); n=$NF; if (seen[p] && seen[p] != n) c
 rm -f "$TMP"
 [ "$DUPES" -eq 0 ] || ERRORS=$((ERRORS + DUPES))
 
+# 10. skill inventory agreement: every skill has a doctrine routing row and a README entry, and
+# the README's repo-layout count matches the tree. A skill added without propagating it to those
+# copies is silent drift that no reader notices (reel-maker, PR #7, shipped exactly that way).
+routing_rows() { # routing_rows <doctrine-file>: the table between **Routing.** and the END marker
+  awk '/\*\*Routing\.\*\*/{f=1; next} /END BORROWEDFIRE DOCTRINE/{f=0} f' "$1"
+}
+# Reduced mode drops the automatic-learning mandate (reflect) and the writing-skill mandates, so
+# exactly those skills have no reduced-mode routing row; every other skill appears in both tables.
+REDUCED_ROUTING_EXEMPT="reflect $(sed -n 's/^WRITING_SKILLS="\(.*\)"$/\1/p' "$ROOT/install.sh")"
+for name in $SKILL_NAMES; do
+  routing_rows "$DOCTRINE" | grep -qF "\`$name\`" ||
+    err "doctrine: routing table has no row for '$name' (add one, or record the exemption here)"
+  case " $REDUCED_ROUTING_EXEMPT " in
+    *" $name "*) ;;
+    *)
+      routing_rows "$SAFE_DOCTRINE" | grep -qF "\`$name\`" ||
+        err "reduced doctrine: routing table has no row for '$name'"
+      ;;
+  esac
+  grep -qF "skills/$name/SKILL.md" "$ROOT/README.md" ||
+    err "README.md: no entry links skills/$name/SKILL.md"
+done
+ACTUAL_COUNT="$(echo "$SKILL_NAMES" | wc -w | tr -d ' ')"
+STATED_COUNT="$(sed -n 's|^skills/[[:space:]]*\([0-9][0-9]*\) SKILL\.md skills.*|\1|p' "$ROOT/README.md" | head -1)"
+if [ -z "$STATED_COUNT" ]; then
+  err "README.md: the repo-layout 'skills/  N SKILL.md skills' line is missing"
+elif [ "$STATED_COUNT" != "$ACTUAL_COUNT" ]; then
+  err "README.md: repo layout says $STATED_COUNT skills, the tree has $ACTUAL_COUNT"
+fi
+
 if [ "$ERRORS" -gt 0 ]; then
   echo "skill-lint: $ERRORS error(s)" >&2
   exit 1

@@ -6,6 +6,7 @@ SRC="$(cd "$(dirname "$0")/.." && pwd)"
 SKILL_COUNT="$(find "$SRC/skills" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d " ")"
 SB="$(mktemp -d)"
 export HOME="$SB/home"
+export XDG_CONFIG_HOME="$HOME/.config"   # hermetic: the runner's config root must not leak in
 PASS=0 FAIL=0
 ok()   { PASS=$((PASS+1)); echo "PASS: $1"; }
 fail() { FAIL=$((FAIL+1)); echo "FAIL: $1"; }
@@ -489,6 +490,48 @@ contract_lint_case "land-merge-rung-floor" "skills/land/SKILL.md" \
   's/rung floor for its class/record/'
 contract_lint_case "qa-audit-proven-threshold" "skills/qa-audit/SKILL.md" \
   's/means rung 4 or higher/means any recorded evidence/'
+
+# --- 12. inventory-agreement contracts fail closed ---
+contract_lint_case "routing-covers-every-skill" "doctrine/DOCTRINE.md" \
+  '/reel-maker/d'
+contract_lint_case "reduced-routing-covers-every-skill" "doctrine/DOCTRINE_NO_LEARNING.md" \
+  '/reel-maker/d'
+contract_lint_case "readme-links-every-skill" "README.md" \
+  '\#skills/reel-maker/SKILL.md#d'
+contract_lint_case "readme-count-matches-tree" "README.md" \
+  's/[0-9][0-9]* SKILL\.md skills/999 SKILL.md skills/'
+contract_lint_case "readme-count-line-present" "README.md" \
+  '/SKILL\.md skills/d'
+
+# a skill added without a routing row or README entry is the drift this contract exists to catch
+drift_clone="$SB/contract-new-skill-unrouted"
+cp -R "$SRC" "$drift_clone"
+mkdir -p "$drift_clone/skills/newskill/agents"
+printf '%s\n' '---' 'name: newskill' \
+  'description: fixture skill for the inventory-agreement lint.' '---' '' '# Newskill' \
+  > "$drift_clone/skills/newskill/SKILL.md"
+cp "$SRC/skills/ship/agents/openai.yaml" "$drift_clone/skills/newskill/agents/openai.yaml"
+if "$drift_clone/tools/skill-lint.sh" >/dev/null 2>&1; then
+  fail "contract lint: new skill without routing/README entries"
+else
+  ok "contract lint: new skill without routing/README entries"
+fi
+
+# --- 13. uninstall names the controller removal step when a controller trace exists ---
+"$SRC/install.sh" >/dev/null 2>&1
+mkdir -p "$XDG_CONFIG_HOME/borrowedfire"
+touch "$XDG_CONFIG_HOME/borrowedfire/prometheus-learning-route.sha256"
+OUT="$("$SRC/install.sh" --uninstall 2>&1)"
+check "uninstall names install-prometheus-cycle.sh --remove" \
+  grep -q 'install-prometheus-cycle.sh --remove' <<<"$OUT"
+rm -f "$XDG_CONFIG_HOME/borrowedfire/prometheus-learning-route.sha256"
+"$SRC/install.sh" >/dev/null 2>&1
+OUT="$("$SRC/install.sh" --uninstall 2>&1)"
+if grep -q -- 'install-prometheus-cycle.sh --remove' <<<"$OUT"; then
+  fail "uninstall stays quiet with no controller trace"
+else
+  ok "uninstall stays quiet with no controller trace"
+fi
 
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"

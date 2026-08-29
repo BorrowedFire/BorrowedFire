@@ -733,6 +733,65 @@ else
   ok "arbitrary Git repository is rejected as a brain"
 fi
 
+# --- --remove tears down the scheduler state and nothing else ---
+ROUTE_PROOF="$XDG_CONFIG_HOME/borrowedfire/prometheus-learning-route.sha256"
+
+rm -f "$OPENCLAW_ARGS_FILE"
+if OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" --remove --notify-channel imessage >/dev/null 2>&1; then
+  fail "--remove rejects declaration flags"
+else
+  ok "--remove rejects declaration flags"
+fi
+check "flag rejection makes no CLI call" test ! -e "$OPENCLAW_ARGS_FILE"
+
+OUT="$(OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" --remove --dry-run)"
+check "--remove --dry-run states the plan" grep -q 'would remove' <<<"$OUT"
+check "--remove --dry-run makes no CLI call" test ! -e "$OPENCLAW_ARGS_FILE"
+
+if OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null; then
+  ok "re-baseline before removal succeeds"
+else
+  fail "re-baseline before removal succeeds"
+fi
+check "baseline leaves a route-proof file" test -f "$ROUTE_PROOF"
+
+if OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" --remove >/dev/null; then
+  ok "--remove succeeds against a declared controller"
+else
+  fail "--remove succeeds against a declared controller"
+fi
+check "--remove disables before removing" grep -qx 'disable' "$OPENCLAW_ARGS_FILE"
+check "--remove removes the learning job" \
+  test "$(recorded_call_count cron rm fixture-job)" -eq 1
+check "--remove deletes the route-proof file" test ! -e "$ROUTE_PROOF"
+
+OUT="$(OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" --remove)"
+check "second --remove reports the job absent" grep -q 'no borrowedfire.prometheus-learning.v1 job present' <<<"$OUT"
+check "second --remove removes nothing further" \
+  test "$(recorded_call_count cron rm fixture-job)" -eq 1
+
+rm -f "$OPENCLAW_ARGS_FILE"
+if OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" \
+  --notify-channel imessage --notify-to owner-route >/dev/null; then
+  ok "re-baseline before failed removal succeeds"
+else
+  fail "re-baseline before failed removal succeeds"
+fi
+if FAKE_OPENCLAW_FAIL_DISABLE=1 OPENCLAW_BIN="$SRC/tests/fixtures/fake-openclaw.sh" \
+  "$SRC/tools/install-prometheus-cycle.sh" --remove >/dev/null 2>&1; then
+  fail "--remove fails closed when the job cannot be disabled"
+else
+  ok "--remove fails closed when the job cannot be disabled"
+fi
+check "failed --remove keeps the route-proof file" test -f "$ROUTE_PROOF"
+
 printf '%s\n' "----" "PASS=$PASS FAIL=$FAIL"
 rm -rf "$SB"
 exit $((FAIL > 0))
