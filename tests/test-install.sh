@@ -521,8 +521,8 @@ contract_lint_case "routing-cells-reject-malformed-names" "doctrine/DOCTRINE.md"
 # --- 14. follow-up ledger contracts fail closed ---
 contract_lint_case "schema-owns-followup-ledger" "skills/remember/references/brain-schema.md" \
   's/^## Follow-ups.*/## Deferred things/'
-contract_lint_case "digest-sweeps-followups" "skills/digest/SKILL.md" \
-  's/Sweep follow-ups/Consider follow-ups/'
+contract_lint_case "digest-normalizes-followups" "skills/digest/SKILL.md" \
+  's/Normalize follow-ups/Consider follow-ups/'
 contract_lint_case "digest-tags-no-trigger" "skills/digest/SKILL.md" \
   's/no-trigger/untriggered/g'
 contract_lint_case "reflect-writes-canonical-token" "skills/reflect/SKILL.md" \
@@ -531,6 +531,16 @@ contract_lint_case "brain-lint-enforces-ledger" "tools/brain-lint.sh" \
   's/Open follow-ups/Open followups/g'
 contract_lint_case "template-index-has-ledger" "prometheus-template/INDEX.md" \
   's/^## Open follow-ups$/## Followups/'
+contract_lint_case "recall-consumes-the-ledger" "skills/recall/SKILL.md" \
+  's/Open follow-ups/Deferred items/'
+contract_lint_case "maintainer-consumes-the-ledger" "skills/maintainer/SKILL.md" \
+  's/Open follow-ups/Deferred items/'
+# shellcheck disable=SC2016  # backticks are intentional literal contract text
+contract_lint_case "land-produces-canonical-followups" "skills/land/SKILL.md" \
+  's/`follow-up:` token/an informal note/'
+# the contract phrase hard-wraps; mutate the sub-phrase that sits on one line
+contract_lint_case "digest-collects-after-distillation" "skills/digest/SKILL.md" \
+  's/the open set \*\*here\*\*, after step 8/the open set back in step 7/'
 
 # a skill added without a routing row or README entry is the drift this contract exists to catch
 drift_clone="$SB/contract-new-skill-unrouted"

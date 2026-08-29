@@ -84,8 +84,8 @@ if [ -f "$BRAIN_SCHEMA" ]; then
   grep -qF '## Open follow-ups' "$BRAIN_SCHEMA" ||
     err "brain-schema: the INDEX 'Open follow-ups' section contract is missing"
 fi
-if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'Sweep follow-ups'; then
-  err "digest: the follow-up sweep step is missing"
+if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'Normalize follow-ups'; then
+  err "digest: the follow-up normalization step is missing"
 fi
 if ! body "$SKILLS_DIR/digest/SKILL.md" | grep -qF 'no-trigger'; then
   err "digest: the no-trigger rot tag is missing"
@@ -98,6 +98,16 @@ grep -qF 'Open follow-ups' "$ROOT/tools/brain-lint.sh" ||
   err "brain-lint: the INDEX follow-up ledger check is missing"
 grep -qF '## Open follow-ups' "$ROOT/prometheus-template/INDEX.md" ||
   err "template INDEX: the 'Open follow-ups' section skeleton is missing"
+# The ledger's roles must exist in the skills the schema names. A documented consumer that
+# never reads the ledger is the "later means never" rot the section exists to prevent.
+for role_skill in recall maintainer land; do
+  body "$SKILLS_DIR/$role_skill/SKILL.md" | grep -qF 'Open follow-ups' ||
+    body "$SKILLS_DIR/$role_skill/SKILL.md" | grep -qF 'follow-up:' ||
+    err "$role_skill: the schema names it in the follow-up lifecycle, but it never reads or writes the ledger"
+done
+if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'Collect the open set **here**, after step 8'; then
+  err "digest: the ledger must be collected after distillation, or a run hides its own follow-ups"
+fi
 
 LEARN_SKILL="$SKILLS_DIR/reflect/SKILL.md"
 DOCTRINE="$ROOT/doctrine/DOCTRINE.md"

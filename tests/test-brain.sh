@@ -223,11 +223,19 @@ Prevention: `follow-up`. Add the guard when the next release branch opens.
 PAGE
 }
 
+# Delete the heading and its body up to the next heading, never to EOF: a range ending on
+# '(none)' eats the rest of the file the moment a fixture carries a real entry instead.
+drop_ledger_section() { # drop_ledger_section <index-file>
+  awk '/^## Open follow-ups/{skip=1; next} /^## /{skip=0} !skip' "$1" > "$1.tmp" && mv "$1.tmp" "$1"
+}
+
 mk_ledger_brain "$SB/L1"
-sed -i.bak '/^## Open follow-ups$/,/^(none)$/d' "$SB/L1/INDEX.md" && rm -f "$SB/L1/INDEX.md.bak"
+drop_ledger_section "$SB/L1/INDEX.md"
 OUT="$(bash "$SRC/tools/brain-lint.sh" "$SB/L1" 2>&1)" || true
 check "ledger: missing INDEX section is flagged" \
   grep -qF "missing '## Open follow-ups' section" <<<"$OUT"
+check "ledger: dropping the section keeps later sections" \
+  grep -q '^## Needs review' "$SB/L1/INDEX.md"
 
 mk_ledger_brain "$SB/L2"
 OUT="$(bash "$SRC/tools/brain-lint.sh" "$SB/L2" 2>&1)" || true
@@ -244,11 +252,37 @@ else
 fi
 
 cp -R "$SRC/prometheus-template" "$SB/L4"
-sed -i.bak '/^## Open follow-ups$/,/^(none)$/d' "$SB/L4/INDEX.md" && rm -f "$SB/L4/INDEX.md.bak"
+drop_ledger_section "$SB/L4/INDEX.md"
 if bash "$SRC/tools/brain-lint.sh" --template "$SB/L4" >/dev/null 2>&1; then
   fail "ledger: template mode requires the section skeleton"
 else
   ok "ledger: template mode requires the section skeleton"
+fi
+
+# A prefix-sharing entry must not satisfy a different lesson's check.
+mk_ledger_brain "$SB/L5"
+sed -i.bak 's|^(none)$|- [Other](lessons/sample-open-item.md-old.md): unrelated (since 2026-07-01)|' "$SB/L5/INDEX.md" && rm -f "$SB/L5/INDEX.md.bak"
+OUT="$(bash "$SRC/tools/brain-lint.sh" "$SB/L5" 2>&1)" || true
+check "ledger: prefix-sharing entry does not satisfy the check" \
+  grep -qF 'follow-up sweep due' <<<"$OUT"
+
+# The guard must see the legacy spellings digest migrates, or it is blind to the migration set.
+mk_ledger_brain "$SB/L6"
+# shellcheck disable=SC2016  # backticks are intentional literal page text
+sed -i.bak 's|^Prevention: `follow-up`\. |Prevention: Open follow-up — |' "$SB/L6/lessons/sample-open-item.md" && rm -f "$SB/L6/lessons/sample-open-item.md.bak"
+OUT="$(bash "$SRC/tools/brain-lint.sh" "$SB/L6" 2>&1)" || true
+check "ledger: legacy Prevention spelling is still swept" \
+  grep -qF 'follow-up sweep due' <<<"$OUT"
+
+# A closed lesson that merely mentions a follow-up in prose is not an open item.
+mk_ledger_brain "$SB/L7"
+# shellcheck disable=SC2016  # backticks are intentional literal page text
+sed -i.bak 's|^Prevention: `follow-up`\. .*|Prevention: `encoded`. The follow-up landed in the guard.|' "$SB/L7/lessons/sample-open-item.md" && rm -f "$SB/L7/lessons/sample-open-item.md.bak"
+OUT="$(bash "$SRC/tools/brain-lint.sh" "$SB/L7" 2>&1)" || true
+if grep -qF 'follow-up sweep due' <<<"$OUT"; then
+  fail "ledger: closed lesson mentioning a follow-up is not flagged"
+else
+  ok "ledger: closed lesson mentioning a follow-up is not flagged"
 fi
 
 echo "----"

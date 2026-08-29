@@ -51,8 +51,11 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
    counting: every page has frontmatter whose `type` matches its directory plus `created`,
    `updated`, and `status`; no `updated:` is older than the page's last dated log bullet; INDEX
    counts match the tree; no dead `## Queue` claims; every wikilink resolves; no duplicated
-   frontmatter keys. From a Borrowed Fire checkout, `tools/brain-lint.sh <brain-root>` runs these
-   checks. Fix each deviation in this run or file it under INDEX.md's needs-review.
+   frontmatter keys; INDEX carries its `## Open follow-ups` section and every open follow-up
+   lesson appears there. From a Borrowed Fire checkout, `tools/brain-lint.sh <brain-root>` runs
+   these checks. Fix each deviation in this run or file it under INDEX.md's needs-review. The
+   two ledger deviations are cleared by this run's own steps 7 and 9, so record them and move
+   on rather than filing them.
 3. **Ingest outboxes.** Any `.brain-outbox/` files in repos you can see, and fenced
    `BRAIN CAPTURE` blocks the owner has queued: file them as normal captures. Delete only the
    exact local-only source file after its capture commit has pushed successfully; never delete
@@ -69,20 +72,22 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
    the archival threshold to `projects/archive/<name>.md`, archive page first, live page second.
    Bring stale `updated:` fields level with each page's last dated log bullet. All of these are
    reconcile-protocol edits: lock held, one page per commit, pushed immediately.
-   **Sweep follow-ups** (schema §Follow-ups) in the same pass: collect the open set — lessons
-   whose line-start `Prevention:` still marks a follow-up in any spelling, canonical or legacy,
-   and project log bullets carrying `follow-up:` (legacy spellings included) with no later
-   closing bullet — for the INDEX refresh in step 9, and tag any entry whose text names no
-   trigger with `no-trigger`. Rewrite a legacy lesson spelling to the canonical form, and
-   rewrite the Prevention line to `encoded` when its prevention has since landed (lessons are
-   not union paths). Project pages stay append-only: closure there is a new log bullet, never
-   an edit.
+   **Normalize follow-ups** (schema §Follow-ups) in the same pass: on lessons, rewrite a legacy
+   Prevention spelling to the canonical form, and rewrite the classification to `encoded` or
+   `memory-only` once its prevention has landed. Lessons are not a union-merged path, so a
+   digest holding the lock may edit them in place; no other writer may. Project pages stay
+   append-only: closure there is a new log bullet, never an edit. Step 9 collects the open set —
+   normalizing here only makes that scan cheap.
 8. **Distill lessons.** Read log entries across `projects/` and other pages — plus `journal/`
    when it has entries — since the last digest; recurring gotchas or themes get promoted into
    `lessons/` or `notes/` pages — this compounding step is the point of the whole system.
 9. **Refresh `INDEX.md`** (generated-only; rewrite wholesale): per-type counts, notable recent
-   pages, active projects, the `## Open follow-ups` section from step 7's sweep (schema
-   §Follow-ups format; `(none)` when empty), open `needs-review` items.
+   pages, active projects, the `## Open follow-ups` ledger, open `needs-review` items. Collect
+   the open set **here**, after step 8, so a follow-up created by this run's own distillation
+   reaches the ledger: lessons whose line-start `Prevention:` still marks a follow-up in any
+   spelling, plus project log bullets carrying `follow-up:` (legacy spellings included) with no
+   later closing bullet. Write them in the schema §Follow-ups format (`(none)` when empty), and
+   tag any entry whose text names no trigger with `no-trigger`.
 10. **Release the lock. Commit + report:** promoted N · ingested M outbox items · merged K
     duplicates · fixed J links · swept Q claims · archived A bullets · F open follow-ups
     (G tagged `no-trigger`) · new/updated lessons · what needs the owner's eyes.
