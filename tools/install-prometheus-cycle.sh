@@ -5,6 +5,16 @@
 # Skill renames do not reach an already-declared controller: its message is stored by the
 # scheduler, not read from this checkout. After any Borrowed Fire skill rename, re-run this script
 # on every host that has a controller, or that host keeps requesting the old skill name.
+#
+# The stored declaration also outlives `install.sh --uninstall`, which removes skills and
+# doctrine only. Before retiring a controller host or deleting this checkout, run
+# `install-prometheus-cycle.sh --remove` there. It removes the learning job and any leftover
+# route probe by declaration key. When it removes the learning job, it also deletes the
+# route-proof file. A retried removal that finds the job already gone keeps the file and says
+# so. Delete the file by hand in that case. It never touches the brain, its watermark notes,
+# or the workspace skills. The route proof is one host-wide file. On a host where several
+# OpenClaw profiles run controllers, re-run the installer for each remaining profile after a
+# removal, so its proof is regenerated.
 set -u
 
 SRC="$(cd "$(dirname "$0")/.." && pwd -P)"
@@ -113,25 +123,40 @@ usage() {
   printf '%s\n' \
     "usage: $0 [--brain <path>] [--agent <id>] [--cron <expression>] [--tz <iana-zone>]" \
     "          --notify-channel <channel> --notify-to <destination> [--dry-run]" \
+    "       $0 --remove [--dry-run]" \
     "" \
     "Declares one nightly OpenClaw agent job. Provider/model selection remains in private" \
-    "fleet configuration; this public installer does not pin either."
+    "fleet configuration; this public installer does not pin either." \
+    "" \
+    "--remove tears down this installer's scheduler state on this host: the learning job and" \
+    "any leftover route probe, found by declaration key. When the learning job is removed" \
+    "here, the local route-proof file is deleted too. A retry that finds no job keeps the" \
+    "file and says so. Do not pass declaration flags with --remove. Brain data and workspace" \
+    "skills stay in place."
 }
 
+REMOVE=0
+DECL_FLAGS=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --brain) shift; BRAIN="${1:-}" ;;
-    --agent) shift; AGENT_ID="${1:-}" ;;
-    --cron) shift; CRON_EXPR="${1:-}" ;;
-    --tz) shift; TIMEZONE="${1:-}" ;;
-    --notify-channel) shift; NOTIFY_CHANNEL="${1:-}" ;;
-    --notify-to) shift; NOTIFY_TO="${1:-}" ;;
+    --brain) DECL_FLAGS="$DECL_FLAGS $1"; shift; BRAIN="${1:-}" ;;
+    --agent) DECL_FLAGS="$DECL_FLAGS $1"; shift; AGENT_ID="${1:-}" ;;
+    --cron) DECL_FLAGS="$DECL_FLAGS $1"; shift; CRON_EXPR="${1:-}" ;;
+    --tz) DECL_FLAGS="$DECL_FLAGS $1"; shift; TIMEZONE="${1:-}" ;;
+    --notify-channel) DECL_FLAGS="$DECL_FLAGS $1"; shift; NOTIFY_CHANNEL="${1:-}" ;;
+    --notify-to) DECL_FLAGS="$DECL_FLAGS $1"; shift; NOTIFY_TO="${1:-}" ;;
+    --remove) REMOVE=1 ;;
     --dry-run) DRY=1 ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'unknown flag: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
   shift
 done
+if [ "$REMOVE" -eq 1 ] && [ -n "$DECL_FLAGS" ]; then
+  printf -- '--remove does not accept declaration flags (got:%s)\n' "$DECL_FLAGS" >&2
+  usage >&2
+  exit 2
+fi
 
 if [ "$DRY" -eq 0 ] && ! command -v "$OPENCLAW_BIN" >/dev/null 2>&1; then
   printf 'OpenClaw CLI not found: %s\n' "$OPENCLAW_BIN" >&2
@@ -299,6 +324,52 @@ fail_declaration_safely() {
   fi
   exit 1
 }
+
+if [ "$REMOVE" -eq 1 ]; then
+  if [ "$DRY" -eq 1 ]; then
+    printf 'would remove any %s and %s jobs, and delete %s when the learning job is present here.\n' \
+      "$DECLARATION_KEY" "$PROBE_DECLARATION_KEY" "$ROUTE_PROOF_FILE"
+    exit 0
+  fi
+  REMOVE_ERRORS=0
+  LEARNING_REMOVED=0
+  for removal_key in "$DECLARATION_KEY" "$PROBE_DECLARATION_KEY"; do
+    if declaration_is_absent "$removal_key"; then
+      printf 'no %s job present.\n' "$removal_key"
+    elif remove_existing_declarations "$removal_key"; then
+      printf 'removed the %s job(s).\n' "$removal_key"
+      [ "$removal_key" = "$DECLARATION_KEY" ] && LEARNING_REMOVED=1
+    else
+      printf 'a %s job could not be proven removed. Inspect OpenClaw before retiring this host.\n' \
+        "$removal_key" >&2
+      REMOVE_ERRORS=$((REMOVE_ERRORS + 1))
+    fi
+  done
+  if [ "$REMOVE_ERRORS" -gt 0 ]; then
+    if [ -e "$ROUTE_PROOF_FILE" ] || [ -L "$ROUTE_PROOF_FILE" ]; then
+      printf 'kept %s so the route evidence survives the failed removal.\n' "$ROUTE_PROOF_FILE" >&2
+    fi
+    exit 1
+  fi
+  # The route proof is one host-wide file. Delete it only when this run removed the learning job
+  # from the scheduler it can see; a proof found with no learning job here may belong to another
+  # OpenClaw profile's controller on this host.
+  if [ "$LEARNING_REMOVED" -eq 1 ]; then
+    if [ -e "$ROUTE_PROOF_FILE" ] || [ -L "$ROUTE_PROOF_FILE" ]; then
+      if rm -f "$ROUTE_PROOF_FILE"; then
+        printf 'deleted %s\n' "$ROUTE_PROOF_FILE"
+      else
+        printf '%s could not be deleted. Remove it by hand.\n' "$ROUTE_PROOF_FILE" >&2
+        exit 1
+      fi
+    fi
+  elif [ -e "$ROUTE_PROOF_FILE" ] || [ -L "$ROUTE_PROOF_FILE" ]; then
+    printf 'kept %s: this scheduler has no learning job. If this is a retried teardown, delete the file by hand. On a multi-profile host it may belong to another OpenClaw profile.\n' \
+      "$ROUTE_PROOF_FILE"
+  fi
+  printf 'controller removal finished. Brain data, watermark notes, and workspace skills are untouched.\n'
+  exit 0
+fi
 
 if ! command -v git >/dev/null 2>&1; then
   if [ "$DRY" -eq 0 ]; then

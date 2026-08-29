@@ -45,6 +45,24 @@ while [ $# -gt 0 ]; do
 done
 
 say() { echo "$@"; }
+
+# Uninstall removes skills and doctrine only. A Prometheus learning controller declared by
+# tools/install-prometheus-cycle.sh lives in the OpenClaw scheduler and survives this uninstall.
+# Its stored job would keep requesting skills that no longer exist. The route-proof file is the
+# local trace that a controller was installed on this host.
+ROUTE_PROOF_TRACE="${XDG_CONFIG_HOME:-$HOME/.config}/borrowedfire/prometheus-learning-route.sha256"
+controller_note() { # print the teardown reminder when a controller trace exists on this host
+  # The reminder goes to stderr: two of its call sites are exit-1 paths, and a scripted
+  # uninstall that discards stdout must still see it.
+  if [ -e "$ROUTE_PROOF_TRACE" ] || [ -L "$ROUTE_PROOF_TRACE" ] || [ -n "$OPENCLAW_WS" ]; then
+    {
+      say "note: this uninstall does not touch the OpenClaw scheduler. If this host runs the"
+      say "      Prometheus learning controller, run tools/install-prometheus-cycle.sh --remove"
+      say "      before deleting this checkout, or the nightly job keeps requesting skills that"
+      say "      no longer exist."
+    } >&2
+  fi
+}
 act() { # act <description> <command...>: honor --dry-run
   local desc="$1"; shift
   say "  $desc"
@@ -95,6 +113,11 @@ if [ -n "$OPENCLAW_WS" ]; then
 fi
 if [ "${#HARNESSES[@]}" -eq 0 ]; then
   echo "no harnesses detected (looked for ~/.claude, ~/.codex, ~/.qwen; pass --openclaw-workspace for OpenClaw)" >&2
+  # A headless controller host can reach this exit with no CLI harness dirs at all. The
+  # teardown reminder must still print there, or its nightly job is orphaned silently.
+  if [ "$UNINSTALL" -eq 1 ]; then
+    controller_note
+  fi
   exit 1
 fi
 
@@ -490,6 +513,12 @@ for row in "${HARNESSES[@]}"; do
     fi
   fi
 done
+
+# The note prints before the fail-closed exit below on purpose: a partly failed uninstall on a
+# messy host is exactly when the owner needs the reminder.
+if [ "$UNINSTALL" -eq 1 ]; then
+  controller_note
+fi
 
 if [ "$INSTALL_ERRORS" -gt 0 ]; then
   echo "operation failed closed: the doctrine-mandated skill stack is not safe in $INSTALL_ERRORS harness(es)" >&2
