@@ -670,6 +670,40 @@ fi
 check "no-harness uninstall names the removal step on stderr" \
   grep -q 'install-prometheus-cycle.sh --remove' <<<"$OUT"
 
+# --- 16. private brain content must not reach this public repo ---
+leak_case() { # leak_case <label> <line to append to the land log>
+  local label="$1" line="$2" clone="$SB/leak-$1"
+  cp -R "$SRC" "$clone"
+  printf '\n%s\n' "$line" >> "$clone/tasks/land-log.md"
+  if "$clone/tools/skill-lint.sh" >/dev/null 2>&1; then
+    fail "leak guard: $label"
+  else
+    ok "leak guard: $label"
+  fi
+}
+leak_case "brain-page-counts" "- 2026-01-01: INDEX says 27 lessons, the tree has 45."
+leak_case "macos-home-path" "- 2026-01-01: ran the installer from /Users/someone/prometheus."
+# A guard narrower than its claim is the defect it exists to catch, so each widening has a case.
+leak_case "linux-home-path" "- 2026-01-01: the controller runs from /home/someone/prometheus."
+
+# The same shapes must be caught in the other tracked file types the guard claims to scan.
+leak_file_case() { # leak_file_case <label> <repo-relative file> <line>
+  local label="$1" rel="$2" line="$3" clone="$SB/leakfile-$1"
+  cp -R "$SRC" "$clone"
+  printf '\n%s\n' "$line" >> "$clone/$rel"
+  if "$clone/tools/skill-lint.sh" >/dev/null 2>&1; then
+    fail "leak guard: $label"
+  else
+    ok "leak guard: $label"
+  fi
+}
+leak_file_case "tracked-yaml" "skills/bootstrap/agents/openai.yaml" "# note: /home/someone/prometheus"
+leak_file_case "public-template" "prometheus-template/README.md" "Ran from /Users/someone/prometheus."
+# The word-based exemptions used to hide real leaks: any line containing "example", and every
+# line of any path containing "fixture".
+leak_case "word-example-does-not-exempt" "- 2026-01-01: for example, production runs from /home/alice/prometheus."
+leak_file_case "fixture-path-does-not-exempt" "tests/fixtures/fake-openclaw.sh" "# ran from /Users/someone/prometheus"
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 rm -rf "$SB"
