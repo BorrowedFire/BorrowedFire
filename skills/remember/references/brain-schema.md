@@ -102,6 +102,40 @@ denylist_extra: []          # repo-specific additions to land's denylist
 
 Body sections: `## Queue` (maintainer's claim lines), `## Log` (status changes, lands, decisions).
 
+## Follow-ups (the deferred-work ledger)
+
+A follow-up is prevention or operational work the current task could not do: warranted, but
+outside its authority or scope. This section owns their format so deferred work stays greppable
+and cannot rot into "later means never". The lifecycle has four roles, and each one is
+implemented in the skill named here: `reflect` and `land` **produce** follow-ups, `digest`
+**collects** them into the ledger, `brain-lint` **validates** that the ledger is current, and
+`recall` and `maintainer` **consume** it. A role documented here but absent from its skill is a
+defect in that skill, not a note about future work.
+
+- **Two contexts, one vocabulary.** A **lesson** records prevention debt on a line-start
+  `Prevention:` line whose classification word is `follow-up` — `reflect`'s vocabulary is
+  `encoded`, `memory-only`, `follow-up` — with the paragraph naming the action and the trigger.
+  A **project page** records operational debt as a dated `## Log` bullet carrying the token
+  `follow-up:` followed by the action and the trigger. Those two forms are the canonical writes.
+  Readers also accept the legacy spellings that survive in old pages ("Open follow-up",
+  "OPEN FOLLOW-UP", "owner follow-up"), and `digest` rewrites a legacy lesson line to the
+  canonical form. Every follow-up names its trigger: the condition that says when to revisit it.
+- **What closes one.** On a lesson, `digest` rewrites the classification to `encoded` or
+  `memory-only` once the prevention lands. Lessons are not a union-merged path, so a digest
+  holding the lock may edit them in place; no other writer may. On a project page, closure is a
+  later dated log bullet that names the follow-up and states it is done or superseded — the
+  queue-claim release pattern. The original bullet is never edited.
+- **The ledger.** `INDEX.md` carries a generated `## Open follow-ups` section: one line per open
+  item, `- [<title>](<page path>.md): <action> (since <date>)`, or `(none)` when the set is
+  empty. The link target keeps the `.md` extension, matching the other generated INDEX link
+  lists, and `brain-lint` matches the delimited form `](<page path>)`.
+  `digest` owns the section and collects the open set during the INDEX refresh, after its own
+  lesson distillation, so a follow-up created by that same run still reaches the ledger.
+  `recall` reports matching entries in its task preflight; `maintainer` takes an entry whose
+  trigger has fired as queue work. An entry whose text names no trigger gets a trailing
+  `no-trigger` tag — those are the ones that rot first, and the digest report, `recall`, and
+  `maintainer` all call them out.
+
 ## Sync protocol (multi-writer, multi-machine)
 
 Several agents on several machines write concurrently. The protocol is git-native — no server.
