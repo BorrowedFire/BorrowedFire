@@ -548,14 +548,18 @@ else
 fi
 
 # The note must survive a partly failed uninstall. A messy host is exactly when it matters.
+# The fault is a stubbed failing mktemp, not directory permissions: mode bits do not bind
+# root, so a chmod fixture passes or fails with the runner UID.
 touch "$XDG_CONFIG_HOME/borrowedfire/prometheus-learning-route.sha256"
-chmod 555 "$HOME/.claude"
-if OUT="$("$SRC/install.sh" --uninstall 2>&1)"; then
-  fail "unwritable harness fails the uninstall closed"
+FAKEBIN="$SB/fakebin"
+mkdir -p "$FAKEBIN"
+printf '#!/bin/sh\nexit 1\n' > "$FAKEBIN/mktemp"
+chmod +x "$FAKEBIN/mktemp"
+if OUT="$(PATH="$FAKEBIN:$PATH" "$SRC/install.sh" --uninstall 2>&1)"; then
+  fail "context update failure fails the uninstall closed"
 else
-  ok "unwritable harness fails the uninstall closed"
+  ok "context update failure fails the uninstall closed"
 fi
-chmod 755 "$HOME/.claude"
 check "failed uninstall still names the controller removal step" \
   grep -q 'install-prometheus-cycle.sh --remove' <<<"$OUT"
 rm -f "$XDG_CONFIG_HOME/borrowedfire/prometheus-learning-route.sha256"
