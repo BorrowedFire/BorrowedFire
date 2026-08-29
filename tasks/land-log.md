@@ -120,3 +120,38 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
   executed lint suite (skill-lint 18, test-install 139/139, test-brain 46/46, cycle 164/164,
   shellcheck clean), four contracts proven to fail closed, and the installed skills serving the
   ladder, threshold, and predicate in both harnesses.
+
+## 2026-08-29 — inventory agreement + controller teardown (PR #8)
+- Item: https://github.com/BorrowedFire/BorrowedFire/pull/8 — first PR of the ponytail adoption
+  (DietrichGebert/ponytail @ `2ed6c52`): keep the skill inventory's copies in agreement and give
+  the nightly controller a removal path. skill-lint rule 10 ties `skills/*` to both doctrine
+  routing tables (two-sided reduced-mode exemption, Skill-column scoping, malformed-name
+  rejection, and the reverse direction) and to the README (links and count). Doctrine v6 adds
+  the `reel-maker` row; the owner picked a routing row over an exemption.
+  `install-prometheus-cycle.sh --remove` tears down the learning job and probe by declaration
+  key and deletes the route proof only when this run removed the learning job.
+  `install.sh --uninstall` prints the teardown reminder on stderr, on the no-harness exit, and
+  before the fail-closed exit. CI now runs the cycle suite and checks its scripts.
+  cycle-contract.md gains a Removal section.
+- Class: Autonomous (lint, installers, doctrine text, docs, tests; 10 files; denylist: no match).
+- Gates: adversarial max-effort — six finder passes plus a sweep (the line-by-line finder died
+  on a 429 mid-run; the sweep re-covered its remit) found 15 findings, all fixed, none refuted.
+  Codex round 1: P2, the host-wide route proof was deleted for other profiles — fixed by gating
+  deletion on the learning job actually being removed here; per-binding namespacing was rejected
+  as converge-path scope. Round 2: P2, the chmod-555 fixture fails under root — fixed with a
+  PATH-stubbed failing mktemp. Round 3: clean @ `86116fb` (sha == head, no new findings). CI
+  green on both heads of the extended workflow (2m58s, 2m19s).
+- Scope note: cumulative fixes grew the diff past 2× the frozen non-test baseline. All growth is
+  validated-finding hardening of this PR's own mechanisms, and the owner's "I want this for
+  Prometheus" is the scope authorization. Recorded here instead of an escalation.
+- Gotcha: a chmod-based negative fixture passes or fails with the runner UID, because root
+  ignores mode bits. Fault-inject by stubbing the failing tool on PATH instead. See
+  [[lessons/chmod-fixtures-do-not-bind-root]].
+- Outcome: squash-merged as `e397570`. Live proof — rung 5 for the doctrine and note surfaces
+  (a real `install.sh` run wrote the v6 header and `reel-maker` row into a sandbox harness
+  exactly once; a real uninstall printed the note on stderr with a trace present); rung 4 for
+  the lint and teardown paths (suites 156/156 and 184/184 executing every new branch including
+  eight fail-closed contract mutations; direct host runs: `--remove --dry-run` exit 0, flag
+  rejection exit 2). `--remove`'s rung-5 surface is Selene's production scheduler; mutating it
+  is rollout, not merge proof. Rollout owed: an `install.sh` re-run per harness for doctrine v6
+  (this Mac, and Selene in an interactive session).
