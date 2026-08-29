@@ -561,6 +561,17 @@ contract_lint_case "ci-runs-the-eval-scorer" ".github/workflows/skill-lint.yml" 
   '\#tests/test-evals.sh#d'
 contract_lint_case "ci-does-not-run-live-cells" ".github/workflows/skill-lint.yml" \
   's|run: bash tests/test-evals.sh|run: bash evals/run.sh|'
+# "check it, then run it" is the natural shape, and a guard that only looked for the checker
+# anywhere on the line let it through.
+contract_lint_case "ci-guard-catches-check-then-run" ".github/workflows/skill-lint.yml" \
+  's|run: bash tests/test-evals.sh|run: bash -n evals/run.sh \&\& bash evals/run.sh --repeats 1|'
+contract_lint_case "ci-guard-catches-trailing-checker" ".github/workflows/skill-lint.yml" \
+  's|run: bash tests/test-evals.sh|run: bash evals/run.sh --repeats 1 \&\& bash -n install.sh|'
+# A comment naming the flag must not disarm the per-line contract.
+contract_lint_case "evals-setting-sources-contract-is-per-line" "evals/run.sh" \
+  's|# Argument validation runs|# Historical note: we used to pass --setting-sources user,project,local here.\
+set -- "$@" --setting-sources project,local\
+# Argument validation runs|'
 # shellcheck disable=SC2016  # the literal $cell text in run.sh is the mutation target
 contract_lint_case "evals-contain-codex-home" "evals/run.sh" \
   's|CODEX_HOME="$cell/home/.codex"|CODEX_HOME="$CODEX_HOME"|'

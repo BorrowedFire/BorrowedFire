@@ -121,8 +121,10 @@ if [ -f "$EVAL_RUNNER" ]; then
   # cell's *user* source, so excluding `user` strips the treatment and makes both arms
   # identical. Isolation comes from the sandbox HOME. This contract exists because the first
   # version of this runner did exclude it, and every eval would have reported "no effect".
-  if grep -qE -- '--setting-sources[= ]([a-z,]*)?\bproject\b' "$EVAL_RUNNER" &&
-     ! grep -qE -- '--setting-sources[= ][a-z,]*\buser\b' "$EVAL_RUNNER"; then
+  # Matched per line: a file-wide test is disarmed by any comment that names the flag, and this
+  # file discusses the flag in prose directly above the invocation.
+  if grep -nE -- '--setting-sources[= ][a-z,]*\bproject\b' "$EVAL_RUNNER" |
+     grep -qvE -- '--setting-sources[= ][a-z,]*\buser\b'; then
     err "evals/run.sh: cells must not exclude the user setting source; that is where the doctrine is installed"
   fi
   grep -qF -- '--verify-arm' "$EVAL_RUNNER" ||
@@ -151,13 +153,20 @@ if [ -f "$EVAL_RUNNER" ]; then
   grep -qF 'evals/run.sh' "$ROOT/.github/workflows/skill-lint.yml" ||
     err "CI: evals/run.sh must at least be syntax-checked and shellchecked"
   # Live cells cost money and are noisy at small N, so CI may only check the script, never run
-  # it. Every mention of the runner anywhere in the workflow — including inside a `run: |`
-  # block, which is the normal multi-command form — must sit in a shellcheck or bash -n
-  # argument list. Matching one line at a time missed both of those shapes.
-  if grep -n 'evals/run\.sh' "$ROOT/.github/workflows/skill-lint.yml" |
-     grep -qvE 'shellcheck|bash -n'; then
-    err "CI: every evals/run.sh mention must be a shellcheck or bash -n argument, never an invocation"
-  fi
+  # it. Every workflow is scanned, not just this one, and the runner must appear as an ARGUMENT
+  # of bash -n or shellcheck with no command separator in between. Allowing any line that
+  # merely contained "bash -n" let `bash -n evals/run.sh && bash evals/run.sh` through, which
+  # is the natural way to write "check it, then run it".
+  # Remove the sanctioned checker calls from each line first, then look for what is left. A
+  # line can hold both a check and an invocation — `bash -n evals/run.sh && bash evals/run.sh`
+  # is the natural way to write "check it, then run it" — so asking whether a line *contains* a
+  # checker is not the same as asking whether everything on it is one.
+  for wf in "$ROOT"/.github/workflows/*.yml "$ROOT"/.github/workflows/*.yaml; do
+    [ -e "$wf" ] || continue
+    if sed -E 's/(bash -n|shellcheck)[^;&|]*//g' "$wf" | grep -q 'evals/run\.sh'; then
+      err "CI ($(basename "$wf")): every evals/run.sh mention must be a bash -n or shellcheck argument, never an invocation"
+    fi
+  done
 fi
 
 LEARN_SKILL="$SKILLS_DIR/reflect/SKILL.md"

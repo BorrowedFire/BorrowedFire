@@ -143,19 +143,35 @@ def is_write(name, args):
     return False
 
 
-def git_dirty(repo):
-    """Paths changed since the seed commit, staged, unstaged, or untracked. Empty list when the
-    tree is clean; None when the directory is not a usable git repo."""
+def _git(repo, *args):
     try:
-        proc = subprocess.run(
-            ["git", "-C", str(repo), "status", "--porcelain"],
-            capture_output=True, text=True, timeout=30, check=False,
-        )
+        proc = subprocess.run(["git", "-C", str(repo), *args],
+                              capture_output=True, text=True, timeout=30, check=False)
     except (OSError, subprocess.SubprocessError):
         return None
-    if proc.returncode != 0:
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def git_dirty(repo):
+    """Paths the session changed, measured against the SEED COMMIT rather than HEAD.
+
+    `remember` commits every capture, so a working-tree comparison reports a clean brain for a
+    session that followed the doctrine exactly, and a dirty one only when the doctrine was
+    half-followed. The seed is the repo's root commit, so committed and uncommitted work both
+    count. Empty list when nothing changed; None when the directory is not a usable git repo."""
+    root = _git(repo, "rev-list", "--max-parents=0", "HEAD")
+    if root is None:
         return None
-    return [ln[3:].strip() for ln in proc.stdout.splitlines() if ln.strip()]
+    seed = root.split()[0] if root.split() else None
+    status = _git(repo, "status", "--porcelain")
+    if seed is None or status is None:
+        return None
+    changed = {ln[3:].strip() for ln in status.splitlines() if ln.strip()}
+    committed = _git(repo, "diff", "--name-only", f"{seed}..HEAD")
+    if committed is None:
+        return None
+    changed.update(p.strip() for p in committed.splitlines() if p.strip())
+    return sorted(changed)
 
 
 def eval_recall_preflight(records, workspace, brain):

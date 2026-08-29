@@ -137,6 +137,14 @@ expect FAIL "reflect-noop: editing an existing page also fails" reflect-noop "$T
 
 expect FAIL "reflect-noop: a brain that is not a git repo cannot be scored" reflect-noop "$T" "$W" "$SB/not-a-repo"
 
+# remember COMMITS every capture. Measuring the working tree would report a clean brain for a
+# session that followed the doctrine exactly, so the delta is taken against the seed commit.
+commit_in() { git -C "$1" add -A && git -C "$1" -c user.email=e@e -c user.name=e commit -qm "$2"; }
+B="$SB/b2e"; mk_brain "$B"
+printf -- '---\ntype: lesson\n---\n\n# invented\n' > "$B/lessons/invented.md"
+commit_in "$B" "brain: capture lessons/invented.md [x@y]"
+expect FAIL "reflect-noop: a COMMITTED manufactured lesson still fails" reflect-noop "$T" "$W" "$B"
+
 # --- 3. reflect-capture ---
 B="$SB/b3"; mk_brain "$B"
 expect FAIL "reflect-capture: no new lesson fails" reflect-capture "$T" "$W" "$B"
@@ -150,6 +158,12 @@ expect FAIL "reflect-capture: a lesson without a Prevention line fails" reflect-
 # shellcheck disable=SC2016  # backticks are intentional literal page text
 printf -- '---\ntype: lesson\n---\n\n# learned\n\nSome text.\n\nPrevention: `encoded`.\n' > "$B/lessons/learned.md"
 expect PASS "reflect-capture: a lesson with a Prevention line passes" reflect-capture "$T" "$W" "$B"
+
+B="$SB/b3b"; mk_brain "$B"
+# shellcheck disable=SC2016  # backticks are intentional literal page text
+printf -- '---\ntype: lesson\n---\n\n# learned\n\nText.\n\nPrevention: `encoded`.\n' > "$B/lessons/learned.md"
+commit_in "$B" "brain: capture lessons/learned.md [x@y]"
+expect PASS "reflect-capture: a COMMITTED capture is still seen" reflect-capture "$T" "$W" "$B"
 
 # --- 4. writing-punctuation ---
 B="$SB/b4"; mk_brain "$B"

@@ -103,3 +103,30 @@ no run at all.
   arms. A converged eval should be replaced, not celebrated.
 - **The scorer is a proxy.** `recall-preflight` proves that `lessons/` was read before a write,
   not that the lesson changed the fix. That is the honest ceiling of a mechanical check.
+- **No live cell has ever run.** Every check here was proven against recorded transcripts and a
+  mock endpoint. The first real invocation is a calibration run, not a measurement: read its
+  arm-check lines first, and treat a surprising column as a harness bug until the transcripts
+  say otherwise.
+
+## Known gaps, deferred on purpose
+
+Three review rounds each found this harness measuring the wrong thing in a new place, so these
+are recorded rather than quietly carried. All bias the measured gap toward zero, which means a
+weak result is the expected failure and a strong one is trustworthy.
+
+- follow-up: `reads_brain_lessons` misses `Bash` reads written through `$PROMETHEUS_DIR`, and
+  `Grep` calls that split the brain across `path` and `glob`. The doctrine teaches the
+  `$PROMETHEUS_DIR` idiom, so the false negative lands on the doctrine arm only. Trigger: the
+  first live run showing `recall-preflight` failing in the doctrine arm with a brain read
+  visible in the transcript.
+- follow-up: `SHELL_WRITE` counts `2>/dev/null` as a write, so an orienting `ls -la 2>/dev/null`
+  pins the first write to call one and fails an otherwise correct session. Trigger: same run,
+  same eval.
+- follow-up: `verify_arm` reads only the first `init` record and has no exception guard, so a
+  changed init schema produces a traceback instead of a clean error. Trigger: a CLI upgrade, or
+  any cell whose arm check dies rather than failing.
+- follow-up: the runner has no per-cell timeout, so one stuck session hangs a 16-cell run with
+  no partial report. Trigger: the first run that has to be interrupted.
+- follow-up: `writing-punctuation` counts only the em dash and the semicolon the doctrine names.
+  A model steered onto en dashes or ` -- ` scores clean. Trigger: a doctrine arm that passes
+  this eval while its prose still reads as dash-joined.
