@@ -152,9 +152,9 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
   exactly once; a real uninstall printed the note on stderr with a trace present); rung 4 for
   the lint and teardown paths (suites 156/156 and 184/184 executing every new branch including
   eight fail-closed contract mutations; direct host runs: `--remove --dry-run` exit 0, flag
-  rejection exit 2). `--remove`'s rung-5 surface is Selene's production scheduler; mutating it
-  is rollout, not merge proof. Rollout owed: an `install.sh` re-run per harness for doctrine v6
-  (this Mac, and Selene in an interactive session).
+  rejection exit 2). `--remove`'s rung-5 surface is a production scheduler on a controller
+  host, and mutating one is rollout rather than merge proof. Rollout owed: an `install.sh`
+  re-run per harness for doctrine v6. Host-level detail stays in the private brain.
 
 ## 2026-08-29 — follow-up ledger (PR #9)
 - Item: https://github.com/BorrowedFire/BorrowedFire/pull/9 — second ponytail-adoption PR:
@@ -177,14 +177,14 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
   zero new findings). CI green.
 - Gotcha: a lint contract pinned to a step's title breaks when the step is renamed for accuracy.
   The rename was right; the contract and its fail-closed mutation move with it.
-- Outcome: squash-merged as `cb8bd7b`. Live proof at final head, rung 5 on real brain data: a
-  copy of the live Prometheus brain, where the detector found exactly the two genuinely open
-  follow-up lessons, went red (missing section) → green (ledger written) → red again with one
-  real entry removed. Suites: skill-lint 19, test-brain 54/54 (8 ledger cases), test-install
+- Outcome: squash-merged as `cb8bd7b`. Live proof at final head, rung 5 against a working copy of a
+  real brain rather than a fixture: the detector selected the open follow-up lessons it should
+  have, and the copy went red (missing section) → green (ledger written) → red again with one
+  entry removed. Counts and page contents stay in the private brain. Suites: skill-lint 19, test-brain 54/54 (8 ledger cases), test-install
   166/166 (10 new contracts), cycle 184/184, shellcheck clean.
 - Rollout owed: the live brain's next `digest` regenerates INDEX with the ledger. Until then
   `brain-lint` reds on the missing section alongside the pre-existing stale-count errors — the
-  brain is overdue for a digest (INDEX says 27 lessons, the tree has 45).
+  brain's INDEX counts were stale against its tree, so a digest was due.
 
 ## 2026-08-29 — doctrine behavior evals (PR #10)
 - Item: https://github.com/BorrowedFire/BorrowedFire/pull/10 — third and last ponytail-adoption
