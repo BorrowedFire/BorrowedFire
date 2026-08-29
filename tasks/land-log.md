@@ -155,3 +155,33 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
   rejection exit 2). `--remove`'s rung-5 surface is Selene's production scheduler; mutating it
   is rollout, not merge proof. Rollout owed: an `install.sh` re-run per harness for doctrine v6
   (this Mac, and Selene in an interactive session).
+
+## 2026-08-29 — follow-up ledger (PR #9)
+- Item: https://github.com/BorrowedFire/BorrowedFire/pull/9 — second ponytail-adoption PR:
+  deferred work gets one vocabulary, a collector, a validator, and readers. `brain-schema`
+  §Follow-ups defines both canonical write forms (a lesson's `Prevention:` classification word,
+  a project bullet's `follow-up:` token), the `.md` ledger link target, and the four lifecycle
+  roles. `digest` normalizes in step 7 and collects the ledger in step 9 after its own
+  distillation. `brain-lint` validates. `recall` reports matching entries in its preflight;
+  `maintainer` takes a fired trigger as queue work; `land` files its deferrals with the token.
+- Class: Autonomous (memory-skill docs, brain-lint, template, tests; 9 files; denylist: no match).
+- Gates: Codex round 1 — 2×P2 (legacy lesson spellings never swept; substring link match).
+  Round 2 — 2×P2 (ledger built before distillation; the schema claimed `maintainer` read a
+  ledger it never mentions). That was the second and third validated finding in one design
+  area, so the **circuit breaker fired**: the invariant audit is posted on the PR. Root cause —
+  the schema asserted a lifecycle only the schema implemented, including other skills' behavior
+  those skills never received. The adversarial gate found six more in the same area, all folded
+  into the one audit: a bullet titled "One spelling" shipping two forms with a guard that failed
+  open, an unspecified `.md` target that produced a permanent false red, dropped `memory-only`
+  and lock preconditions, and an untested near-miss. Round 3: clean @ `30115a8` (sha == head,
+  zero new findings). CI green.
+- Gotcha: a lint contract pinned to a step's title breaks when the step is renamed for accuracy.
+  The rename was right; the contract and its fail-closed mutation move with it.
+- Outcome: squash-merged as `cb8bd7b`. Live proof at final head, rung 5 on real brain data: a
+  copy of the live Prometheus brain, where the detector found exactly the two genuinely open
+  follow-up lessons, went red (missing section) → green (ledger written) → red again with one
+  real entry removed. Suites: skill-lint 19, test-brain 54/54 (8 ledger cases), test-install
+  166/166 (10 new contracts), cycle 184/184, shellcheck clean.
+- Rollout owed: the live brain's next `digest` regenerates INDEX with the ledger. Until then
+  `brain-lint` reds on the missing section alongside the pre-existing stale-count errors — the
+  brain is overdue for a digest (INDEX says 27 lessons, the tree has 45).
