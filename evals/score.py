@@ -7,6 +7,7 @@ question per eval. Every check is a property of the transcript or of the files
 the session left behind, never a judgement about the prose.
 
 Usage: score.py <eval-name> <transcript.jsonl> <workspace-dir> <brain-dir>
+       score.py --verify-arm <doctrine|bare> <transcript.jsonl>
 Exit 0 = pass, 1 = fail, 2 = the cell did not produce a usable transcript.
 Prints one line: "<eval> <PASS|FAIL|ERROR> <evidence>".
 """
@@ -19,9 +20,15 @@ import sys
 
 def load(path):
     """Ordered records. A malformed line is skipped: the CLI can interleave
-    non-JSON noise on stderr redirects, and one bad line must not void a run."""
+    non-JSON noise on stderr redirects, and one bad line must not void a run.
+    An unreadable transcript returns nothing, which the caller reports as an error — never as
+    a failed doctrine rule."""
+    try:
+        text = pathlib.Path(path).read_text(errors="replace")
+    except OSError:
+        return []
     out = []
-    for line in pathlib.Path(path).read_text(errors="replace").splitlines():
+    for line in text.splitlines():
         line = line.strip()
         if not line.startswith("{"):
             continue
@@ -57,6 +64,61 @@ def completed(records):
 
 def mentions(payload, needle):
     return needle in json.dumps(payload)
+
+
+# Skills this repo installs. Their presence in a session's init record is what distinguishes
+# the two arms, so it is checked rather than assumed.
+DOCTRINE_SKILLS = ("recall", "remember", "digest", "reflect")
+READ_TOOLS = {"Read", "Grep", "Glob", "Bash", "NotebookRead"}
+PATH_FIELDS = ("file_path", "path", "pattern", "command", "notebook_path", "glob")
+
+
+def init_record(records):
+    for rec in records:
+        if rec.get("type") == "system" and rec.get("subtype") == "init":
+            return rec
+    return None
+
+
+def verify_arm(arm, transcript):
+    """Prove the cell actually got the treatment it claims. A doctrine cell whose session never
+    loaded the skills, or a bare cell that somehow did, produces no usable measurement: without
+    this the harness cannot tell 'the rule did nothing' from 'the rule was never loaded'."""
+    records = load(transcript)
+    if not records:
+        return False, f"no readable transcript at {transcript}"
+    init = init_record(records)
+    if init is None:
+        return False, "session emitted no init record"
+    visible = set(init.get("skills") or [])
+    found = sorted(s for s in DOCTRINE_SKILLS if s in visible)
+    if arm == "doctrine":
+        missing = [s for s in DOCTRINE_SKILLS if s not in visible]
+        if missing:
+            return False, (f"doctrine cell cannot see {', '.join(missing)} "
+                           f"({len(visible)} skills visible); the arms are identical")
+        return True, f"doctrine cell sees {', '.join(found)}"
+    if found:
+        return False, f"bare cell can see {', '.join(found)}; the arms are contaminated"
+    return True, f"bare cell sees none of the doctrine skills ({len(visible)} skills visible)"
+
+
+def reads_brain_lessons(name, args, brain):
+    """True when this call reads the seeded brain's lessons/, judged on the path-bearing fields
+    only. A todo or a description that merely says the word proves nothing was read."""
+    if name not in READ_TOOLS:
+        return False
+    lessons = str((brain / "lessons").resolve())
+    for field in PATH_FIELDS:
+        value = args.get(field)
+        if not isinstance(value, str):
+            continue
+        if lessons in value or f"{brain}/lessons" in value:
+            return True
+        # A relative reference still has to name the brain, not just the word.
+        if "lessons" in value and (str(brain) in value or "brain" in value):
+            return True
+    return False
 
 
 WRITE_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
@@ -102,8 +164,8 @@ def eval_recall_preflight(records, workspace, brain):
     calls = tool_calls(records)
     first_write = next((i for i, (n, a) in enumerate(calls) if is_write(n, a)), len(calls))
     for i, (name, args) in enumerate(calls[:first_write]):
-        if mentions(args, "lessons"):
-            return True, f"{name} touched lessons/ at call {i + 1}, before the first write at {first_write + 1}"
+        if reads_brain_lessons(name, args, brain):
+            return True, f"{name} read the brain's lessons/ at call {i + 1}, before the first write at {first_write + 1}"
     where = f"call {first_write + 1}" if first_write < len(calls) else "never"
     return False, f"{len(calls)} calls, first write {where}, no lessons/ read before it"
 
@@ -141,37 +203,48 @@ def eval_reflect_capture(records, workspace, brain):
     return True, f"{with_prevention[0]} carries a Prevention line"
 
 
-def eval_writing_semicolons(records, workspace, brain):
-    """The writing doctrine prefers a period to a semicolon. Scored on the
-    deliverable only, and only for semicolons joining prose: a semicolon inside
-    a fenced code block is code, not writing."""
+def eval_writing_punctuation(records, workspace, brain):
+    """The writing doctrine prefers a period to an em dash or a semicolon. Both markers are
+    counted and reported separately, so a marker that stops discriminating is visible instead
+    of averaged away. Code is not prose: fenced blocks and inline spans are excluded."""
     text = final_text(records)
     if not text.strip():
         return False, "no final text to score"
+    fences = sum(1 for line in text.splitlines() if line.lstrip().startswith("```"))
+    if fences % 2:
+        raise ValueError(f"unbalanced code fence ({fences} markers); the deliverable cannot be scored")
     outside, in_fence = [], False
     for line in text.splitlines():
         if line.lstrip().startswith("```"):
             in_fence = not in_fence
             continue
         if not in_fence:
-            outside.append(line)
+            # Strip inline code per line: a stray backtick must not swallow the next paragraph.
+            outside.append(re.sub(r"`[^`]*`", "", line))
     prose = "\n".join(outside)
-    prose = re.sub(r"`[^`]*`", "", prose)  # inline code is code too
-    hits = prose.count(";")
-    if hits:
-        return False, f"{hits} prose semicolon(s) in the deliverable"
-    return True, f"0 prose semicolons in {len(prose.split())} words"
+    semis, dashes = prose.count(";"), prose.count("—")
+    if semis or dashes:
+        return False, f"{semis} semicolon(s) and {dashes} em dash(es) in the deliverable's prose"
+    return True, f"0 semicolons and 0 em dashes in {len(prose.split())} words"
 
 
 EVALS = {
     "recall-preflight": eval_recall_preflight,
     "reflect-noop": eval_reflect_noop,
     "reflect-capture": eval_reflect_capture,
-    "writing-semicolons": eval_writing_semicolons,
+    "writing-punctuation": eval_writing_punctuation,
 }
 
 
 def main():
+    if len(sys.argv) == 4 and sys.argv[1] == "--verify-arm":
+        arm = sys.argv[2]
+        if arm not in ("doctrine", "bare"):
+            print(f"unknown arm '{arm}'", file=sys.stderr)
+            return 2
+        ok, note = verify_arm(arm, sys.argv[3])
+        print(note, file=sys.stderr if not ok else sys.stdout)
+        return 0 if ok else 1
     if len(sys.argv) != 5:
         print(__doc__.strip(), file=sys.stderr)
         return 2
@@ -183,7 +256,11 @@ def main():
     if not records or not completed(records):
         print(f"{name} ERROR session did not complete; see {transcript}")
         return 2
-    ok, evidence = EVALS[name](records, pathlib.Path(workspace), pathlib.Path(brain))
+    try:
+        ok, evidence = EVALS[name](records, pathlib.Path(workspace), pathlib.Path(brain))
+    except Exception as exc:                     # a scorer that cannot judge must not judge
+        print(f"{name} ERROR {exc}")
+        return 2
     print(f"{name} {'PASS' if ok else 'FAIL'} {evidence}")
     return 0 if ok else 1
 

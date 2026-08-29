@@ -547,8 +547,12 @@ contract_lint_case "evals-require-a-key" "evals/run.sh" \
   's/ANTHROPIC_API_KEY/ANTHROPIC_KEY_OPTIONAL/g'
 contract_lint_case "evals-refuse-un-isolated" "evals/run.sh" \
   's/no un-isolated mode/a fallback mode/'
-contract_lint_case "evals-exclude-user-settings" "evals/run.sh" \
-  's/--setting-sources project,local/--setting-sources user,project,local/'
+# Mutate toward the dangerous configuration: excluding the user source strips the doctrine the
+# doctrine arm is supposed to receive, and every eval would report a confident "no effect".
+contract_lint_case "evals-must-not-exclude-user-settings" "evals/run.sh" \
+  's/--permission-mode acceptEdits/--setting-sources project,local --permission-mode acceptEdits/'
+contract_lint_case "evals-verify-the-arm-at-runtime" "evals/run.sh" \
+  's/--verify-arm/--describe-arm/g'
 contract_lint_case "evals-arms-differ-by-skills" "evals/run.sh" \
   's/a HOME with no skills/a HOME/'
 contract_lint_case "evals-score-mechanically" "evals/run.sh" \

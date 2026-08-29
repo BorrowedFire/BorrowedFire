@@ -15,7 +15,7 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-EVALS="recall-preflight,reflect-noop,reflect-capture,writing-semicolons"
+EVALS="recall-preflight,reflect-noop,reflect-capture,writing-punctuation"
 ARMS="doctrine,bare"
 REPEATS=2
 MODEL=""
@@ -34,6 +34,29 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+# Argument validation runs before the environment guards below. A CI box without the CLI must
+# still fail an invalid flag, or these checks can only ever be tested where the CLI exists.
+case "$REPEATS" in ''|*[!0-9]*) echo "evals: --repeats needs a number" >&2; exit 2 ;; esac
+[ "$REPEATS" -ge 1 ] || { echo "evals: --repeats must be at least 1" >&2; exit 2; }
+IFS=',' read -r -a EVAL_LIST <<< "$EVALS"
+IFS=',' read -r -a ARM_LIST <<< "$ARMS"
+[ "${#EVAL_LIST[@]}" -gt 0 ] || { echo "evals: --evals is empty" >&2; exit 2; }
+[ "${#ARM_LIST[@]}" -gt 0 ] || { echo "evals: --arms is empty" >&2; exit 2; }
+for arm in "${ARM_LIST[@]}"; do
+  case "$arm" in
+    doctrine|bare) ;;
+    # An unrecognized arm used to fall through to the bare configuration: it burned a paid cell
+    # and then vanished from the report, so a typo looked like a total doctrine failure.
+    *) echo "evals: unknown arm '$arm' (expected doctrine or bare)" >&2; exit 2 ;;
+  esac
+done
+for eval_name in "${EVAL_LIST[@]}"; do
+  case "$eval_name" in
+    recall-preflight|reflect-noop|reflect-capture|writing-punctuation) ;;
+    *) echo "evals: unknown eval '$eval_name'" >&2; exit 2 ;;
+  esac
+done
+
 if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
   cat >&2 <<'MSG'
 evals: ANTHROPIC_API_KEY is not set.
@@ -48,8 +71,6 @@ MSG
 fi
 command -v claude >/dev/null 2>&1 || { echo "evals: the claude CLI is not on PATH" >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "evals: python3 is required for scoring" >&2; exit 1; }
-case "$REPEATS" in ''|*[!0-9]*) echo "evals: --repeats needs a number" >&2; exit 2 ;; esac
-[ "$REPEATS" -ge 1 ] || { echo "evals: --repeats must be at least 1" >&2; exit 2; }
 
 RUN_DIR="$(mktemp -d)"
 RESULTS="$RUN_DIR/results.tsv"
@@ -108,32 +129,29 @@ PAGE
   git -C "$w" -c user.email=e@e -c user.name=e commit -qm "seed"
 }
 
+# A prompt states the task the way a user would, and never names the rule under test. Asking
+# for the behavior measures instruction following, not whether the doctrine fires on its own,
+# and a prompt that forbids its own failure mode cannot fail in either arm.
 prompt_for() { # prompt_for <eval>
   case "$1" in
     recall-preflight)
       echo "test_widget.py fails. Fix the bug in widget.py so it passes." ;;
     reflect-noop)
-      echo "What is 2 + 2? Answer in one word. Change no files." ;;
+      echo "What does widget_count(\"a,b\") return? Answer with the number." ;;
     reflect-capture)
-      echo "test_widget.py fails because parse_widget keeps an empty field from the feed's trailing comma. Fix widget.py, then record what a future session should know so this class of bug is not re-patched at the callers." ;;
-    writing-semicolons)
+      echo "test_widget.py fails: parse_widget keeps an empty field from the feed's trailing comma, and the two previous fixes patched the callers instead. Fix widget.py so the test passes." ;;
+    writing-punctuation)
       echo "Write the body of a pull request description for a change that strips a trailing comma before splitting a widget record. Cover the problem, the fix, and how it was proven. Output the body only." ;;
     *) return 1 ;;
   esac
 }
 
 # --- run ------------------------------------------------------------------------------------
-IFS=',' read -r -a EVAL_LIST <<< "$EVALS"
-IFS=',' read -r -a ARM_LIST <<< "$ARMS"
 CELLS=0
 FAILED_CELLS=0
 
 for eval_name in "${EVAL_LIST[@]}"; do
   [ -n "$eval_name" ] || continue
-  if ! prompt_for "$eval_name" >/dev/null; then
-    echo "evals: unknown eval '$eval_name'" >&2
-    exit 2
-  fi
   for arm in "${ARM_LIST[@]}"; do
     [ -n "$arm" ] || continue
     rep=1
@@ -160,9 +178,15 @@ for eval_name in "${EVAL_LIST[@]}"; do
         }
       fi   # bare arm: a HOME with no skills and no doctrine
 
+      # Do NOT restrict --setting-sources. install.sh writes the skills and the doctrine block
+      # into the *user* source of this cell's HOME, so excluding `user` would strip the very
+      # treatment being measured and make both arms identical. Isolation comes from the sandbox
+      # HOME, never from dropping the source the doctrine lives in.
       set -- -p "$(prompt_for "$eval_name")"
       set -- "$@" --output-format stream-json --verbose
-      set -- "$@" --setting-sources project,local --permission-mode acceptEdits
+      set -- "$@" --permission-mode acceptEdits
+      # Granted to BOTH arms on purpose: an asymmetric grant would let the doctrine arm reach a
+      # brain the bare arm physically cannot, so every gap would measure the grant, not the rule.
       set -- "$@" --add-dir "$cell/brain"
       [ -n "$MODEL" ] && set -- "$@" --model "$MODEL"
 
@@ -170,13 +194,28 @@ for eval_name in "${EVAL_LIST[@]}"; do
           CODEX_HOME="$cell/home/.codex" PROMETHEUS_DIR="$cell/brain" claude "$@" ) \
         > "$cell/transcript.jsonl" 2> "$cell/stderr.log"
 
+      # Live-fire check before scoring: the session's own init record must show the doctrine
+      # arm seeing the Borrowed Fire skills and the bare arm not seeing them. Without this the
+      # harness cannot tell "the rule did nothing" from "the rule was never loaded", which is
+      # the difference between a finding and a lie.
+      if ! arm_note="$(python3 "$ROOT/evals/score.py" --verify-arm "$arm" "$cell/transcript.jsonl" 2>&1)"; then
+        printf '  %-20s %-9s rep %s  ARM-CHECK FAILED %s\n' "$eval_name" "$arm" "$rep" "$arm_note"
+        printf '%s\t%s\t%s\t%s\n' "$eval_name" "$arm" "$rep" "$eval_name ERROR arm check: $arm_note" >> "$RESULTS"
+        CELLS=$((CELLS + 1)); FAILED_CELLS=$((FAILED_CELLS + 1)); rep=$((rep + 1)); continue
+      fi
+
       verdict="$(python3 "$ROOT/evals/score.py" "$eval_name" \
         "$cell/transcript.jsonl" "$cell/work" "$cell/brain")"
       status=$?
+      # An empty verdict means the scorer died before printing. Anything other than a clean
+      # pass or fail is an error, never a silent doctrine failure.
+      if [ -z "$verdict" ] || { [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; }; then
+        verdict="$eval_name ERROR scorer exited $status"
+        FAILED_CELLS=$((FAILED_CELLS + 1))
+      fi
       printf '%s\t%s\t%s\t%s\n' "$eval_name" "$arm" "$rep" "$verdict" >> "$RESULTS"
       printf '  %-20s %-9s rep %s  %s\n' "$eval_name" "$arm" "$rep" "$verdict"
       CELLS=$((CELLS + 1))
-      [ "$status" -eq 2 ] && FAILED_CELLS=$((FAILED_CELLS + 1))
       rep=$((rep + 1))
     done
   done
@@ -185,12 +224,21 @@ done
 # --- report ---------------------------------------------------------------------------------
 echo
 echo "evals: $CELLS cell(s)"
-python3 - "$RESULTS" <<'PY'
+REPORT_OK=1
+python3 - "$RESULTS" <<'PY' || REPORT_OK=0
 import collections, sys, pathlib
-rows = [l.split("\t") for l in pathlib.Path(sys.argv[1]).read_text().splitlines() if l.strip()]
 tally = collections.defaultdict(lambda: collections.Counter())
-for name, arm, _rep, verdict in rows:
-    tally[name][arm, verdict.split()[1]] += 1
+for line in pathlib.Path(sys.argv[1]).read_text().splitlines():
+    if not line.strip():
+        continue
+    # A verdict can contain tabs or be empty when a cell died. Split off the three leading
+    # fields and keep the rest whole, so one damaged row cannot destroy the whole report.
+    parts = line.split("\t", 3)
+    if len(parts) < 4:
+        continue
+    name, arm, _rep, verdict = parts
+    words = verdict.split()
+    tally[name][arm, words[1] if len(words) > 1 else "ERROR"] += 1
 width = max((len(n) for n in tally), default=10)
 print(f"{'eval'.ljust(width)}  doctrine      bare")
 for name in sorted(tally):
@@ -204,10 +252,13 @@ print("A doctrine rule is firing when doctrine passes and bare does not. Equal c
 print("rule is not what produced the behavior — the model would have done it either way.")
 PY
 
-if [ "$KEEP" -eq 1 ]; then
+# Keep the evidence whenever anything went wrong. A run that deletes its own transcripts after
+# a failure leaves nothing to diagnose with.
+if [ "$KEEP" -eq 1 ] || [ "$FAILED_CELLS" -ne 0 ] || [ "$REPORT_OK" -eq 0 ]; then
   echo "evals: transcripts kept in $RUN_DIR"
 else
   rm -rf "$RUN_DIR"
   echo "evals: run directory removed (pass --keep to inspect transcripts)"
 fi
+[ "$REPORT_OK" -eq 1 ] || { echo "evals: the summary could not be built from $RESULTS" >&2; exit 1; }
 [ "$FAILED_CELLS" -eq 0 ] || { echo "evals: $FAILED_CELLS cell(s) did not produce a usable result" >&2; exit 1; }

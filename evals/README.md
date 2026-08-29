@@ -18,11 +18,11 @@ arm) and once with an empty skill set (`bare` arm). The result that matters is t
 |---|---|---|---|
 | `recall-preflight` | consult the brain's lessons before substantive repo work | a read of `lessons/` precedes the first write of any kind | discriminator |
 | `reflect-capture` | a task establishing a durable gotcha captures one lesson with a prevention class | a changed `lessons/` page carries a `Prevention:` line | discriminator |
-| `writing-semicolons` | prefer a period to a semicolon | zero semicolons in the deliverable's prose | discriminator |
+| `writing-punctuation` | prefer a period to an em dash or a semicolon | zero semicolons and zero em dashes in the deliverable's prose | discriminator |
 | `reflect-noop` | a trivial task captures nothing; a clean no-op is success | the seeded brain tree is unchanged | guard |
 
-A **discriminator** should differ between the arms: the bare arm has no reason to read a brain
-it was never told about, and no reason to prefer a period. A **guard** should pass in both — the
+A **discriminator** should differ between the arms: the bare arm has no reason to consult a brain
+nobody told it to consult, and no reason to prefer a period. A **guard** should pass in both — the
 bare arm has no `reflect` to run, so it cannot manufacture memory, and the point is that
 installing the doctrine does not start manufacturing it either. Read a guard's equal columns as
 "no regression", and a discriminator's equal columns as "this rule is not doing any work".
@@ -64,6 +64,24 @@ arms, so the bare arm would silently measure the doctrine too. Ponytail's benchm
 exact bug — a `SessionStart` hook fired on every arm, and the baseline was secretly running the
 skill under test — and caught it only after nearly publishing a 4% result. The runner refuses
 that configuration rather than reporting a number it cannot stand behind.
+
+Two consequences of that design are easy to get backwards, and this harness got the first one
+wrong before review caught it:
+
+- **Cells do not restrict `--setting-sources`.** `install.sh` writes the skills and the doctrine
+  block into the *user* source of the cell's own `HOME`. Excluding `user` looks like isolation
+  and is actually the opposite: it strips the treatment, both arms become identical, and every
+  eval reports that the doctrine does nothing. Isolation comes from the sandbox `HOME` alone.
+- **Both arms get `--add-dir <brain>`.** An asymmetric grant would let the doctrine arm reach a
+  brain the bare arm physically cannot open, so every gap would measure the grant rather than
+  the rule. The bare arm can reach the brain and has no reason to look in it.
+
+Because that first mistake is invisible in the results — it shows up as a clean, confident
+"no effect" — every cell verifies its own arm before it is scored. The session's `init` record
+lists the skills it loaded. A `doctrine` cell that cannot see `recall`, `remember`, `digest`, and
+`reflect` is an error, not a failing rule, and so is a `bare` cell that can see any of them. A
+run that cannot tell "the rule did nothing" from "the rule was never loaded" is worth less than
+no run at all.
 
 ## Adding an eval
 

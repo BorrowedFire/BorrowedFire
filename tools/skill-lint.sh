@@ -117,8 +117,16 @@ if [ -f "$EVAL_RUNNER" ]; then
     err "evals/run.sh: the API-key requirement is missing, so a cell could run un-isolated"
   grep -qF 'no un-isolated mode' "$EVAL_RUNNER" ||
     err "evals/run.sh: the refusal to run un-isolated must stay stated in the error"
-  grep -qF -- '--setting-sources project,local' "$EVAL_RUNNER" ||
-    err "evals/run.sh: cells must exclude user-level settings"
+  # The inverse of the obvious contract. install.sh writes the skills and the doctrine into the
+  # cell's *user* source, so excluding `user` strips the treatment and makes both arms
+  # identical. Isolation comes from the sandbox HOME. This contract exists because the first
+  # version of this runner did exclude it, and every eval would have reported "no effect".
+  if grep -qE -- '--setting-sources[= ]([a-z,]*)?\bproject\b' "$EVAL_RUNNER" &&
+     ! grep -qE -- '--setting-sources[= ][a-z,]*\buser\b' "$EVAL_RUNNER"; then
+    err "evals/run.sh: cells must not exclude the user setting source; that is where the doctrine is installed"
+  fi
+  grep -qF -- '--verify-arm' "$EVAL_RUNNER" ||
+    err "evals/run.sh: each cell must verify at run time that its arm loaded the expected skills"
   for arm_marker in 'install.sh" --copy' 'a HOME with no skills'; do
     grep -qF "$arm_marker" "$EVAL_RUNNER" ||
       err "evals/run.sh: the two arms must differ only by the installed skill set ('$arm_marker' missing)"
@@ -143,10 +151,12 @@ if [ -f "$EVAL_RUNNER" ]; then
   grep -qF 'evals/run.sh' "$ROOT/.github/workflows/skill-lint.yml" ||
     err "CI: evals/run.sh must at least be syntax-checked and shellchecked"
   # Live cells cost money and are noisy at small N, so CI may only check the script, never run
-  # it. A `run:` step naming evals/run.sh outside a shellcheck or bash -n invocation does that.
-  if grep -E '^[[:space:]]*run:.*evals/run\.sh' "$ROOT/.github/workflows/skill-lint.yml" |
+  # it. Every mention of the runner anywhere in the workflow — including inside a `run: |`
+  # block, which is the normal multi-command form — must sit in a shellcheck or bash -n
+  # argument list. Matching one line at a time missed both of those shapes.
+  if grep -n 'evals/run\.sh' "$ROOT/.github/workflows/skill-lint.yml" |
      grep -qvE 'shellcheck|bash -n'; then
-    err "CI: live eval cells must not run in CI (a run: step invokes evals/run.sh directly)"
+    err "CI: every evals/run.sh mention must be a shellcheck or bash -n argument, never an invocation"
   fi
 fi
 
