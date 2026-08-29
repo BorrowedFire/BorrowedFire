@@ -117,9 +117,13 @@ defect in that skill, not a note about future work.
   `encoded`, `memory-only`, `follow-up` — with the paragraph naming the action and the trigger.
   A **project page** records operational debt as a dated `## Log` bullet carrying the token
   `follow-up:` followed by the action and the trigger. Those two forms are the canonical writes.
-  Readers also accept the legacy spellings that survive in old pages ("Open follow-up",
-  "OPEN FOLLOW-UP", "owner follow-up"), and `digest` rewrites a legacy lesson line to the
-  canonical form. Every follow-up names its trigger: the condition that says when to revisit it.
+  Readers also accept the legacy spellings that survive in old pages: "Open follow-up",
+  "OPEN FOLLOW-UP", "owner follow-up", and the **plural header** "Follow-ups:" introducing a
+  numbered or bulleted list. The plural is the one a naive sweep misses, because a search for
+  the singular token `follow-up:` does not match `Follow-ups:`, and one header can carry several
+  items — each item in that list is its own follow-up and is collected separately. `digest`
+  rewrites a legacy lesson line to the canonical form. Every follow-up names its trigger: the
+  condition that says when to revisit it.
 - **What closes one.** On a lesson, `digest` rewrites the classification to `encoded` or
   `memory-only` once the prevention lands. Lessons are not a union-merged path, so a digest
   holding the lock may edit them in place; no other writer may. On a project page, closure is a

@@ -100,9 +100,13 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
     pages, active projects, the `## Open follow-ups` ledger, open `needs-review` items. Collect
     the open set **here**, after steps 8 and 9, so a follow-up created or closed by this run
     reaches the ledger in its final state: lessons whose line-start `Prevention:` still marks a
-    follow-up in any spelling, plus project log bullets carrying `follow-up:` (legacy spellings
-    included) with no later closing bullet. Write them in the schema §Follow-ups format
-    (`(none)` when empty), and tag any entry whose text names no trigger with `no-trigger`.
+    follow-up in any spelling, plus project log bullets carrying `follow-up:` with no later
+    closing bullet. Match the legacy spellings too, and match the plural header "Follow-ups:"
+    separately: a search for the singular token does not find it, and one header can introduce
+    several items, each of which is its own follow-up. A case-insensitive `follow.?up` search
+    over `projects/` finds every form; judging which are still open is the reading work.
+    Write them in the schema §Follow-ups format (`(none)` when empty), and tag any entry whose
+    text names no trigger with `no-trigger`.
 11. **Record the run — only now.** Append the run's own completion bullet, then reconcile that
     one page's `updated:`. This comes after step 10 on purpose: the schema defines a completed
     digest as a pass that *ends* by regenerating INDEX.md, so a completion bullet written any

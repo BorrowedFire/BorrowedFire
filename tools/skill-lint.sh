@@ -90,6 +90,14 @@ fi
 if ! body "$SKILLS_DIR/digest/SKILL.md" | grep -qF 'no-trigger'; then
   err "digest: the no-trigger rot tag is missing"
 fi
+# The plural header is the spelling a singular-token sweep misses, and it is how the brain's
+# oldest follow-ups are written. A real one went uncollected for six days before this contract.
+if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'the plural header "Follow-ups:"'; then
+  err "digest: the collection must name the plural Follow-ups: header, which a singular search misses"
+fi
+if [ -f "$BRAIN_SCHEMA" ] && ! tr '\n' ' ' < "$BRAIN_SCHEMA" | tr -s ' ' | grep -qF 'plural header** "Follow-ups:"'; then
+  err "brain-schema: the legacy spelling list must name the plural Follow-ups: header"
+fi
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
 if ! body "$SKILLS_DIR/reflect/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'canonical token `follow-up:`'; then
   err "reflect: the canonical follow-up token rule is missing"

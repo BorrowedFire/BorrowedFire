@@ -525,6 +525,10 @@ contract_lint_case "digest-normalizes-followups" "skills/digest/SKILL.md" \
   's/Normalize follow-ups/Consider follow-ups/'
 contract_lint_case "digest-tags-no-trigger" "skills/digest/SKILL.md" \
   's/no-trigger/untriggered/g'
+contract_lint_case "digest-collects-the-plural-header" "skills/digest/SKILL.md" \
+  's/the plural header "Follow-ups:"/the header/'
+contract_lint_case "schema-names-the-plural-header" "skills/remember/references/brain-schema.md" \
+  's/\*\*plural header\*\* "Follow-ups:"/plural header/'
 contract_lint_case "reflect-writes-canonical-token" "skills/reflect/SKILL.md" \
   's/canonical token/usual token/'
 contract_lint_case "brain-lint-enforces-ledger" "tools/brain-lint.sh" \
