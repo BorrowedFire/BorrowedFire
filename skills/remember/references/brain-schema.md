@@ -122,6 +122,7 @@ deferred work stays greppable and cannot rot into "later means never".
   never edited.
 - **The ledger.** `INDEX.md` carries a generated `## Open follow-ups` section: one line per open
   item, `- [<title>](<page path>): <action> (since <date>)`, or `(none)` when the set is empty.
+  Keep the link target exact — `brain-lint` matches the delimited form `](<page path>)`.
   `digest` owns the section (its sweep builds it); `recall` and `maintainer` read it as the
   deferred-work ledger. An entry whose text names no trigger gets a trailing `no-trigger` tag —
   those are the ones that rot first, and the digest report calls them out.

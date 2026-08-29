@@ -239,7 +239,9 @@ if [ -f "$BRAIN/INDEX.md" ]; then
       case "$(basename "$page")" in _template.md) continue ;; esac
       # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
       grep -q '^Prevention: `follow-up`' "$page" || continue
-      printf '%s\n' "$FOLLOWUP_SECTION" | grep -qF "lessons/$(basename "$page")" ||
+      # Match the delimited link target, not a bare substring: an entry for lessons/x.md-old.md
+      # must not satisfy an open lessons/x.md.
+      printf '%s\n' "$FOLLOWUP_SECTION" | grep -qF "](lessons/$(basename "$page"))" ||
         err "${page#"$BRAIN"/}: open follow-up not listed in INDEX.md — digest follow-up sweep due"
     done
   fi

@@ -70,11 +70,13 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
    Bring stale `updated:` fields level with each page's last dated log bullet. All of these are
    reconcile-protocol edits: lock held, one page per commit, pushed immediately.
    **Sweep follow-ups** (schema §Follow-ups) in the same pass: collect the open set — lessons
-   whose line-start ``Prevention: `follow-up`.`` still stands, and project log bullets carrying
-   `follow-up:` (legacy spellings included) with no later closing bullet — for the INDEX refresh
-   in step 9, and tag any entry whose text names no trigger with `no-trigger`. When a lesson's
-   prevention has since landed, rewrite its Prevention line to `encoded` (lessons are not union
-   paths). Project pages stay append-only: closure there is a new log bullet, never an edit.
+   whose line-start `Prevention:` still marks a follow-up in any spelling, canonical or legacy,
+   and project log bullets carrying `follow-up:` (legacy spellings included) with no later
+   closing bullet — for the INDEX refresh in step 9, and tag any entry whose text names no
+   trigger with `no-trigger`. Rewrite a legacy lesson spelling to the canonical form, and
+   rewrite the Prevention line to `encoded` when its prevention has since landed (lessons are
+   not union paths). Project pages stay append-only: closure there is a new log bullet, never
+   an edit.
 8. **Distill lessons.** Read log entries across `projects/` and other pages — plus `journal/`
    when it has entries — since the last digest; recurring gotchas or themes get promoted into
    `lessons/` or `notes/` pages — this compounding step is the point of the whole system.
