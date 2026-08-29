@@ -215,3 +215,26 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
   isolation design forbids a fallback. The README says the first real invocation is a
   calibration run, not a measurement. Every known gap biases the gap toward zero, so a weak
   result is the expected failure and a strong one is trustworthy.
+
+## 2026-08-29 — digest step order (PR #11)
+- Item: https://github.com/BorrowedFire/BorrowedFire/pull/11 — found by running the digest on the
+  live brain, not by reading it. Step 7 reconciled `updated:` fields, then later steps appended
+  log bullets and re-staled them; `brain-lint` went red the moment the lock released, and
+  clearing it took a second scoped lock cycle. The reconcile moves to a new step 9 that appends
+  first, the completion bullet moves after the INDEX refresh, and lock release is unconditional.
+- Class: Autonomous (one skill body, lint contracts, tests; 3 files; denylist: no match).
+- Gates: Codex round 1 — 2×P2, one problem: the tail must record completion only after the
+  index, keep the reconcile last, and always release the lock. Fixed as one restructure. Round 3
+  clean @ `f0fc3d6`. Adversarial round 1 — 5 findings, one invariant: the ordering rule was not
+  stated everywhere it could be broken, and its contracts pinned titles instead of behavior.
+  The reviewer **proved the contracts failed open** by restoring the reconcile sentence to the
+  sweep step while leaving its heading alone: lint stayed green with the regression live.
+- Gotchas: (1) a contract pinned to a step title misses a moved instruction and trips on a doc
+  describing its own history; check ordering by comparing step positions instead. (2) an em dash
+  inside a lint literal is a trap in this repo, because the mandated `unslop` pass rewrites it
+  and the contract then fails with an error naming a change nobody made. (3) step 2 told a reader
+  to fix a stale `updated:` on sight, which is the very bug step 9 prevents.
+- Outcome: squash-merged as `3162043`. Live proof, rung 5: the defect and the fix both came from
+  a real digest pass on the live Prometheus brain, which ended red, needed a scoped lock cycle to
+  clear, and now reports `brain-lint: OK` with a clean tree and no lock. Suites: skill-lint 19,
+  test-install 184/184 with both ordering mutations failing closed, shellcheck clean.
