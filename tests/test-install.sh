@@ -544,12 +544,33 @@ contract_lint_case "digest-collects-after-distillation" "skills/digest/SKILL.md"
 contract_lint_case "digest-reconciles-last" "skills/digest/SKILL.md" \
   's/\*\*Reconcile last\.\*\*/**Reconcile whenever.**/'
 # reverting the reconcile back into the sweep step is the exact regression this ordering fixes
-contract_lint_case "digest-reconcile-not-in-sweep-step" "skills/digest/SKILL.md" \
-  's/\*\*Sweep queues and archive old logs\.\*\*/**Sweep queues, archive old logs, reconcile frontmatter.**/'
-contract_lint_case "digest-records-completion-after-index" "skills/digest/SKILL.md" \
-  's/\*\*Record the run — only now\.\*\*/**Record the run.**/'
 contract_lint_case "digest-releases-the-lock-unconditionally" "skills/digest/SKILL.md" \
   's/\*\*Release the lock unconditionally\*\*/**Release the lock when clean**/'
+# Ordering is checked by position, so these mutations MOVE the instruction instead of retitling
+# it. The earlier title-pinned contract stayed green while the reconcile sentence sat back in
+# the sweep step, which is the regression the ordering exists to prevent.
+MOVER="$SB/move-line.py"
+cat > "$MOVER" <<'MOVEPY'
+import sys
+path, anchor, dest = sys.argv[1:4]
+lines = open(path).read().splitlines(keepends=True)
+moved = [l for l in lines if anchor in l]
+rest = [l for l in lines if anchor not in l]
+at = next(i for i, l in enumerate(rest) if dest in l)
+open(path, "w").write("".join(rest[:at] + moved + rest[at:]))
+MOVEPY
+mv_line_case() { # mv_line_case <label> <anchor-substring> <destination-anchor>
+  local label="$1" anchor="$2" dest="$3" clone="$SB/order-$1"
+  cp -R "$SRC" "$clone"
+  python3 "$MOVER" "$clone/skills/digest/SKILL.md" "$anchor" "$dest"
+  if "$clone/tools/skill-lint.sh" >/dev/null 2>&1; then
+    fail "contract lint: $label"
+  else
+    ok "contract lint: $label"
+  fi
+}
+mv_line_case "digest-reconcile-must-follow-distillation" "fields level" "Sweep queues and archive old logs"
+mv_line_case "digest-completion-must-follow-index" "Append the run's own completion bullet" "Distill lessons"
 
 # --- 15. eval-harness isolation contracts fail closed ---
 contract_lint_case "evals-require-a-key" "evals/run.sh" \

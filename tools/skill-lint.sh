@@ -108,23 +108,38 @@ done
 if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'Collect the open set **here**, after steps 8 and 9'; then
   err "digest: the ledger must be collected after distillation and the run's own bullets, or a run hides its own follow-ups"
 fi
-# The reconcile must be the last write. Every append re-stales the `updated:` field of the page
-# it touches, so reconciling before the appends leaves the brain red the moment the lock drops.
-if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'Reconcile last.'; then
+# Ordering contracts for digest, checked by POSITION rather than by step title or wording.
+# A contract pinned to a title survives the retitling and misses the regression: putting the
+# reconcile sentence back into the sweep step while leaving its heading alone passed the
+# title-based version of this check. A positional test encodes the behavior itself.
+DIGEST_BODY="$(mktemp)"
+body "$SKILLS_DIR/digest/SKILL.md" > "$DIGEST_BODY"
+line_of() { grep -nF "$1" "$DIGEST_BODY" | head -1 | cut -d: -f1; }
+DISTILL_AT="$(line_of 'Distill lessons')"
+RECONCILE_AT="$(line_of 'fields level')"
+INDEX_AT="$(line_of 'generated-only; rewrite wholesale')"
+COMPLETION_AT="$(line_of "Append the run's own completion bullet")"
+RELEASE_AT="$(line_of 'Release the lock unconditionally')"
+for pair in "DISTILL_AT:$DISTILL_AT" "RECONCILE_AT:$RECONCILE_AT" "INDEX_AT:$INDEX_AT" \
+            "COMPLETION_AT:$COMPLETION_AT" "RELEASE_AT:$RELEASE_AT"; do
+  [ -n "${pair#*:}" ] || err "digest: ordering anchor ${pair%%:*} is missing from the flow"
+done
+if [ -n "$DISTILL_AT" ] && [ -n "$RECONCILE_AT" ] && [ "$RECONCILE_AT" -lt "$DISTILL_AT" ]; then
+  err "digest: the updated: reconcile runs before distillation, so every later append re-stales it"
+fi
+if [ -n "$INDEX_AT" ] && [ -n "$COMPLETION_AT" ] && [ "$COMPLETION_AT" -lt "$INDEX_AT" ]; then
+  err "digest: the completion bullet is written before the INDEX refresh, claiming a completion that may not happen"
+fi
+if [ -n "$COMPLETION_AT" ] && [ -n "$RELEASE_AT" ] && [ "$RELEASE_AT" -lt "$COMPLETION_AT" ]; then
+  err "digest: the lock is released before the run is recorded"
+fi
+if ! tr '\n' ' ' < "$DIGEST_BODY" | tr -s ' ' | grep -qF 'Reconcile last.'; then
   err "digest: the reconcile-last ordering rule is missing"
 fi
-if body "$SKILLS_DIR/digest/SKILL.md" | grep -qF 'Sweep queues, archive old logs, reconcile frontmatter'; then
-  err "digest: the frontmatter reconcile must not sit in the sweep step. It runs after every append"
-fi
-# The completion bullet is the brain's record that a digest finished. Written before the INDEX
-# refresh, it claims a completion that may never happen.
-if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'Record the run — only now.'; then
-  err "digest: the completion bullet must be written after the INDEX refresh, not before"
-fi
-# A stranded lock blocks every future digest fleet-wide, so release can never be conditional.
-if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'Release the lock unconditionally'; then
+if ! tr '\n' ' ' < "$DIGEST_BODY" | tr -s ' ' | grep -qF 'Release the lock unconditionally'; then
   err "digest: lock release must be unconditional, per the schema's same-run release rule"
 fi
+rm -f "$DIGEST_BODY"
 
 # 11. eval harness: the isolation contract is the whole value. An eval that can silently run
 # against the operator's own HOME measures the doctrine in both arms and reports a lie.

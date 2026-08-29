@@ -54,8 +54,10 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
    frontmatter keys; INDEX carries its `## Open follow-ups` section and every open follow-up
    lesson appears there. From a Borrowed Fire checkout, `tools/brain-lint.sh <brain-root>` runs
    these checks. Fix each deviation in this run or file it under INDEX.md's needs-review. The
-   two ledger deviations are cleared by this run's own steps 7 and 10, so record them and move
-   on rather than filing them.
+   two ledger deviations are cleared by this run's own steps 7 and 10, and a stale `updated:`
+   is cleared by step 9, so record all three and move on rather than fixing or filing them
+   here. Fixing a stale `updated:` at this point is the ordering bug step 9 exists to prevent:
+   every later append would re-stale it.
 3. **Ingest outboxes.** Any `.brain-outbox/` files in repos you can see, and fenced
    `BRAIN CAPTURE` blocks the owner has queued: file them as normal captures. Delete only the
    exact local-only source file after its capture commit has pushed successfully; never delete
@@ -85,10 +87,15 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
 9. **Close resolved follow-ups, then reconcile `updated:`.** Append a closing bullet on each
    project page whose follow-up this run resolved. Only then bring stale `updated:` fields level
    with each page's last dated log bullet, one page per commit under the reconcile protocol.
-   **Reconcile last.** Every append in steps 4, 7, 8, and this one re-stales the `updated:`
+   Push the appends first. The reconcile protocol's precondition allows deferring a reconcile
+   when the tree has unpushed work, and taking that branch here would end the run with exactly
+   the stale fields this step exists to clear. Finish the batch, then reconcile.
+   **Reconcile last.** Every append in steps 3, 4, 7, 8, and this one re-stales the `updated:`
    field of the page it touches, so a reconcile performed before them leaves the brain red the
-   moment the lock is released. If a later step still has to append to a page, reconcile that
-   page after it, not before — which is exactly what step 11 does for the completion bullet.
+   moment the lock is released. Outbox ingest counts: a capture filed onto a `projects/` page in
+   step 3 leaves that page stale like any other append. If a later step still has to append to a
+   page, reconcile that page after it, not before — which is exactly what step 11 does for the
+   completion bullet.
 10. **Refresh `INDEX.md`** (generated-only; rewrite wholesale): per-type counts, notable recent
     pages, active projects, the `## Open follow-ups` ledger, open `needs-review` items. Collect
     the open set **here**, after steps 8 and 9, so a follow-up created or closed by this run
