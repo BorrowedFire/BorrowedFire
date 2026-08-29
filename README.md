@@ -116,7 +116,13 @@ install.sh         manifest-owned cross-harness installer
 tools/skill-lint.sh   lint (also install.sh's local preflight)
 tools/brain-lint.sh   brain integrity check (digest's inventory gate; CI lints the template)
 tests/             local installer sandbox matrix + brain-protocol live proof
+evals/             doctrine behavior evals (pre-release gate; needs an API key)
 ```
+
+The suites prove the machinery. [`evals/`](evals/README.md) proves the doctrine: each eval runs
+one task with the skills installed and again with an empty skill set, and scores the transcript
+mechanically. A rule is firing when the two arms differ. Cells cost real money, so the runner is
+a pre-release gate; CI runs only its scorer against recorded transcripts.
 
 Skills are plain markdown — readable by any agent that can read files, portable to any harness
 that supports the SKILL.md convention.

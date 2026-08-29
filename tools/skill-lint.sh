@@ -109,6 +109,66 @@ if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'Co
   err "digest: the ledger must be collected after distillation, or a run hides its own follow-ups"
 fi
 
+# 11. eval harness: the isolation contract is the whole value. An eval that can silently run
+# against the operator's own HOME measures the doctrine in both arms and reports a lie.
+EVAL_RUNNER="$ROOT/evals/run.sh"
+if [ -f "$EVAL_RUNNER" ]; then
+  grep -qF 'ANTHROPIC_API_KEY' "$EVAL_RUNNER" ||
+    err "evals/run.sh: the API-key requirement is missing, so a cell could run un-isolated"
+  grep -qF 'no un-isolated mode' "$EVAL_RUNNER" ||
+    err "evals/run.sh: the refusal to run un-isolated must stay stated in the error"
+  # The inverse of the obvious contract. install.sh writes the skills and the doctrine into the
+  # cell's *user* source, so excluding `user` strips the treatment and makes both arms
+  # identical. Isolation comes from the sandbox HOME. This contract exists because the first
+  # version of this runner did exclude it, and every eval would have reported "no effect".
+  # Matched per line: a file-wide test is disarmed by any comment that names the flag, and this
+  # file discusses the flag in prose directly above the invocation.
+  if grep -nE -- '--setting-sources[= ][a-z,]*\bproject\b' "$EVAL_RUNNER" |
+     grep -qvE -- '--setting-sources[= ][a-z,]*\buser\b'; then
+    err "evals/run.sh: cells must not exclude the user setting source; that is where the doctrine is installed"
+  fi
+  grep -qF -- '--verify-arm' "$EVAL_RUNNER" ||
+    err "evals/run.sh: each cell must verify at run time that its arm loaded the expected skills"
+  for arm_marker in 'install.sh" --copy' 'a HOME with no skills'; do
+    grep -qF "$arm_marker" "$EVAL_RUNNER" ||
+      err "evals/run.sh: the two arms must differ only by the installed skill set ('$arm_marker' missing)"
+  done
+  # Both halves of harness-root containment. An inherited CODEX_HOME rewrites the operator's
+  # real Codex root; a missing sandbox .claude means install.sh finds no harness, the doctrine
+  # arm installs nothing, and both arms silently measure the same thing.
+  # shellcheck disable=SC2016  # the literal $cell text in run.sh is what we match
+  grep -qF 'CODEX_HOME="$cell/home/.codex"' "$EVAL_RUNNER" ||
+    err "evals/run.sh: CODEX_HOME must be redirected into the sandbox, never inherited"
+  # shellcheck disable=SC2016  # the literal $cell text in run.sh is what we match
+  grep -qF 'mkdir -p "$cell/home/.claude"' "$EVAL_RUNNER" ||
+    err "evals/run.sh: the sandbox harness root must exist before install, or no skills are installed"
+  grep -qF 'the arms would be identical' "$EVAL_RUNNER" ||
+    err "evals/run.sh: a doctrine cell must verify that skills were actually installed"
+  grep -qF 'evals/score.py' "$EVAL_RUNNER" ||
+    err "evals/run.sh: cells must be scored mechanically"
+  [ -f "$ROOT/evals/score.py" ] || err "evals: score.py is missing"
+  [ -f "$ROOT/tests/test-evals.sh" ] || err "evals: tests/test-evals.sh is missing"
+  grep -qF 'tests/test-evals.sh' "$ROOT/.github/workflows/skill-lint.yml" ||
+    err "CI: the eval scorer suite is not run"
+  grep -qF 'evals/run.sh' "$ROOT/.github/workflows/skill-lint.yml" ||
+    err "CI: evals/run.sh must at least be syntax-checked and shellchecked"
+  # Live cells cost money and are noisy at small N, so CI may only check the script, never run
+  # it. Every workflow is scanned, not just this one, and the runner must appear as an ARGUMENT
+  # of bash -n or shellcheck with no command separator in between. Allowing any line that
+  # merely contained "bash -n" let `bash -n evals/run.sh && bash evals/run.sh` through, which
+  # is the natural way to write "check it, then run it".
+  # Remove the sanctioned checker calls from each line first, then look for what is left. A
+  # line can hold both a check and an invocation — `bash -n evals/run.sh && bash evals/run.sh`
+  # is the natural way to write "check it, then run it" — so asking whether a line *contains* a
+  # checker is not the same as asking whether everything on it is one.
+  for wf in "$ROOT"/.github/workflows/*.yml "$ROOT"/.github/workflows/*.yaml; do
+    [ -e "$wf" ] || continue
+    if sed -E 's/(bash -n|shellcheck)[^;&|]*//g' "$wf" | grep -q 'evals/run\.sh'; then
+      err "CI ($(basename "$wf")): every evals/run.sh mention must be a bash -n or shellcheck argument, never an invocation"
+    fi
+  done
+fi
+
 LEARN_SKILL="$SKILLS_DIR/reflect/SKILL.md"
 DOCTRINE="$ROOT/doctrine/DOCTRINE.md"
 SAFE_DOCTRINE="$ROOT/doctrine/DOCTRINE_NO_LEARNING.md"

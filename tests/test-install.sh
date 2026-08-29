@@ -542,6 +542,45 @@ contract_lint_case "land-produces-canonical-followups" "skills/land/SKILL.md" \
 contract_lint_case "digest-collects-after-distillation" "skills/digest/SKILL.md" \
   's/the open set \*\*here\*\*, after step 8/the open set back in step 7/'
 
+# --- 15. eval-harness isolation contracts fail closed ---
+contract_lint_case "evals-require-a-key" "evals/run.sh" \
+  's/ANTHROPIC_API_KEY/ANTHROPIC_KEY_OPTIONAL/g'
+contract_lint_case "evals-refuse-un-isolated" "evals/run.sh" \
+  's/no un-isolated mode/a fallback mode/'
+# Mutate toward the dangerous configuration: excluding the user source strips the doctrine the
+# doctrine arm is supposed to receive, and every eval would report a confident "no effect".
+contract_lint_case "evals-must-not-exclude-user-settings" "evals/run.sh" \
+  's/--permission-mode acceptEdits/--setting-sources project,local --permission-mode acceptEdits/'
+contract_lint_case "evals-verify-the-arm-at-runtime" "evals/run.sh" \
+  's/--verify-arm/--describe-arm/g'
+contract_lint_case "evals-arms-differ-by-skills" "evals/run.sh" \
+  's/a HOME with no skills/a HOME/'
+contract_lint_case "evals-score-mechanically" "evals/run.sh" \
+  's|evals/score.py|evals/judge-by-model.py|g'
+contract_lint_case "ci-runs-the-eval-scorer" ".github/workflows/skill-lint.yml" \
+  '\#tests/test-evals.sh#d'
+contract_lint_case "ci-does-not-run-live-cells" ".github/workflows/skill-lint.yml" \
+  's|run: bash tests/test-evals.sh|run: bash evals/run.sh|'
+# "check it, then run it" is the natural shape, and a guard that only looked for the checker
+# anywhere on the line let it through.
+contract_lint_case "ci-guard-catches-check-then-run" ".github/workflows/skill-lint.yml" \
+  's|run: bash tests/test-evals.sh|run: bash -n evals/run.sh \&\& bash evals/run.sh --repeats 1|'
+contract_lint_case "ci-guard-catches-trailing-checker" ".github/workflows/skill-lint.yml" \
+  's|run: bash tests/test-evals.sh|run: bash evals/run.sh --repeats 1 \&\& bash -n install.sh|'
+# A comment naming the flag must not disarm the per-line contract.
+contract_lint_case "evals-setting-sources-contract-is-per-line" "evals/run.sh" \
+  's|# Argument validation runs|# Historical note: we used to pass --setting-sources user,project,local here.\
+set -- "$@" --setting-sources project,local\
+# Argument validation runs|'
+# shellcheck disable=SC2016  # the literal $cell text in run.sh is the mutation target
+contract_lint_case "evals-contain-codex-home" "evals/run.sh" \
+  's|CODEX_HOME="$cell/home/.codex"|CODEX_HOME="$CODEX_HOME"|'
+# shellcheck disable=SC2016  # the literal $cell text in run.sh is the mutation target
+contract_lint_case "evals-create-the-harness-root" "evals/run.sh" \
+  's|mkdir -p "$cell/home/.claude" "$cell/home/.config"|mkdir -p "$cell/home/.config"|'
+contract_lint_case "evals-verify-skills-installed" "evals/run.sh" \
+  's/the arms would be identical/something went wrong/'
+
 # a skill added without a routing row or README entry is the drift this contract exists to catch
 drift_clone="$SB/contract-new-skill-unrouted"
 cp -R "$SRC" "$drift_clone"
