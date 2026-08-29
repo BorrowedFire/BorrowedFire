@@ -185,3 +185,33 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
 - Rollout owed: the live brain's next `digest` regenerates INDEX with the ledger. Until then
   `brain-lint` reds on the missing section alongside the pre-existing stale-count errors — the
   brain is overdue for a digest (INDEX says 27 lessons, the tree has 45).
+
+## 2026-08-29 — doctrine behavior evals (PR #10)
+- Item: https://github.com/BorrowedFire/BorrowedFire/pull/10 — third and last ponytail-adoption
+  PR. `evals/run.sh` runs each task twice, doctrine arm against bare arm, in a throwaway HOME
+  with its own workspace and brain; `evals/score.py` scores the transcript mechanically. A rule
+  fires only when the arms differ. Pre-release gate: CI runs the scorer suite against recorded
+  transcripts and never a live cell.
+- Class: Autonomous, escalated at the end for one owner decision (see Outcome).
+- Gates: Codex clean at rounds 2 and 3. The adversarial gate carried this PR. Round 1 it proved
+  with a mock-endpoint capture that `--setting-sources project,local` stripped the user source
+  where `install.sh` writes the skills and doctrine, so **both arms were identical and the
+  harness measured nothing** — and a lint contract I had written required the flag. Round 2, in
+  the same design area: `git status --porcelain` compares against HEAD while `remember` commits,
+  so a doctrine arm that obeyed the doctrine scored FAIL on capture and PASS on manufactured
+  memory. Two guards this PR added were themselves fail-open.
+- Circuit breaker: fired twice. One invariant audit (posted on the PR), then a new validated
+  related finding after its re-review — `land`'s hard stop. Stopped patching, fixed the three
+  proven defects, filed five gaps as follow-ups with triggers in `evals/README.md`, escalated.
+- Gotchas: (1) inside a sandbox HOME the *user* setting source is the treatment, not
+  contamination — isolation comes from HOME alone; (2) a guard that asks whether a line
+  *contains* a checker is not asking whether everything on it is one; (3) a delta measured on
+  the working tree is blind to a system that commits. See
+  [[lessons/an-eval-must-prove-it-delivered-its-own-treatment]].
+- Outcome: squash-merged as `bb85946` after an explicit owner decision to land it as
+  calibration scaffolding. Live proof: rung 4 only — 48 scorer cases over transcripts in the
+  real stream-json shape, 180 installer contracts, mock-endpoint verification of arm delivery
+  by the review gate. **No live cell has ever run**; there is no API key in the session and the
+  isolation design forbids a fallback. The README says the first real invocation is a
+  calibration run, not a measurement. Every known gap biases the gap toward zero, so a weak
+  result is the expected failure and a strong one is trustworthy.
