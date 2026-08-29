@@ -114,7 +114,16 @@ if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'Re
   err "digest: the reconcile-last ordering rule is missing"
 fi
 if body "$SKILLS_DIR/digest/SKILL.md" | grep -qF 'Sweep queues, archive old logs, reconcile frontmatter'; then
-  err "digest: the frontmatter reconcile must not sit in the sweep step; it runs after every append"
+  err "digest: the frontmatter reconcile must not sit in the sweep step. It runs after every append"
+fi
+# The completion bullet is the brain's record that a digest finished. Written before the INDEX
+# refresh, it claims a completion that may never happen.
+if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'Record the run — only now.'; then
+  err "digest: the completion bullet must be written after the INDEX refresh, not before"
+fi
+# A stranded lock blocks every future digest fleet-wide, so release can never be conditional.
+if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'Release the lock unconditionally'; then
+  err "digest: lock release must be unconditional, per the schema's same-run release rule"
 fi
 
 # 11. eval harness: the isolation contract is the whole value. An eval that can silently run

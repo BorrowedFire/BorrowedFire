@@ -546,6 +546,10 @@ contract_lint_case "digest-reconciles-last" "skills/digest/SKILL.md" \
 # reverting the reconcile back into the sweep step is the exact regression this ordering fixes
 contract_lint_case "digest-reconcile-not-in-sweep-step" "skills/digest/SKILL.md" \
   's/\*\*Sweep queues and archive old logs\.\*\*/**Sweep queues, archive old logs, reconcile frontmatter.**/'
+contract_lint_case "digest-records-completion-after-index" "skills/digest/SKILL.md" \
+  's/\*\*Record the run — only now\.\*\*/**Record the run.**/'
+contract_lint_case "digest-releases-the-lock-unconditionally" "skills/digest/SKILL.md" \
+  's/\*\*Release the lock unconditionally\*\*/**Release the lock when clean**/'
 
 # --- 15. eval-harness isolation contracts fail closed ---
 contract_lint_case "evals-require-a-key" "evals/run.sh" \

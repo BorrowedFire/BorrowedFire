@@ -82,14 +82,13 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
 8. **Distill lessons.** Read log entries across `projects/` and other pages — plus `journal/`
    when it has entries — since the last digest; recurring gotchas or themes get promoted into
    `lessons/` or `notes/` pages — this compounding step is the point of the whole system.
-9. **Record the run, then reconcile `updated:`.** Append every log bullet this pass owes: a
-   closing bullet on each project page whose follow-up this run resolved, and the run's own
-   completion bullet. Only then bring stale `updated:` fields level with each page's last dated
-   log bullet, one page per commit under the reconcile protocol.
+9. **Close resolved follow-ups, then reconcile `updated:`.** Append a closing bullet on each
+   project page whose follow-up this run resolved. Only then bring stale `updated:` fields level
+   with each page's last dated log bullet, one page per commit under the reconcile protocol.
    **Reconcile last.** Every append in steps 4, 7, 8, and this one re-stales the `updated:`
    field of the page it touches, so a reconcile performed before them leaves the brain red the
    moment the lock is released. If a later step still has to append to a page, reconcile that
-   page after it, not before.
+   page after it, not before — which is exactly what step 11 does for the completion bullet.
 10. **Refresh `INDEX.md`** (generated-only; rewrite wholesale): per-type counts, notable recent
     pages, active projects, the `## Open follow-ups` ledger, open `needs-review` items. Collect
     the open set **here**, after steps 8 and 9, so a follow-up created or closed by this run
@@ -97,11 +96,18 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
     follow-up in any spelling, plus project log bullets carrying `follow-up:` (legacy spellings
     included) with no later closing bullet. Write them in the schema §Follow-ups format
     (`(none)` when empty), and tag any entry whose text names no trigger with `no-trigger`.
-11. **Verify, release the lock, report.** Re-run the step 2 integrity check and confirm it is
-    clean before releasing: the run owns whatever it dirtied. Then release the lock and report:
-    promoted N · ingested M outbox items · merged K duplicates · fixed J links · swept Q claims ·
-    archived A bullets · F open follow-ups (G tagged `no-trigger`) · new/updated lessons · what
-    needs the owner's eyes.
+11. **Record the run — only now.** Append the run's own completion bullet, then reconcile that
+    one page's `updated:`. This comes after step 10 on purpose: the schema defines a completed
+    digest as a pass that *ends* by regenerating INDEX.md, so a completion bullet written any
+    earlier claims a completion that may never happen. If step 10 failed, write no completion
+    bullet and say the run was incomplete.
+12. **Release the lock, then report.** Re-run the step 2 integrity check and report its result.
+    **Release the lock unconditionally**, in the same run that took it, whether the pass
+    succeeded, failed, or left the brain red — a stranded lock blocks every future digest
+    fleet-wide, which is worse than any state this run could leave behind. Report: promoted N ·
+    ingested M outbox items · merged K duplicates · fixed J links · swept Q claims · archived A
+    bullets · F open follow-ups (G tagged `no-trigger`) · new/updated lessons · whether the
+    integrity check ended clean · what needs the owner's eyes.
 
 ## Scheduling
 
