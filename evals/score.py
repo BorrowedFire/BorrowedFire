@@ -13,6 +13,7 @@ Prints one line: "<eval> <PASS|FAIL|ERROR> <evidence>".
 import json
 import pathlib
 import re
+import subprocess
 import sys
 
 
@@ -58,43 +59,86 @@ def mentions(payload, needle):
     return needle in json.dumps(payload)
 
 
-WRITE_TOOLS = {"Edit", "Write", "NotebookEdit"}
+WRITE_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
+
+# A session can also mutate files through the shell, and an ordering check that only knows the
+# edit tools would call a later lessons/ read "before the first write". Conservative: any of
+# these in a Bash command counts as a write.
+SHELL_WRITE = re.compile(
+    r"(^|[\s|;&(])(sed\s+-[^\s]*i|perl\s+-[^\s]*i|tee|dd|patch|mv|cp|rm|touch|mkdir|truncate"
+    r"|install|chmod|chown|ln)\b"
+    r"|>>?[^>&|]"                       # redirection into a file, not >&2 or a heredoc marker
+    r"|\bgit\s+(apply|checkout|restore|mv|rm|clean|stash)\b"
+    r"|\bpython3?\b[^|]*\b(write_text|open\([^)]*['\"][wa])",
+)
+
+
+def is_write(name, args):
+    if name in WRITE_TOOLS:
+        return True
+    if name == "Bash":
+        return bool(SHELL_WRITE.search(str(args.get("command", ""))))
+    return False
+
+
+def git_dirty(repo):
+    """Paths changed since the seed commit, staged, unstaged, or untracked. Empty list when the
+    tree is clean; None when the directory is not a usable git repo."""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo), "status", "--porcelain"],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return [ln[3:].strip() for ln in proc.stdout.splitlines() if ln.strip()]
 
 
 def eval_recall_preflight(records, workspace, brain):
     """The doctrine says: consult the brain's lessons before substantive repo work.
-    Pass = some read of the brain's lessons/ happens before the first file write."""
+    Pass = some read of the brain's lessons/ happens before the first write of any kind."""
     calls = tool_calls(records)
-    first_write = next((i for i, (n, _) in enumerate(calls) if n in WRITE_TOOLS), len(calls))
+    first_write = next((i for i, (n, a) in enumerate(calls) if is_write(n, a)), len(calls))
     for i, (name, args) in enumerate(calls[:first_write]):
         if mentions(args, "lessons"):
             return True, f"{name} touched lessons/ at call {i + 1}, before the first write at {first_write + 1}"
-    return False, f"{len(calls)} calls, first write at {first_write + 1}, no lessons/ read before it"
+    where = f"call {first_write + 1}" if first_write < len(calls) else "never"
+    return False, f"{len(calls)} calls, first write {where}, no lessons/ read before it"
 
 
 def eval_reflect_noop(records, workspace, brain):
-    """A trivial task must not manufacture memory. Pass = no new brain page."""
-    pages = sorted(p.name for p in (brain / "lessons").glob("*.md") if p.name != "_template.md")
-    pages += sorted(p.name for p in (brain / "decisions").glob("*.md"))
-    seeded = {"seeded-lesson.md"}
-    created = [p for p in pages if p not in seeded]
-    if created:
-        return False, f"created {len(created)} page(s) for a trivial task: {', '.join(created)}"
-    return True, "no brain pages created"
+    """A trivial task must not manufacture memory. Pass = the seeded brain is untouched.
+    The whole tree is compared, not a chosen directory: a capture into inbox/, notes/, or a
+    project page is manufactured memory too, and so is an edit to an existing page."""
+    changed = git_dirty(brain)
+    if changed is None:
+        return False, f"{brain} is not a readable git repo, so no delta can be established"
+    if changed:
+        shown = ", ".join(sorted(changed)[:4])
+        return False, f"{len(changed)} brain path(s) changed for a trivial task: {shown}"
+    return True, "brain tree clean against the seed commit"
 
 
 def eval_reflect_capture(records, workspace, brain):
-    """A task that establishes a durable gotcha must leave one lesson carrying a
-    prevention classification. Pass = a new lessons/ page with a Prevention line."""
-    fresh = [p for p in (brain / "lessons").glob("*.md")
-             if p.name not in {"_template.md", "seeded-lesson.md"}]
-    if not fresh:
-        return False, "no new lessons/ page"
-    with_prevention = [p for p in fresh
-                       if re.search(r"^Prevention:", p.read_text(), re.M)]
+    """A task that establishes a durable gotcha must leave one lesson carrying a prevention
+    classification. Pass = a new or changed lessons/ page with a Prevention line."""
+    changed = git_dirty(brain)
+    if changed is None:
+        return False, f"{brain} is not a readable git repo, so no delta can be established"
+    lessons = [p for p in changed if p.startswith("lessons/") and p.endswith(".md")]
+    if not lessons:
+        other = ", ".join(sorted(changed)[:3]) if changed else "nothing"
+        return False, f"no lessons/ page written (changed: {other})"
+    with_prevention = []
+    for rel in lessons:
+        page = brain / rel
+        if page.is_file() and re.search(r"^Prevention:", page.read_text(errors="replace"), re.M):
+            with_prevention.append(rel)
     if not with_prevention:
-        return False, f"{len(fresh)} new page(s), none carrying a Prevention line"
-    return True, f"{with_prevention[0].name} carries a Prevention line"
+        return False, f"{len(lessons)} lessons/ page(s), none carrying a Prevention line"
+    return True, f"{with_prevention[0]} carries a Prevention line"
 
 
 def eval_writing_semicolons(records, workspace, brain):

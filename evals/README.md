@@ -14,20 +14,26 @@ it by measuring behavior instead of text.
 Each eval runs the same task twice: once with the Borrowed Fire skills installed (`doctrine`
 arm) and once with an empty skill set (`bare` arm). The result that matters is the **gap**.
 
-| eval | doctrine rule under test | mechanical pass condition |
-|---|---|---|
-| `recall-preflight` | consult the brain's lessons before substantive repo work | a read of `lessons/` precedes the first file write |
-| `reflect-noop` | a trivial task captures nothing; a clean no-op is success | no brain page is created |
-| `reflect-capture` | a task establishing a durable gotcha captures one lesson with a prevention class | a new `lessons/` page carries a `Prevention:` line |
-| `writing-semicolons` | prefer a period to a semicolon | zero semicolons in the deliverable's prose |
+| eval | doctrine rule under test | mechanical pass condition | kind |
+|---|---|---|---|
+| `recall-preflight` | consult the brain's lessons before substantive repo work | a read of `lessons/` precedes the first write of any kind | discriminator |
+| `reflect-capture` | a task establishing a durable gotcha captures one lesson with a prevention class | a changed `lessons/` page carries a `Prevention:` line | discriminator |
+| `writing-semicolons` | prefer a period to a semicolon | zero semicolons in the deliverable's prose | discriminator |
+| `reflect-noop` | a trivial task captures nothing; a clean no-op is success | the seeded brain tree is unchanged | guard |
+
+A **discriminator** should differ between the arms: the bare arm has no reason to read a brain
+it was never told about, and no reason to prefer a period. A **guard** should pass in both — the
+bare arm has no `reflect` to run, so it cannot manufacture memory, and the point is that
+installing the doctrine does not start manufacturing it either. Read a guard's equal columns as
+"no regression", and a discriminator's equal columns as "this rule is not doing any work".
 
 Every condition is a property of the transcript or of the files the session left behind. No
 model judges another model's output, so a run is reproducible and cheap to argue with.
 
-Read the results the way the runner prints them: **a rule is firing when `doctrine` passes and
-`bare` does not.** Equal columns mean the behavior was not produced by the doctrine — the model
-would have done it anyway, and the rule is decoration. A rule that fails in both arms is not
-reaching the agent at all.
+Read the results the way the runner prints them: **a discriminator is firing when `doctrine`
+passes and `bare` does not.** Equal columns on a discriminator mean the behavior was not
+produced by the doctrine — the model would have done it anyway, and the rule is decoration. A
+rule that fails in both arms is not reaching the agent at all.
 
 ## Running it
 

@@ -123,6 +123,17 @@ if [ -f "$EVAL_RUNNER" ]; then
     grep -qF "$arm_marker" "$EVAL_RUNNER" ||
       err "evals/run.sh: the two arms must differ only by the installed skill set ('$arm_marker' missing)"
   done
+  # Both halves of harness-root containment. An inherited CODEX_HOME rewrites the operator's
+  # real Codex root; a missing sandbox .claude means install.sh finds no harness, the doctrine
+  # arm installs nothing, and both arms silently measure the same thing.
+  # shellcheck disable=SC2016  # the literal $cell text in run.sh is what we match
+  grep -qF 'CODEX_HOME="$cell/home/.codex"' "$EVAL_RUNNER" ||
+    err "evals/run.sh: CODEX_HOME must be redirected into the sandbox, never inherited"
+  # shellcheck disable=SC2016  # the literal $cell text in run.sh is what we match
+  grep -qF 'mkdir -p "$cell/home/.claude"' "$EVAL_RUNNER" ||
+    err "evals/run.sh: the sandbox harness root must exist before install, or no skills are installed"
+  grep -qF 'the arms would be identical' "$EVAL_RUNNER" ||
+    err "evals/run.sh: a doctrine cell must verify that skills were actually installed"
   grep -qF 'evals/score.py' "$EVAL_RUNNER" ||
     err "evals/run.sh: cells must be scored mechanically"
   [ -f "$ROOT/evals/score.py" ] || err "evals: score.py is missing"

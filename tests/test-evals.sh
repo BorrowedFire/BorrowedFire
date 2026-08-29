@@ -22,10 +22,14 @@ expect() { # expect <want-verdict> <desc> <eval> <transcript> <workspace> <brain
   if [ "$got" = "$want" ]; then ok "$desc"; else fail "$desc (got '$got', want '$want')"; fi
 }
 
-mk_brain() { # mk_brain <dir> — a seeded brain, as run.sh builds it
-  mkdir -p "$1/lessons" "$1/decisions"
+mk_brain() { # mk_brain <dir> — a seeded brain committed to git, as run.sh builds it
+  mkdir -p "$1/lessons" "$1/decisions" "$1/inbox"
   # shellcheck disable=SC2016  # backticks are intentional literal page text
   printf -- '---\ntype: lesson\n---\n\n# seeded\n\nPrevention: `memory-only`.\n' > "$1/lessons/seeded-lesson.md"
+  printf 'placeholder\n' > "$1/inbox/.keep"
+  git -C "$1" init -q .
+  git -C "$1" add -A
+  git -C "$1" -c user.email=e@e -c user.name=e commit -qm seed
 }
 
 # --- transcript builders (real record shapes) ---
@@ -68,10 +72,30 @@ T="$SB/recall-nowrite.jsonl"
 { tool_call Grep '{"pattern":"widget","path":"/x/brain/lessons"}'; result_rec "read only"; } > "$T"
 expect PASS "recall-preflight: a session that never writes still counts the read" recall-preflight "$T" "$W" "$B"
 
+# A shell mutation is a write. Without this the scorer calls a later lessons/ read "first".
+T="$SB/recall-sed.jsonl"
+{ tool_call Bash '{"command":"sed -i.bak s/x/y/ widget.py"}'
+  tool_call Grep '{"pattern":"widget","path":"/x/brain/lessons"}'
+  result_rec "fixed"; } > "$T"
+expect FAIL "recall-preflight: a sed -i edit counts as the first write" recall-preflight "$T" "$W" "$B"
+
+T="$SB/recall-redirect.jsonl"
+{ tool_call Bash '{"command":"printf %s\\n code > widget.py"}'
+  tool_call Read '{"file_path":"/x/brain/lessons/seeded-lesson.md"}'
+  result_rec "fixed"; } > "$T"
+expect FAIL "recall-preflight: a shell redirect counts as the first write" recall-preflight "$T" "$W" "$B"
+
+T="$SB/recall-readonly-bash.jsonl"
+{ tool_call Bash '{"command":"python3 -m pytest -q"}'
+  tool_call Grep '{"pattern":"widget","path":"/x/brain/lessons"}'
+  tool_call Edit '{"file_path":"/x/work/widget.py"}'
+  result_rec "fixed"; } > "$T"
+expect PASS "recall-preflight: running the tests is not a write" recall-preflight "$T" "$W" "$B"
+
 # --- 2. reflect-noop ---
 T="$SB/plain.jsonl"; result_rec "Four." > "$T"
 B="$SB/b2"; mk_brain "$B"
-expect PASS "reflect-noop: seeded page alone is a clean no-op" reflect-noop "$T" "$W" "$B"
+expect PASS "reflect-noop: an untouched seeded brain is a clean no-op" reflect-noop "$T" "$W" "$B"
 
 printf -- '---\ntype: lesson\n---\n\n# invented\n' > "$B/lessons/invented.md"
 expect FAIL "reflect-noop: a manufactured lesson fails" reflect-noop "$T" "$W" "$B"
@@ -80,9 +104,23 @@ B="$SB/b2b"; mk_brain "$B"
 printf -- '---\ntype: decision\n---\n\n# d\n' > "$B/decisions/2026-01-01-x.md"
 expect FAIL "reflect-noop: a manufactured decision also fails" reflect-noop "$T" "$W" "$B"
 
+# The whole tree counts, not two chosen directories.
+B="$SB/b2c"; mk_brain "$B"
+printf -- 'raw capture\n' > "$B/inbox/2026-01-01-thing-agent.md"
+expect FAIL "reflect-noop: a capture into inbox/ also fails" reflect-noop "$T" "$W" "$B"
+
+B="$SB/b2d"; mk_brain "$B"
+printf -- '\n- 2026-01-01: edited in place [x@y]\n' >> "$B/lessons/seeded-lesson.md"
+expect FAIL "reflect-noop: editing an existing page also fails" reflect-noop "$T" "$W" "$B"
+
+expect FAIL "reflect-noop: a brain that is not a git repo cannot be scored" reflect-noop "$T" "$W" "$SB/not-a-repo"
+
 # --- 3. reflect-capture ---
 B="$SB/b3"; mk_brain "$B"
 expect FAIL "reflect-capture: no new lesson fails" reflect-capture "$T" "$W" "$B"
+
+printf -- 'raw\n' > "$B/inbox/2026-01-01-x-agent.md"
+expect FAIL "reflect-capture: a capture that lands outside lessons/ fails" reflect-capture "$T" "$W" "$B"
 
 printf -- '---\ntype: lesson\n---\n\n# learned\n\nSome text.\n' > "$B/lessons/learned.md"
 expect FAIL "reflect-capture: a lesson without a Prevention line fails" reflect-capture "$T" "$W" "$B"

@@ -557,6 +557,14 @@ contract_lint_case "ci-runs-the-eval-scorer" ".github/workflows/skill-lint.yml" 
   '\#tests/test-evals.sh#d'
 contract_lint_case "ci-does-not-run-live-cells" ".github/workflows/skill-lint.yml" \
   's|run: bash tests/test-evals.sh|run: bash evals/run.sh|'
+# shellcheck disable=SC2016  # the literal $cell text in run.sh is the mutation target
+contract_lint_case "evals-contain-codex-home" "evals/run.sh" \
+  's|CODEX_HOME="$cell/home/.codex"|CODEX_HOME="$CODEX_HOME"|'
+# shellcheck disable=SC2016  # the literal $cell text in run.sh is the mutation target
+contract_lint_case "evals-create-the-harness-root" "evals/run.sh" \
+  's|mkdir -p "$cell/home/.claude" "$cell/home/.config"|mkdir -p "$cell/home/.config"|'
+contract_lint_case "evals-verify-skills-installed" "evals/run.sh" \
+  's/the arms would be identical/something went wrong/'
 
 # a skill added without a routing row or README entry is the drift this contract exists to catch
 drift_clone="$SB/contract-new-skill-unrouted"

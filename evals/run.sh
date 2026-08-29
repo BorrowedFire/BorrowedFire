@@ -139,19 +139,26 @@ for eval_name in "${EVAL_LIST[@]}"; do
     rep=1
     while [ "$rep" -le "$REPEATS" ]; do
       cell="$RUN_DIR/$eval_name.$arm.$rep"
-      mkdir -p "$cell/home"
+      # Both arms get the same HOME shape. install.sh only sees a harness when its root dir
+      # exists, so .claude is created either way: without it the doctrine arm would install
+      # nothing and both arms would measure the same thing.
+      mkdir -p "$cell/home/.claude" "$cell/home/.config"
       seed_brain "$cell/brain"
       seed_workspace "$cell/work"
 
       if [ "$arm" = "doctrine" ]; then
-        HOME="$cell/home" XDG_CONFIG_HOME="$cell/home/.config" \
+        # CODEX_HOME is redirected, never inherited: an exported one points at the operator's
+        # real Codex root, and install.sh would rewrite it.
+        HOME="$cell/home" XDG_CONFIG_HOME="$cell/home/.config" CODEX_HOME="$cell/home/.codex" \
           "$ROOT/install.sh" --copy --brain "$cell/brain" >"$cell/install.log" 2>&1 || {
             echo "evals: install failed for $eval_name/$arm/$rep, see $cell/install.log" >&2
             FAILED_CELLS=$((FAILED_CELLS + 1)); rep=$((rep + 1)); continue
           }
-      else
-        mkdir -p "$cell/home/.claude"   # a HOME with no skills and no doctrine
-      fi
+        [ -d "$cell/home/.claude/skills" ] || {
+          echo "evals: install wrote no skills for $eval_name/$arm/$rep; the arms would be identical" >&2
+          FAILED_CELLS=$((FAILED_CELLS + 1)); rep=$((rep + 1)); continue
+        }
+      fi   # bare arm: a HOME with no skills and no doctrine
 
       set -- -p "$(prompt_for "$eval_name")"
       set -- "$@" --output-format stream-json --verbose
@@ -160,7 +167,7 @@ for eval_name in "${EVAL_LIST[@]}"; do
       [ -n "$MODEL" ] && set -- "$@" --model "$MODEL"
 
       ( cd "$cell/work" && HOME="$cell/home" XDG_CONFIG_HOME="$cell/home/.config" \
-          PROMETHEUS_DIR="$cell/brain" claude "$@" ) \
+          CODEX_HOME="$cell/home/.codex" PROMETHEUS_DIR="$cell/brain" claude "$@" ) \
         > "$cell/transcript.jsonl" 2> "$cell/stderr.log"
 
       verdict="$(python3 "$ROOT/evals/score.py" "$eval_name" \
