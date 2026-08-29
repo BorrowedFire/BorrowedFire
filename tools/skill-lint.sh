@@ -90,8 +90,8 @@ fi
 if ! body "$SKILLS_DIR/digest/SKILL.md" | grep -qF 'no-trigger'; then
   err "digest: the no-trigger rot tag is missing"
 fi
-# The plural header is the spelling a singular-token sweep misses, and it is how the brain's
-# oldest follow-ups are written. A real one went uncollected for six days before this contract.
+# The plural header is the spelling a singular-token sweep misses: a search for `follow-up:`
+# does not match `Follow-ups:`, and one header can introduce several items.
 if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'the plural header "Follow-ups:"'; then
   err "digest: the collection must name the plural Follow-ups: header, which a singular search misses"
 fi
