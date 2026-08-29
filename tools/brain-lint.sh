@@ -225,6 +225,34 @@ if [ "$TEMPLATE" -eq 0 ] && [ -f "$BRAIN/INDEX.md" ]; then
   fi
 fi
 
+# --- follow-up ledger (schema §Follow-ups) ---
+# The section must exist in every INDEX, template included. The listing check runs live-only
+# and covers the lessons half: a line-start Prevention follow-up must appear in the ledger.
+# Project-bullet follow-ups close via prose in later bullets, so their sweep stays with digest.
+if [ -f "$BRAIN/INDEX.md" ]; then
+  if ! grep -q '^## Open follow-ups' "$BRAIN/INDEX.md"; then
+    err "INDEX.md: missing '## Open follow-ups' section — digest refresh due"
+  elif [ "$TEMPLATE" -eq 0 ]; then
+    FOLLOWUP_SECTION="$(awk '/^## Open follow-ups/{f=1; next} /^## /{f=0} f' "$BRAIN/INDEX.md")"
+    for page in "$BRAIN"/lessons/*.md; do
+      [ -e "$page" ] || continue
+      base="$(basename "$page")"
+      case "$base" in _template.md) continue ;; esac
+      # Canonical form plus the legacy spellings digest migrates. A guard that saw only the
+      # canonical form would be blind to exactly the pages the migration exists for. The
+      # classification word is anchored to the start of the value, so a closed lesson that
+      # merely mentions a follow-up in prose does not match.
+      grep -qiE '^Prevention:[[:space:]]*`?(open |owner )?follow.?up' "$page" || continue
+      # Match the delimited link target, not a bare substring: an entry for lessons/x.md-old.md
+      # must not satisfy an open lessons/x.md. Both the canonical .md target and an
+      # extensionless one count as listed, so a link-style change cannot red the brain.
+      printf '%s\n' "$FOLLOWUP_SECTION" | grep -qF "](lessons/$base)" ||
+        printf '%s\n' "$FOLLOWUP_SECTION" | grep -qF "](lessons/${base%.md})" ||
+        err "${page#"$BRAIN"/}: open follow-up not listed in INDEX.md — digest follow-up sweep due"
+    done
+  fi
+fi
+
 if [ "$ERRORS" -gt 0 ]; then
   echo "brain-lint: $ERRORS error(s) in $BRAIN" >&2
   exit 1

@@ -62,7 +62,12 @@ choice, and the summary. **Freeze a scope baseline**: original request, changed-
 non-test LOC count — the circuit-breakers below measure against this snapshot, not against
 whatever the diff has grown into. **Release-branch mode**: on a release/beta/hotfix/signing
 branch, only release blockers, install/upgrade breakage, data loss/crashes, and concrete security
-exposure get fixed in-loop; every other finding is filed as a main-branch follow-up.
+exposure get fixed in-loop; every other finding is filed as a main-branch follow-up. Every
+follow-up this skill files — here, at the invariant-audit grouping in step 7, and at the
+non-convergence classification in step 8 — is written in the brain with the canonical
+`follow-up:` token, its action, and its trigger (schema §Follow-ups), so `digest` lists it and
+`maintainer` can pick it up. A deferral recorded only in a PR comment is invisible the moment
+the tab closes.
 
 **1 · Un-stale the branch (critical).** `git fetch origin`; if behind the base branch, **merge it
 in** first. A stale branch makes the reviewer flag files that exist on the base but not the branch

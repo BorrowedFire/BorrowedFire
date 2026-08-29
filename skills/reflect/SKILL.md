@@ -57,7 +57,9 @@ Run this sequence once at each meaningful terminal checkpoint:
    - `memory-only` — durable context where automation would be disproportionate;
    - `follow-up` — prevention is warranted but outside current authority or scope.
    Record the existing enforcement or the smallest concrete follow-up; never claim prevention
-   from documentation or memory alone when a mechanical guard is required.
+   from documentation or memory alone when a mechanical guard is required. Write a follow-up
+   with the canonical token `follow-up:` plus the action and its trigger, in the schema
+   §Follow-ups format, so the digest sweep and the INDEX ledger can see it.
 6. **Persist through `remember`.** Lessons go to `lessons/`, decisions to `decisions/`, durable
    owner preferences to the existing owner/config page, and status deltas append to the matching
    `projects/` page. Preserve writer tags, union-path append-only rules, and sync behavior.

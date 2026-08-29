@@ -45,6 +45,11 @@ for the repo/surface at hand (`rg -il '<repo|topic>' lessons/ projects/`). A ten
 that surfaces a prior gotcha pays for itself; this is the read-side twin of `land`'s lessons
 write-back.
 
+Read `INDEX.md`'s `## Open follow-ups` ledger (schema §Follow-ups) in the same pass and report any
+entry whose page matches the repo or surface at hand. Deferred prevention work is exactly what a
+new task on the same surface should know about, and an entry tagged `no-trigger` is the one most
+likely to have rotted.
+
 ## Related
 
 `remember` (write side, owns the schema) · `digest` (fixes what recall finds broken).

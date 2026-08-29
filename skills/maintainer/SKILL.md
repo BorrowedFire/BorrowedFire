@@ -42,7 +42,11 @@ current harness and note it.
 ## Operating model
 
 1. **Scan.** Per active registry repo: open PRs, open issues, CI status, stale branches, latest
-   release / unreleased changes. Build a one-line-per-item ledger.
+   release / unreleased changes. Also read the brain's `INDEX.md` `## Open follow-ups` ledger
+   (schema §Follow-ups) and take every entry whose page belongs to a repo in scope: a follow-up
+   whose stated trigger has fired is queue work like any other item, and one tagged `no-trigger`
+   is surfaced in the report as deferred work that named no condition to revisit. Build a
+   one-line-per-item ledger.
 2. **Prioritize** (work the queue in this order):
    1. Red CI on a default branch (broken main blocks everything else).
    2. PRs nearest merge (review-clean, needs one push).
