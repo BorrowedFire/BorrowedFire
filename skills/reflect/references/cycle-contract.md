@@ -94,3 +94,21 @@ Useful overrides:
 
 Re-run after changing the skill or schedule. The declaration key updates the same job instead of
 creating another one.
+
+## Removal
+
+The stored declaration outlives `install.sh --uninstall`, which removes skills and doctrine only.
+Before retiring a controller host or deleting the checkout, tear the controller down:
+
+```sh
+./tools/install-prometheus-cycle.sh --remove
+```
+
+It disables and removes the learning job and any leftover route probe by declaration key, and it
+verifies their absence. When it removes the learning job, it also deletes the host-local route
+hash. A retried removal that finds the job already gone keeps the hash file and says so. Delete
+the file by hand in that case. It never touches the brain, its watermark notes, or the workspace
+skills. Remove the skills with `install.sh --uninstall`, passing `--openclaw-workspace <path>` on
+an OpenClaw host. The route hash is one host-wide file, so on a host where several OpenClaw
+profiles run controllers, re-run the installer for each remaining profile after a removal. A
+removal that cannot prove the job gone exits nonzero and keeps the route hash.

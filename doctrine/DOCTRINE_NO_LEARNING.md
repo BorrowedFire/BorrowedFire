@@ -1,5 +1,5 @@
 <!-- BEGIN BORROWEDFIRE DOCTRINE -->
-## Borrowed Fire doctrine (v5 reduced mode — managed by install.sh, do not hand-edit)
+## Borrowed Fire doctrine (v6 reduced mode — managed by install.sh, do not hand-edit)
 
 **Memory.** Prometheus is the private git-backed brain. Resolve it through `$PROMETHEUS_DIR`, then
 `~/.config/borrowedfire/brain`, then `~/prometheus`. Before substantive repo work, use `recall` for
@@ -47,5 +47,6 @@ local tier when one is available. Never hardcode private endpoints, caps, or pro
 | register a new repo/app/idea | `bootstrap` |
 | bounded QA loop | `qa-audit` |
 | marketing / customer-facing copy | `signal` |
+| short-form marketing video or reel | `reel-maker` |
 | audit requested vs completed work at session end | `session-closeout` |
 <!-- END BORROWEDFIRE DOCTRINE -->

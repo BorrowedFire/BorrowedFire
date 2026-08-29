@@ -135,14 +135,23 @@ grep -q '^DOCTRINE_SKILLS="\$LEARNING_SKILLS \$WRITING_SKILLS"' "$ROOT/install.s
 # declaration on them. A rename that updates only install.sh leaves that gate checking stale names,
 # which is exactly how a stored controller ends up naming a skill that no longer exists.
 CYCLE_INSTALLER="$ROOT/tools/install-prometheus-cycle.sh"
+WRITING_LIST="$(sed -n 's/^WRITING_SKILLS="\(.*\)"$/\1/p' "$ROOT/install.sh")"
 if [ -f "$CYCLE_INSTALLER" ]; then
-  mandated_list="$(sed -n 's/^LEARNING_SKILLS="\(.*\)"$/\1/p' "$ROOT/install.sh") $(sed -n 's/^WRITING_SKILLS="\(.*\)"$/\1/p' "$ROOT/install.sh")"
+  mandated_list="$(sed -n 's/^LEARNING_SKILLS="\(.*\)"$/\1/p' "$ROOT/install.sh") $WRITING_LIST"
   for mandated_skill in $mandated_list; do
     grep -q "^skills = (.*\"$mandated_skill\"" "$CYCLE_INSTALLER" ||
       err "install-prometheus-cycle.sh: 'skills' integrity check omits '$mandated_skill'; the nightly job would activate a doctrine mandating an unverified skill"
     grep -q "^required = {.*\"$mandated_skill\"" "$CYCLE_INSTALLER" ||
       err "install-prometheus-cycle.sh: 'required' visibility gate omits '$mandated_skill'; the nightly job would activate a doctrine mandating an unverified skill"
   done
+
+  # install.sh's uninstall note reads the route-proof trace the cycle installer writes. The two
+  # path literals must stay identical, or the note silently never fires again.
+  INSTALL_PROOF="$(sed -n 's/^ROUTE_PROOF_TRACE="\(.*\)"$/\1/p' "$ROOT/install.sh" | head -1)"
+  CYCLE_PROOF="$(sed -n 's/^ROUTE_PROOF_FILE="\(.*\)"$/\1/p' "$CYCLE_INSTALLER" | head -1)"
+  if [ -z "$INSTALL_PROOF" ] || [ "$INSTALL_PROOF" != "$CYCLE_PROOF" ]; then
+    err "route-proof path drift: install.sh reads '$INSTALL_PROOF' but install-prometheus-cycle.sh writes '$CYCLE_PROOF'"
+  fi
 fi
 if ! body "$SKILLS_DIR/technical-writing/SKILL.md" | grep -qF 'ASD-STE100'; then
   err "technical-writing: the ASD-STE100 instruction layer is missing"
@@ -223,8 +232,71 @@ DUPES=$(awk '{p=$0; sub(/ [^ ]+$/, "", p); n=$NF; if (seen[p] && seen[p] != n) c
 rm -f "$TMP"
 [ "$DUPES" -eq 0 ] || ERRORS=$((ERRORS + DUPES))
 
+# 10. skill inventory agreement: every skill has a doctrine routing row and a README entry, and
+# the README's repo-layout count matches the tree. A skill added without propagating it to those
+# copies is silent drift that no reader notices (reel-maker, PR #7, shipped exactly that way).
+routing_rows() { # routing_rows <doctrine-file>: the table between **Routing.** and the END marker
+  awk '/\*\*Routing\.\*\*/{f=1; next} /END BORROWEDFIRE DOCTRINE/{f=0} f' "$1"
+}
+# The Skill column only (the last cell of each row). A backticked mention inside a Need cell must
+# not satisfy or violate a routing contract.
+routing_skill_cells() { # routing_skill_cells <doctrine-file>
+  routing_rows "$1" | awk -F'|' 'NF >= 3 {print $(NF-1)}'
+}
+# Reduced mode drops the automatic-learning mandate (reflect) and the writing-skill mandates, so
+# exactly those skills have no reduced-mode routing row. Every other skill appears in both tables.
+# The exemption is two-sided: a dropped-mandate skill routed in the reduced table would route an
+# unverified skill, the defect class the reduced doctrine exists to prevent.
+REDUCED_ROUTING_EXEMPT="reflect $WRITING_LIST"
+for name in $SKILL_NAMES; do
+  routing_skill_cells "$DOCTRINE" | grep -qF "\`$name\`" ||
+    err "doctrine: routing table has no row for '$name' (add one, or record the exemption here)"
+  case " $REDUCED_ROUTING_EXEMPT " in
+    *" $name "*)
+      if routing_skill_cells "$SAFE_DOCTRINE" | grep -qF "\`$name\`"; then
+        err "reduced doctrine: must not route '$name' (its mandate is dropped in reduced mode)"
+      fi
+      ;;
+    *)
+      routing_skill_cells "$SAFE_DOCTRINE" | grep -qF "\`$name\`" ||
+        err "reduced doctrine: routing table has no row for '$name'"
+      ;;
+  esac
+  grep -qF "skills/$name/SKILL.md" "$ROOT/README.md" ||
+    err "README.md: no entry links skills/$name/SKILL.md"
+done
+# Reverse direction: a routing row or README link must point at an existing skill. A deleted
+# skill whose row or link survives is the same silent drift, inverted.
+for doctrine_file in "$DOCTRINE" "$SAFE_DOCTRINE"; do
+  # shellcheck disable=SC2016  # backticks are intentional literal table text
+  while IFS= read -r cell_name; do
+    [ -n "$cell_name" ] || continue
+    case "$cell_name" in
+      *[!a-z0-9-]*)
+        err "$(basename "$doctrine_file"): malformed skill reference '$cell_name' in a routing Skill cell"
+        ;;
+      *)
+        [ -d "$SKILLS_DIR/$cell_name" ] ||
+          err "$(basename "$doctrine_file"): routing table routes '$cell_name' but skills/$cell_name does not exist"
+        ;;
+    esac
+  done < <(routing_skill_cells "$doctrine_file" | grep -oE '`[^`]+`' | tr -d '`' | sort -u)
+done
+while IFS= read -r readme_target; do
+  [ -n "$readme_target" ] || continue
+  [ -f "$ROOT/$readme_target" ] ||
+    err "README.md: links $readme_target which does not exist"
+done < <(grep -oE 'skills/[A-Za-z0-9._-]+/SKILL\.md' "$ROOT/README.md" | sort -u)
+ACTUAL_COUNT="$(echo "$SKILL_NAMES" | wc -w | tr -d ' ')"
+STATED_COUNT="$(sed -n 's|^skills/[[:space:]]*\([0-9][0-9]*\) SKILL\.md skills.*|\1|p' "$ROOT/README.md" | head -1)"
+if [ -z "$STATED_COUNT" ]; then
+  err "README.md: the repo-layout 'skills/  N SKILL.md skills' line is missing"
+elif [ "$STATED_COUNT" != "$ACTUAL_COUNT" ]; then
+  err "README.md: repo layout says $STATED_COUNT skills, the tree has $ACTUAL_COUNT"
+fi
+
 if [ "$ERRORS" -gt 0 ]; then
   echo "skill-lint: $ERRORS error(s)" >&2
   exit 1
 fi
-echo "skill-lint: OK ($(echo "$SKILL_NAMES" | wc -w | tr -d ' ') skills)"
+echo "skill-lint: OK ($ACTUAL_COUNT skills)"
