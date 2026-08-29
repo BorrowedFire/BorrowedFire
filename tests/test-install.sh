@@ -670,6 +670,20 @@ fi
 check "no-harness uninstall names the removal step on stderr" \
   grep -q 'install-prometheus-cycle.sh --remove' <<<"$OUT"
 
+# --- 16. private brain content must not reach this public repo ---
+leak_case() { # leak_case <label> <line to append to the land log>
+  local label="$1" line="$2" clone="$SB/leak-$1"
+  cp -R "$SRC" "$clone"
+  printf '\n%s\n' "$line" >> "$clone/tasks/land-log.md"
+  if "$clone/tools/skill-lint.sh" >/dev/null 2>&1; then
+    fail "leak guard: $label"
+  else
+    ok "leak guard: $label"
+  fi
+}
+leak_case "brain-page-counts" "- 2026-01-01: INDEX says 27 lessons, the tree has 45."
+leak_case "owner-home-path" "- 2026-01-01: ran the installer from /Users/someone/prometheus."
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 rm -rf "$SB"
