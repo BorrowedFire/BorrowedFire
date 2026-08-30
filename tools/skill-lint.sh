@@ -173,6 +173,22 @@ if [ -f "$BRAIN_SCHEMA" ]; then
     err "brain-schema section Follow-ups: the cross-page closure rule is missing"
 fi
 
+# Writer-tag repair is the one sanctioned edit to another writer's settled bullet, so the
+# evidence bar is the whole contract: git must ESTABLISH the writer. Without that sentence the
+# rule reads as permission to infer a tag, which makes a bad merge untraceable while looking
+# traceable. Scoped to the section that owns it, so a stray mention cannot satisfy it.
+if [ -f "$BRAIN_SCHEMA" ]; then
+  SCHEMA_WT="$(section_text "$BRAIN_SCHEMA" 'Writer-tag repair' 'Log archival' | tr '\n' ' ' | tr -s ' ')"
+  [ -n "$SCHEMA_WT" ] || err "brain-schema: the writer-tag repair rule is missing"
+  printf '%s' "$SCHEMA_WT" | grep -qF 'never when it merely suggests one' ||
+    err "brain-schema writer-tag repair: the established-not-inferred evidence bar is missing"
+  printf '%s' "$SCHEMA_WT" | grep -qF 'An invented tag is worse than a missing one' ||
+    err "brain-schema writer-tag repair: the refusal to invent a tag is missing"
+fi
+if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'git establishes for it'; then
+  err "digest: writer-tag repair must take the tag git establishes, not one it infers"
+fi
+
 # 11. eval harness: the isolation contract is the whole value. An eval that can silently run
 # against the operator's own HOME measures the doctrine in both arms and reports a lie.
 EVAL_RUNNER="$ROOT/evals/run.sh"

@@ -584,6 +584,17 @@ mv_line_case() { # mv_line_case <label> <anchor-substring> <destination-anchor>
   fi
 }
 mv_line_case "digest-reconcile-must-follow-distillation" "fields level" "Sweep queues and archive old logs"
+# Writer-tag repair: the evidence bar is the contract. Mutating "establishes" into an inference
+# is the dangerous direction, because an invented tag looks traceable and is not.
+contract_lint_case "schema-writer-tag-rule-exists" "skills/remember/references/brain-schema.md" \
+  's/\*\*Writer-tag repair (digest-only):\*\*/**Writer tags:**/'
+# the phrase hard-wraps; mutate the half that sits on one line
+contract_lint_case "schema-writer-tag-requires-evidence" "skills/remember/references/brain-schema.md" \
+  's/merely suggests one/plausibly suggests one/'
+contract_lint_case "schema-writer-tag-refuses-invention" "skills/remember/references/brain-schema.md" \
+  's/An invented tag is worse than a missing one/A best guess is acceptable/'
+contract_lint_case "digest-writer-tag-takes-established" "skills/digest/SKILL.md" \
+  's/git establishes for it/git suggests for it/'
 mv_line_case "digest-mirroring-must-precede-reconcile" "includes **mirroring**" "Refresh \`INDEX.md\`"
 mv_line_case "digest-completion-must-follow-index" "Append the run's own completion bullet" "Distill lessons"
 

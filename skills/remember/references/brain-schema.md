@@ -243,6 +243,19 @@ concurrent claim append that rebases over the sweep can resurrect a removed line
 both sides). The resurrected line is still dead by its own timestamp, readers ignore it, and the
 next sweep removes it again — the failure mode is clutter, not loss.
 
+**Writer-tag repair (digest-only):** a dated log bullet with no `[harness@host]` tag breaks the
+audit trail and reds `brain-lint` on every run, and no other writer may fix another writer's
+settled bullet. `digest` repairs it only when git **establishes** the writer, never when it
+merely suggests one: the commit that introduced the line carries a `[harness@host]` tag in its
+message, or its author maps to exactly one `config/fleet.md` §Writer identities entry. Use that
+exact spelling and append it to the bullet's last line. When git cannot establish the writer — a
+squashed range, a bulk import, a tagless message, two candidates — leave the page under
+INDEX.md's needs-review and repair nothing. An invented tag is worse than a missing one, because
+it makes a bad merge untraceable while looking traceable. This is a reconcile-protocol edit: lock
+held, one page per commit, pushed immediately. It adds no dated bullet, so it does not move the
+page's last log date, and the live append point is never touched — a bullet that is the file's
+final content line is left for its own writer.
+
 **Log archival (digest-only):** when a `projects/` page's `## Log` grows past roughly 60 bullets
 or 15 KB, digest moves the oldest settled bullets — never the final bullet, never a bullet
 younger than 90 days — to `projects/archive/<name>.md`, verbatim and in order, writer tags
