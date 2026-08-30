@@ -525,6 +525,20 @@ contract_lint_case "digest-normalizes-followups" "skills/digest/SKILL.md" \
   's/Normalize follow-ups/Consider follow-ups/'
 contract_lint_case "digest-tags-no-trigger" "skills/digest/SKILL.md" \
   's/no-trigger/untriggered/g'
+contract_lint_case "digest-searches-without-a-colon" "skills/digest/SKILL.md" \
+  's/without requiring a colon/for the canonical token/'
+# shellcheck disable=SC2016  # backticks are intentional literal schema text
+contract_lint_case "schema-names-the-plural-spelling" "skills/remember/references/brain-schema.md" \
+  's/plural `Follow-ups:`/plural form/'
+# both phrases hard-wrap; mutate the sub-phrase that sits on one line
+contract_lint_case "schema-names-the-capitalized-singular" "skills/remember/references/brain-schema.md" \
+  's/a capitalized/a capitalised/'
+contract_lint_case "schema-names-colon-less-forms" "skills/remember/references/brain-schema.md" \
+  's/colon-less/colonless/g'
+contract_lint_case "schema-keeps-the-multi-item-rule" "skills/remember/references/brain-schema.md" \
+  's/\*\*not\*\* close the others/close the others/'
+contract_lint_case "schema-keeps-cross-page-closure" "skills/remember/references/brain-schema.md" \
+  's/Closure is mirrored, never assumed/Closure may be recorded anywhere/'
 contract_lint_case "reflect-writes-canonical-token" "skills/reflect/SKILL.md" \
   's/canonical token/usual token/'
 contract_lint_case "brain-lint-enforces-ledger" "tools/brain-lint.sh" \
@@ -570,6 +584,7 @@ mv_line_case() { # mv_line_case <label> <anchor-substring> <destination-anchor>
   fi
 }
 mv_line_case "digest-reconcile-must-follow-distillation" "fields level" "Sweep queues and archive old logs"
+mv_line_case "digest-mirroring-must-precede-reconcile" "includes **mirroring**" "Refresh \`INDEX.md\`"
 mv_line_case "digest-completion-must-follow-index" "Append the run's own completion bullet" "Distill lessons"
 
 # --- 15. eval-harness isolation contracts fail closed ---
