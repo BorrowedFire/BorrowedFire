@@ -238,3 +238,33 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
   a real digest pass on the live Prometheus brain, which ended red, needed a scoped lock cycle to
   clear, and now reports `brain-lint: OK` with a clean tree and no lock. Suites: skill-lint 19,
   test-install 184/184 with both ordering mutations failing closed, shellcheck clean.
+
+## 2026-08-30 — follow-up sweep completeness (PR #12)
+- Item: https://github.com/BorrowedFire/BorrowedFire/pull/12 — the ledger sweep searched for the
+  canonical singular token and missed items written in older forms. The schema now names the
+  plural, a capitalized singular, and colon-less phrasings, describes the plural correctly as an
+  inline list mid-sentence rather than a header, and adds three rules the sweep lacked: one
+  marker can carry several items, most matches are prose about follow-ups rather than deferrals,
+  and work finished on another page is mirrored onto the item's own page rather than assumed
+  closed. `brain-lint` gains the exact projects-side check: every ledger entry resolves to a
+  real page.
+- Class: Autonomous, owner-merged (the owner made every merge call in this sequence).
+- Gates: adversarial round 1 found six. The decisive one proved both new contracts vacuous by
+  deleting the instruction each protects and leaving the literal in a trailing comment, with
+  lint still green. Contracts are now scoped to the section that owns the rule, and the same
+  attack fails. Codex then found a P1: the new cross-page mirroring rule is an append placed
+  after the reconcile, which re-created the exact staleness PR #11 removed. Round 2 clean at
+  `2a4dd7d`, CI green.
+- Not solved, recorded instead: whether a project page still holds an OPEN follow-up is prose,
+  not grep. A page-level check was built and removed after its closure heuristic matched the
+  word "incomplete" and silently disabled a whole page. Per-item accounting is a follow-up.
+- Gotchas: (1) a contract that greps a whole file is satisfied by a comment and proves nothing;
+  scope it to its section. (2) A wide text replacement silently deleted four existing contracts
+  and the positional ordering block; the suite caught all of them, which is the argument for
+  having them. (3) A mutation test cannot match a phrase that hard-wraps, the same hazard as
+  [[lessons/prose-contracts-break-on-rewrap]] seen from the mutation side. (4) `cmd | tail -1`
+  reports tail's exit status, so a failed push reads as success in an `&&` chain.
+- Outcome: squash-merged as `3b4d19d`. Live proof, rung 4: the vacuity attack re-run and now
+  failing, the reverse-direction ledger check proven both ways on a real brain copy, and the
+  mirroring order pinned by a mutation that moves the instruction and fails. Suites: skill-lint
+  19, test-install 198/198, test-brain 56/56, cycle 184/184, evals 48/48, shellcheck clean.
