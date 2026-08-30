@@ -85,8 +85,14 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
    when it has entries — since the last digest; recurring gotchas or themes get promoted into
    `lessons/` or `notes/` pages — this compounding step is the point of the whole system.
 9. **Close resolved follow-ups, then reconcile `updated:`.** Append a closing bullet on each
-   project page whose follow-up this run resolved. Only then bring stale `updated:` fields level
-   with each page's last dated log bullet, one page per commit under the reconcile protocol.
+   project page whose follow-up this run resolved. That includes **mirroring**: when the work
+   was finished on another page — a lesson recording the prevention, a different project
+   reporting the fix — the follow-up's own page gets the closing bullet here, citing where the
+   work landed. A sweep reading that page cannot see the other one, so an unmirrored item
+   returns to the ledger every run. Mirroring belongs in this step and not in step 10 for the
+   same reason everything else does: it is an append, and an append after the reconcile leaves
+   the page stale. Only then bring stale `updated:` fields level with each page's last dated log
+   bullet, one page per commit under the reconcile protocol.
    Push the appends first. The reconcile protocol's precondition allows deferring a reconcile
    when the tree has unpushed work, and taking that branch here would end the run with exactly
    the stale fields this step exists to clear. Finish the batch, then reconcile.
@@ -106,9 +112,9 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
     items that the canonical token misses, and all three have. That search is deliberately wide,
     so most of its hits are prose about follow-ups rather than deferrals; read each sentence and
     keep only work still to be done (schema §Follow-ups). Split a plural header into its numbered
-    items and judge each one, since a bullet closing one item leaves the rest open. When the work
-    was finished on another page, append the closing bullet to the follow-up's own page first,
-    then drop it — otherwise it returns to the ledger next run. Write the survivors in the schema
+    items and judge each one, since a bullet closing one item leaves the rest open. An item whose
+    work landed on another page was already mirrored and closed in step 9, so it is simply not in
+    the open set here. Write the survivors in the schema
     §Follow-ups format (`(none)` when empty), and tag any entry whose text names no trigger with
     `no-trigger`.
 11. **Record the run — only now.** Append the run's own completion bullet, then reconcile that

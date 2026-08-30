@@ -130,6 +130,13 @@ fi
 if [ -n "$INDEX_AT" ] && [ -n "$COMPLETION_AT" ] && [ "$COMPLETION_AT" -lt "$INDEX_AT" ]; then
   err "digest: the completion bullet is written before the INDEX refresh, claiming a completion that may not happen"
 fi
+MIRROR_AT="$(line_of 'includes **mirroring**')"
+[ -n "$MIRROR_AT" ] || err "digest: the cross-page closure mirroring rule is missing"
+# Mirroring appends a dated bullet, so it must precede the reconcile like every other append.
+# Placing it in the collection step re-created the exact staleness PR #11 removed.
+if [ -n "$MIRROR_AT" ] && [ -n "$RECONCILE_AT" ] && [ "$MIRROR_AT" -gt "$RECONCILE_AT" ]; then
+  err "digest: cross-page closure is mirrored after the reconcile, which leaves the mirrored page stale"
+fi
 if [ -n "$COMPLETION_AT" ] && [ -n "$RELEASE_AT" ] && [ "$RELEASE_AT" -lt "$COMPLETION_AT" ]; then
   err "digest: the lock is released before the run is recorded"
 fi

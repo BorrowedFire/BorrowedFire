@@ -584,6 +584,7 @@ mv_line_case() { # mv_line_case <label> <anchor-substring> <destination-anchor>
   fi
 }
 mv_line_case "digest-reconcile-must-follow-distillation" "fields level" "Sweep queues and archive old logs"
+mv_line_case "digest-mirroring-must-precede-reconcile" "includes **mirroring**" "Refresh \`INDEX.md\`"
 mv_line_case "digest-completion-must-follow-index" "Append the run's own completion bullet" "Distill lessons"
 
 # --- 15. eval-harness isolation contracts fail closed ---
