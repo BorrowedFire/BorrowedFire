@@ -90,14 +90,6 @@ fi
 if ! body "$SKILLS_DIR/digest/SKILL.md" | grep -qF 'no-trigger'; then
   err "digest: the no-trigger rot tag is missing"
 fi
-# The plural header is the spelling a singular-token sweep misses: a search for `follow-up:`
-# does not match `Follow-ups:`, and one header can introduce several items.
-if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'the plural header "Follow-ups:"'; then
-  err "digest: the collection must name the plural Follow-ups: header, which a singular search misses"
-fi
-if [ -f "$BRAIN_SCHEMA" ] && ! tr '\n' ' ' < "$BRAIN_SCHEMA" | tr -s ' ' | grep -qF 'plural header** "Follow-ups:"'; then
-  err "brain-schema: the legacy spelling list must name the plural Follow-ups: header"
-fi
 # shellcheck disable=SC2016  # backticks are an intentional literal contract phrase
 if ! body "$SKILLS_DIR/reflect/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'canonical token `follow-up:`'; then
   err "reflect: the canonical follow-up token rule is missing"
@@ -148,6 +140,31 @@ if ! tr '\n' ' ' < "$DIGEST_BODY" | tr -s ' ' | grep -qF 'Release the lock uncon
   err "digest: lock release must be unconditional, per the schema's same-run release rule"
 fi
 rm -f "$DIGEST_BODY"
+
+# The sweep must match more than the canonical token. A contract that greps the whole file is
+# satisfied by the literal appearing anywhere, including a comment that survives after the
+# instruction is deleted — proven on review. Both checks below are scoped to the section that
+# owns the rule, so the text has to be where an agent executing the skill will read it. Anchors
+# carry no emphasis markers, because the mandated unslop pass rewrites them.
+section_text() { # section_text <file> <start-pattern> <end-pattern>
+  awk -v s="$2" -v e="$3" '$0 ~ s {f=1} f && $0 ~ e && NR>1 && !p {p=1; exit} f' "$1"
+}
+DIGEST_STEP10="$(section_text "$SKILLS_DIR/digest/SKILL.md" '^10\. ' '^11\. ' | tr '\n' ' ' | tr -s ' ')"
+if ! printf '%s' "$DIGEST_STEP10" | grep -qF 'without requiring a colon'; then
+  err "digest step 10: the collection must search without requiring a colon, or it misses the plural, capitalized, and colon-less forms"
+fi
+if [ -f "$BRAIN_SCHEMA" ]; then
+  SCHEMA_FOLLOWUPS="$(section_text "$BRAIN_SCHEMA" '^## Follow-ups' '^## Sync protocol' | tr '\n' ' ' | tr -s ' ')"
+  # shellcheck disable=SC2016  # backticks are intentional literal schema text
+  for spelling in 'plural `Follow-ups:`' 'capitalized singular' 'colon-less'; do
+    printf '%s' "$SCHEMA_FOLLOWUPS" | grep -qF "$spelling" ||
+      err "brain-schema section Follow-ups: the reader spelling set omits '$spelling'"
+  done
+  printf '%s' "$SCHEMA_FOLLOWUPS" | grep -qF 'does **not** close the others' ||
+    err "brain-schema section Follow-ups: the multi-item closure rule is missing"
+  printf '%s' "$SCHEMA_FOLLOWUPS" | grep -qF 'Closure is mirrored, never assumed' ||
+    err "brain-schema section Follow-ups: the cross-page closure rule is missing"
+fi
 
 # 11. eval harness: the isolation contract is the whole value. An eval that can silently run
 # against the operator's own HOME measures the doctrine in both arms and reports a lie.

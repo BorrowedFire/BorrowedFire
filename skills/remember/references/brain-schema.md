@@ -117,18 +117,31 @@ defect in that skill, not a note about future work.
   `encoded`, `memory-only`, `follow-up` — with the paragraph naming the action and the trigger.
   A **project page** records operational debt as a dated `## Log` bullet carrying the token
   `follow-up:` followed by the action and the trigger. Those two forms are the canonical writes.
-  Readers also accept the legacy spellings that survive in old pages: "Open follow-up",
-  "OPEN FOLLOW-UP", "owner follow-up", and the **plural header** "Follow-ups:" introducing a
-  numbered or bulleted list. The plural is the one a naive sweep misses, because a search for
-  the singular token `follow-up:` does not match `Follow-ups:`, and one header can carry several
-  items — each item in that list is its own follow-up and is collected separately. `digest`
-  rewrites a legacy lesson line to the canonical form. Every follow-up names its trigger: the
-  condition that says when to revisit it.
+  Readers accept more than they write, because the older pages predate the canonical form. A
+  sweep must match, case-insensitively: the plural `Follow-ups:`, which in practice introduces an
+  inline `(1) … (2) …` list mid-sentence rather than a heading above a list; a capitalized
+  singular `Follow-up:` mid-sentence; and colon-less phrasings such as "owner follow-up" or
+  "Open follow-up". A search for the canonical token alone finds none of them, and each of those
+  three forms has hidden a real item. `digest` rewrites a legacy lesson line to the canonical
+  form; project bullets are append-only and keep their original wording.
+- **One marker can carry several items.** A plural header introduces a numbered list, and each
+  numbered item is its own follow-up with its own state. A later bullet that closes one item does
+  **not** close the others, so a sweep that treats the marker as a single unit loses the rest.
+  Split the list, judge each item, and keep the open ones.
+- **A marker is not always a deferral.** Most matches in an established brain are prose *about*
+  follow-ups: a bullet reporting that one was closed, a status line describing the ledger
+  feature, a land-log entry naming the word. Collect only text that states work still to be done.
+  When in doubt, read the sentence rather than the keyword.
 - **What closes one.** On a lesson, `digest` rewrites the classification to `encoded` or
   `memory-only` once the prevention lands. Lessons are not a union-merged path, so a digest
   holding the lock may edit them in place; no other writer may. On a project page, closure is a
-  later dated log bullet that names the follow-up and states it is done or superseded — the
-  queue-claim release pattern. The original bullet is never edited.
+  later dated log bullet **on that same page** that names the follow-up and states it is done or
+  superseded — the queue-claim release pattern. The original bullet is never edited.
+  Work is often finished somewhere else: a lesson records the prevention, or another project's
+  page reports the fix. That does not close the follow-up, because a sweep reading the page
+  cannot see it, and the item returns to the ledger on every run. When `digest` finds closure
+  evidence on another page, it appends the closing bullet to the follow-up's own page, citing
+  where the work landed. Closure is mirrored, never assumed.
 - **The ledger.** `INDEX.md` carries a generated `## Open follow-ups` section: one line per open
   item, `- [<title>](<page path>.md): <action> (since <date>)`, or `(none)` when the set is
   empty. The link target keeps the `.md` extension, matching the other generated INDEX link

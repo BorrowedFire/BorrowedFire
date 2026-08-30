@@ -100,13 +100,17 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
     pages, active projects, the `## Open follow-ups` ledger, open `needs-review` items. Collect
     the open set **here**, after steps 8 and 9, so a follow-up created or closed by this run
     reaches the ledger in its final state: lessons whose line-start `Prevention:` still marks a
-    follow-up in any spelling, plus project log bullets carrying `follow-up:` with no later
-    closing bullet. Match the legacy spellings too, and match the plural header "Follow-ups:"
-    separately: a search for the singular token does not find it, and one header can introduce
-    several items, each of which is its own follow-up. A case-insensitive `follow.?up` search
-    over `projects/` finds every form; judging which are still open is the reading work.
-    Write them in the schema §Follow-ups format (`(none)` when empty), and tag any entry whose
-    text names no trigger with `no-trigger`.
+    follow-up in any spelling, plus project log bullets with no later closing bullet. Search
+    `projects/` case-insensitively for `follow.?up` **without requiring a colon**: the plural
+    header, a capitalized singular, and colon-less phrasings such as "owner follow-up" each hide
+    items that the canonical token misses, and all three have. That search is deliberately wide,
+    so most of its hits are prose about follow-ups rather than deferrals; read each sentence and
+    keep only work still to be done (schema §Follow-ups). Split a plural header into its numbered
+    items and judge each one, since a bullet closing one item leaves the rest open. When the work
+    was finished on another page, append the closing bullet to the follow-up's own page first,
+    then drop it — otherwise it returns to the ledger next run. Write the survivors in the schema
+    §Follow-ups format (`(none)` when empty), and tag any entry whose text names no trigger with
+    `no-trigger`.
 11. **Record the run — only now.** Append the run's own completion bullet, then reconcile that
     one page's `updated:`. This comes after step 10 on purpose: the schema defines a completed
     digest as a pass that *ends* by regenerating INDEX.md, so a completion bullet written any

@@ -525,10 +525,20 @@ contract_lint_case "digest-normalizes-followups" "skills/digest/SKILL.md" \
   's/Normalize follow-ups/Consider follow-ups/'
 contract_lint_case "digest-tags-no-trigger" "skills/digest/SKILL.md" \
   's/no-trigger/untriggered/g'
-contract_lint_case "digest-collects-the-plural-header" "skills/digest/SKILL.md" \
-  's/the plural header "Follow-ups:"/the header/'
-contract_lint_case "schema-names-the-plural-header" "skills/remember/references/brain-schema.md" \
-  's/\*\*plural header\*\* "Follow-ups:"/plural header/'
+contract_lint_case "digest-searches-without-a-colon" "skills/digest/SKILL.md" \
+  's/without requiring a colon/for the canonical token/'
+# shellcheck disable=SC2016  # backticks are intentional literal schema text
+contract_lint_case "schema-names-the-plural-spelling" "skills/remember/references/brain-schema.md" \
+  's/plural `Follow-ups:`/plural form/'
+# both phrases hard-wrap; mutate the sub-phrase that sits on one line
+contract_lint_case "schema-names-the-capitalized-singular" "skills/remember/references/brain-schema.md" \
+  's/a capitalized/a capitalised/'
+contract_lint_case "schema-names-colon-less-forms" "skills/remember/references/brain-schema.md" \
+  's/colon-less/colonless/g'
+contract_lint_case "schema-keeps-the-multi-item-rule" "skills/remember/references/brain-schema.md" \
+  's/\*\*not\*\* close the others/close the others/'
+contract_lint_case "schema-keeps-cross-page-closure" "skills/remember/references/brain-schema.md" \
+  's/Closure is mirrored, never assumed/Closure may be recorded anywhere/'
 contract_lint_case "reflect-writes-canonical-token" "skills/reflect/SKILL.md" \
   's/canonical token/usual token/'
 contract_lint_case "brain-lint-enforces-ledger" "tools/brain-lint.sh" \
