@@ -81,8 +81,8 @@ Rules:
   identities, use that exact spelling. Otherwise pick one stable lowercase host name and keep it.
   That section is a table, one row per machine, mapping the machine to every tag its harnesses
   write: `| <machine label> | \`[<harness>@<host>]\`, … |`. Historical variants are listed
-  separately and stay as written in old bullets. The table is what makes a git author resolvable
-  to a tag, so a machine absent from it has no second evidence path.
+  separately and stay as written in old bullets. The table tells a writer which spelling to use;
+  it cannot identify a writer after the fact, because one machine's row holds several tags.
   Spelling drift (`Host`, `host.local`, `host-2`) breaks audit greps and the fleet-cycle
   watermark binding.
 - **One entity, one page.** Search existing slugs before creating; knowingly duplicate pages are
@@ -251,10 +251,12 @@ next sweep removes it again — the failure mode is clutter, not loss.
 **Writer-tag repair (digest-only):** a dated log bullet with no `[harness@host]` tag breaks the
 audit trail and reds `brain-lint` on every run, and no other writer may fix another writer's
 settled bullet. `digest` repairs it only when git **establishes** the writer, never when it
-merely suggests one: the commit that introduced the line carries a `[harness@host]` tag in its
-message, or its author maps to exactly one `config/fleet.md` §Writer identities entry. Use that
-exact spelling and append it to the bullet's last line. When git cannot establish the writer — a
-squashed range, a bulk import, a tagless message, two candidates — leave the page under
+merely suggests one, and exactly one thing establishes it: the commit that introduced the line
+carries a `[harness@host]` tag in its message. Use that exact spelling and append it to the
+bullet's last line. The commit *author* is not evidence — several harnesses on one machine
+commit under the same git identity, so an author resolves to a machine and never to a harness.
+When git cannot establish the writer — a squashed range, a bulk import, a tagless message, a
+line moved or rewrapped by a later commit that is not its author — leave the page under
 INDEX.md's needs-review and repair nothing. An invented tag is worse than a missing one, because
 it makes a bad merge untraceable while looking traceable. This is a reconcile-protocol edit: lock
 held, one page per commit, pushed immediately. It adds no dated bullet, so it does not move the

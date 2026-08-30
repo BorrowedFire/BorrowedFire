@@ -184,6 +184,10 @@ if [ -f "$BRAIN_SCHEMA" ]; then
     err "brain-schema writer-tag repair: the established-not-inferred evidence bar is missing"
   printf '%s' "$SCHEMA_WT" | grep -qF 'An invented tag is worse than a missing one' ||
     err "brain-schema writer-tag repair: the refusal to invent a tag is missing"
+  # The author path was removed because harnesses on one machine share a git identity, so an
+  # author resolves to a machine and never to a harness. Re-adding it would licence a guess.
+  printf '%s' "$SCHEMA_WT" | grep -qF 'The commit *author* is not evidence' ||
+    err "brain-schema writer-tag repair: the rule must state that a commit author is not evidence"
   # The rule calls itself a reconcile-protocol edit, so the protocol's own allowlist must admit
   # it. Without this the two texts contradict and a literal reading refuses the repair.
   SCHEMA_ALLOW="$(section_text "$BRAIN_SCHEMA" 'Touch only settled content' 'Commit the edit alone' | tr '\n' ' ' | tr -s ' ')"

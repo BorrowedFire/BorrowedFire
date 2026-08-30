@@ -15,8 +15,9 @@ your private brain.
 ## Writer identities
 
 Canonical `[<harness>@<host>]` writer tags (schema §Page format). Every log bullet and brain
-commit from a listed machine uses these exact spellings. `digest` also reads this table when it
-repairs a missing writer tag, so a machine absent here cannot be resolved from a git author.
+commit from a listed machine uses these exact spellings. The table tells a writer which spelling
+to use. It cannot identify a writer after the fact, because one machine's row holds several tags
+and its harnesses share a git identity.
 
 | Machine | Tags |
 |---|---|

@@ -602,6 +602,8 @@ contract_lint_case "schema-allowlist-admits-writer-tag-repair" "skills/remember/
   's/missing its `\[harness@host\]` writer tag/missing something/'
 contract_lint_case "template-ships-writer-identities" "prometheus-template/config/fleet.md" \
   's/^## Writer identities$/## Writers/'
+contract_lint_case "schema-rejects-author-as-evidence" "skills/remember/references/brain-schema.md" \
+  's/The commit \*author\* is not evidence/The commit author is acceptable evidence/'
 mv_line_case "digest-mirroring-must-precede-reconcile" "includes **mirroring**" "Refresh \`INDEX.md\`"
 mv_line_case "digest-completion-must-follow-index" "Append the run's own completion bullet" "Distill lessons"
 

@@ -76,9 +76,10 @@ authority (layout, sync protocol, lock, union-merge caveat): `remember`'s
    respects the schema's 90-day floor, so a page can sit far past the size threshold with
    nothing eligible; that is a no-op, not a deferral.
    **Repair writer tags** (schema §Writer-tag repair) in the same pass: a dated bullet with no
-   `[harness@host]` tag gets the tag git establishes for it, from the introducing commit's
-   message or its author's §Writer identities entry. If git only suggests a writer, leave the
-   page in needs-review; an invented tag makes a bad merge untraceable while looking traceable.
+   `[harness@host]` tag gets the tag git establishes for it, which means the introducing
+   commit's message carries that tag. A commit author is not evidence, since harnesses on one
+   machine share a git identity. If git only suggests a writer, leave the page in needs-review;
+   an invented tag makes a bad merge untraceable while looking traceable.
    **Normalize follow-ups** (schema §Follow-ups) in the same pass: on lessons, rewrite a legacy
    Prevention spelling to the canonical form, and rewrite the classification to `encoded` or
    `memory-only` once its prevention has landed. Lessons are not a union-merged path, so a
