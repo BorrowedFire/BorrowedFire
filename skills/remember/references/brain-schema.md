@@ -79,6 +79,10 @@ Rules:
 - **Every log bullet ends with a writer tag** `[<harness>@<host>]` (e.g. `[openclaw@controlnode]`)
   so a bad merge can be traced. When the machine is listed in `config/fleet.md` §Writer
   identities, use that exact spelling. Otherwise pick one stable lowercase host name and keep it.
+  That section is a table, one row per machine, mapping the machine to every tag its harnesses
+  write: `| <machine label> | \`[<harness>@<host>]\`, … |`. Historical variants are listed
+  separately and stay as written in old bullets. The table is what makes a git author resolvable
+  to a tag, so a machine absent from it has no second evidence path.
   Spelling drift (`Host`, `host.local`, `host-2`) breaks audit greps and the fleet-cycle
   watermark binding.
 - **One entity, one page.** Search existing slugs before creating; knowingly duplicate pages are
@@ -206,8 +210,9 @@ only by `digest`, under the digest lock, one page per commit:
    batch first — or defer the reconcile.
 1. `git pull --rebase` immediately before the edit.
 2. Touch only settled content — frontmatter, the summary above `## Relations`/`## Log`,
-   `## Relations` edge lines, an existing log bullet needing link repair, or a dead `## Queue`
-   claim line (see the queue sweep below). Never delete a log bullet in place — the log archival
+   `## Relations` edge lines, an existing log bullet needing link repair, a dated log bullet
+   missing its `[harness@host]` writer tag (see the writer-tag repair below), or a dead
+   `## Queue` claim line (see the queue sweep below). Never delete a log bullet in place — the log archival
    below is the one sanctioned relocation — and never touch a **live append point**: the final
    log bullet (end of file), on `projects/` pages the line after the last `## Queue` claim where
    new claims land — and on any union page, the file's last content line, whatever it is. The

@@ -12,6 +12,19 @@ Instance config for tier routing. Skills (`maintainer` in particular) read this 
 work runs and where paid tokens may be spent. Fill in your own values — this file lives only in
 your private brain.
 
+## Writer identities
+
+Canonical `[<harness>@<host>]` writer tags (schema §Page format). Every log bullet and brain
+commit from a listed machine uses these exact spellings. `digest` also reads this table when it
+repairs a missing writer tag, so a machine absent here cannot be resolved from a git author.
+
+| Machine | Tags |
+|---|---|
+| <machine label, e.g. MacBook Pro `HOST-NAME`> | `[claude-code@HOST-NAME]`, `[codex@HOST-NAME]` |
+
+Historical variants (spellings you used before adopting this table) stay as written in old
+bullets; new writes use the canonical tags above.
+
 ## Execution tiers
 
 | Tier | Endpoint / harness | Use for |

@@ -595,6 +595,13 @@ contract_lint_case "schema-writer-tag-refuses-invention" "skills/remember/refere
   's/An invented tag is worse than a missing one/A best guess is acceptable/'
 contract_lint_case "digest-writer-tag-takes-established" "skills/digest/SKILL.md" \
   's/git establishes for it/git suggests for it/'
+# The rule must not contradict the protocol it claims membership in, and its second evidence
+# path must exist for a brain built from the public template.
+# shellcheck disable=SC2016  # backticks are intentional literal schema text
+contract_lint_case "schema-allowlist-admits-writer-tag-repair" "skills/remember/references/brain-schema.md" \
+  's/missing its `\[harness@host\]` writer tag/missing something/'
+contract_lint_case "template-ships-writer-identities" "prometheus-template/config/fleet.md" \
+  's/^## Writer identities$/## Writers/'
 mv_line_case "digest-mirroring-must-precede-reconcile" "includes **mirroring**" "Refresh \`INDEX.md\`"
 mv_line_case "digest-completion-must-follow-index" "Append the run's own completion bullet" "Distill lessons"
 

@@ -184,6 +184,15 @@ if [ -f "$BRAIN_SCHEMA" ]; then
     err "brain-schema writer-tag repair: the established-not-inferred evidence bar is missing"
   printf '%s' "$SCHEMA_WT" | grep -qF 'An invented tag is worse than a missing one' ||
     err "brain-schema writer-tag repair: the refusal to invent a tag is missing"
+  # The rule calls itself a reconcile-protocol edit, so the protocol's own allowlist must admit
+  # it. Without this the two texts contradict and a literal reading refuses the repair.
+  SCHEMA_ALLOW="$(section_text "$BRAIN_SCHEMA" 'Touch only settled content' 'Commit the edit alone' | tr '\n' ' ' | tr -s ' ')"
+  # shellcheck disable=SC2016  # backticks are intentional literal schema text
+  printf '%s' "$SCHEMA_ALLOW" | grep -qF 'missing its `[harness@host]` writer tag' ||
+    err "brain-schema reconcile protocol: the allowlist does not admit writer-tag repair, so the rule contradicts the protocol it claims"
+  # The second evidence path reads a table that must actually exist for a fresh brain.
+  grep -qF '## Writer identities' "$ROOT/prometheus-template/config/fleet.md" ||
+    err "template fleet.md: the Writer identities table is missing, so the git-author evidence path is unusable on a new brain"
 fi
 if ! body "$SKILLS_DIR/digest/SKILL.md" | tr '\n' ' ' | tr -s ' ' | grep -qF 'git establishes for it'; then
   err "digest: writer-tag repair must take the tag git establishes, not one it infers"
