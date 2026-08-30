@@ -274,6 +274,23 @@ OUT="$(bash "$SRC/tools/brain-lint.sh" "$SB/L6" 2>&1)" || true
 check "ledger: legacy Prevention spelling is still swept" \
   grep -qF 'follow-up sweep due' <<<"$OUT"
 
+# Every ledger entry must resolve to a real page. This is the projects side's only exact
+# check: whether a project page still holds an OPEN item is prose, not grep.
+mk_ledger_brain "$SB/L8"
+sed -i.bak 's|^(none)$|- [Ghost](projects/no-such-page.md): something (since 2026-07-01)|' "$SB/L8/INDEX.md" && rm -f "$SB/L8/INDEX.md.bak"
+OUT="$(bash "$SRC/tools/brain-lint.sh" "$SB/L8" 2>&1)" || true
+check "ledger: an entry pointing at a missing page is flagged" \
+  grep -qF 'ledger entry points at projects/no-such-page.md' <<<"$OUT"
+
+mk_ledger_brain "$SB/L9"
+sed -i.bak 's|^(none)$|- [Seeded](lessons/sample-open-item.md): do the thing (since 2026-07-01)|' "$SB/L9/INDEX.md" && rm -f "$SB/L9/INDEX.md.bak"
+OUT="$(bash "$SRC/tools/brain-lint.sh" "$SB/L9" 2>&1)" || true
+if grep -qF 'ledger entry points at' <<<"$OUT"; then
+  fail "ledger: an entry pointing at a real page is not flagged"
+else
+  ok "ledger: an entry pointing at a real page is not flagged"
+fi
+
 # A closed lesson that merely mentions a follow-up in prose is not an open item.
 mk_ledger_brain "$SB/L7"
 # shellcheck disable=SC2016  # backticks are intentional literal page text

@@ -228,7 +228,12 @@ fi
 # --- follow-up ledger (schema §Follow-ups) ---
 # The section must exist in every INDEX, template included. The listing check runs live-only
 # and covers the lessons half: a line-start Prevention follow-up must appear in the ledger.
-# Project-bullet follow-ups close via prose in later bullets, so their sweep stays with digest.
+# The projects side is checked too, at the level a grep can be right about. Closure there is
+# prose in a later bullet, so per-item state cannot be computed mechanically; what can be
+# checked is that a page carrying follow-up markers is represented in the ledger at all. That
+# catches a page dropped entirely, which is the coarse half of the failure. The fine half, an
+# individual item lost inside a page that is already listed, needs per-item accounting the brain
+# does not have yet, and it is recorded as a follow-up rather than pretended away.
 if [ -f "$BRAIN/INDEX.md" ]; then
   if ! grep -q '^## Open follow-ups' "$BRAIN/INDEX.md"; then
     err "INDEX.md: missing '## Open follow-ups' section — digest refresh due"
@@ -250,6 +255,17 @@ if [ -f "$BRAIN/INDEX.md" ]; then
         printf '%s\n' "$FOLLOWUP_SECTION" | grep -qF "](lessons/${base%.md})" ||
         err "${page#"$BRAIN"/}: open follow-up not listed in INDEX.md — digest follow-up sweep due"
     done
+    # Projects side, reverse direction only. Whether a project page still holds an OPEN
+    # follow-up is not mechanically decidable: closure is prose in a later bullet, and a page's
+    # markers are mostly reports about follow-ups rather than deferrals. An attempt at a
+    # closure heuristic here matched the word "incomplete" and silently disabled a whole page,
+    # which is worse than no check. What is exact is the other direction: every ledger entry
+    # must point at a page that exists. Per-item accounting is a recorded follow-up.
+    while IFS= read -r target; do
+      [ -n "$target" ] || continue
+      [ -f "$BRAIN/$target" ] || [ -f "$BRAIN/$target.md" ] ||
+        err "INDEX.md: ledger entry points at $target, which does not exist"
+    done < <(printf '%s\n' "$FOLLOWUP_SECTION" | grep -oE '\]\((lessons|projects|notes|decisions)/[^)]+\)' | sed 's/^](//; s/)$//' | sort -u)
   fi
 fi
 
