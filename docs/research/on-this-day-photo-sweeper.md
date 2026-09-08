@@ -18,10 +18,11 @@ lifetime tier, and treats privacy and the widget as the product instead of featu
 
 ## What we could verify, and what we could not
 
-The sandbox blocks every Apple domain, the Wayback Machine, reader proxies, and every app
-intelligence site (Sensor Tower, Appfigures, Apptopia, AppAgg). The listing itself was
-unreachable. Everything below about the target comes from search index snippets, and everything
-about competitors comes from search snippets of their listings, reviews, and press.
+Verified sources: search-engine index snippets of App Store listings, review pages, and press
+coverage. Not verified: the target's own listing page, its reviews page, and any app-intelligence
+estimate for it (Sensor Tower, Appfigures, Apptopia, AppAgg). None of those were reachable during
+research, so everything below about the target comes from index snippets, and everything about
+competitors comes from snippets of their listings, reviews, and press.
 
 Facts we could pin down about the target:
 
@@ -29,9 +30,10 @@ Facts we could pin down about the target:
 - The only page any search engine has indexed is the Japanese storefront's "customers also
   bought" page. No US listing page, no reviews page, no press, no Reddit, no TikTok, no Product
   Hunt, no developer site surfaced under any query.
-- The id sits just above SwipeSwoop (6752326592), which shipped version 1.0.0 on 2025-09-20. The
-  target was therefore created in App Store Connect around late September or early October 2025.
-  It is at most a year old.
+- Neighboring ids hint at age. SwipeSwoop (6752326592) shipped version 1.0.0 on 2025-09-20 and
+  This Day (6758584686) shipped in early 2026, so the target's record was probably created in the
+  second half of 2025. Apple assigns the id when the record is created, which can be well before
+  release, so treat this as a hint. The version history in the manual check is the evidence.
 - The name collides with PhotoSweeper, a Mac duplicate finder sold since 2011 by Overmacs, and
   with PhotoSweeper Mobile (2024). Every search for the target's name returned those apps first.
   That is an ASO problem the developer chose for themselves.
@@ -46,7 +48,9 @@ Five-minute manual check for whoever has an iPhone in hand. Open the link, then 
 2. Subtitle and the first two lines of the description.
 3. In-app purchase list with prices (scroll to Information).
 4. Rating count and average, and the date of the oldest review.
-5. Version history dates. One entry means it was abandoned after launch.
+5. Version history dates. Note the time since the last update and whether the developer has
+   other apps. One entry on an app that is months old suggests low activity, not proof of
+   abandonment.
 6. App Privacy label. "Data Not Collected" or something else.
 7. Screenshot of the paywall after install. Note trial length and default plan.
 
@@ -166,16 +170,18 @@ each tier.
 Tier 1, the habit.
 
 1. Never an empty day. If today's date has nothing, widen to this week in past years, then to
-   "a day you have not reviewed yet", then to "one random day from this month five years ago".
-   The feed always opens with something worth looking at.
+   a day you have not reviewed yet, then to a day the index knows has photos, even one you
+   already reviewed. The app keeps an index of non-empty days, so the last fallback cannot come
+   up empty. If the library itself is empty, show a completion state instead of a blank feed.
 2. Moments, not a date. Group the day's photos by time gap and location, reverse-geocode the
    place name, and label the group "Lisbon, 2019, 14 photos". Same data, ten times the feeling.
 3. Three piles plus a maybe. Keep, delete, star (writes the Photos favorite), and a maybe pile
    that comes back in 30 days. Maybe is where most guilt-deletes go, and it stops the "I deleted
    the wrong one" review.
 4. Pending trash with unlimited undo. Nothing leaves the library until the user taps "empty
-   trash". That also collapses hundreds of iOS delete prompts into one and removes the
-   bulk-delete crash class.
+   trash". Commit in bounded, resumable batches of about 500 assets, so a 4,000-item session is
+   eight prompts instead of thousands and no single PhotoKit transaction is large enough to hit
+   the bulk-delete crashes reviewers report.
 5. The widget does the work. Interactive Home Screen widget with keep and star buttons through
    App Intents, a Lock Screen widget, StandBy, and a Watch complication. Delete from the widget
    queues into pending trash, because the Photos confirmation dialog cannot show from a widget.
@@ -189,7 +195,9 @@ Tier 2, the storage.
    a byte count shown before you commit. This Day gates this behind Premium. We make it Pro too,
    but the counter is free so the value is visible.
 8. Honest byte counts. Sum real asset resource sizes, not estimates, and report iCloud-offloaded
-   items separately so the "storage saved" number matches Settings.
+   items separately. Label the total "pending" until the user empties Recently Deleted, because
+   Photos keeps deleted items for up to 30 days and the app cannot purge that album. Show the
+   one-tap path to Recently Deleted so the number in Settings catches up.
 
 Tier 3, the memory.
 
@@ -200,7 +208,9 @@ Tier 3, the memory.
 
 Tier 4, trust.
 
-11. Privacy as the headline. No network entitlement at all. App Privacy label "Data Not
+11. Privacy as the headline. No servers of ours and no analytics SDK. The only network traffic
+    is Apple's own iCloud (for library sync and offloaded originals) and Apple's geocoder for
+    place names, and geocoding is a setting the user can turn off. App Privacy label "Data Not
     Collected". Say it in the subtitle. The free competitors already proved this converts.
 12. No weekly plan. No trial that charges silently. A 7-day trial exists only on the annual plan
     and the app sends a local reminder 24 hours before it converts.
@@ -235,8 +245,9 @@ App Store title is 30 characters and the subtitle is 30. Working set for Winnow:
 
 - Title: "Winnow: On This Day Cleaner" (27)
 - Subtitle: "Relive today. Tidy your photos" (30)
-- Keyword field: on this day, photo cleaner, swipe delete photos, memories, storage, duplicates,
-  live photo, camera roll
+- Keyword field (94 of 100 characters, and no words repeated from the title or subtitle because
+  Apple indexes those separately):
+  `swipe,delete,storage,duplicates,live,camera,roll,memories,declutter,space,clean,organize,burst`
 
 ## Pricing recommendation
 
@@ -267,7 +278,8 @@ channels and press. Sanity math before Apple's cut:
   the first quarter.
 - Press that already covers this niche in 2026: 9to5Mac's Indie App Spotlight (This Day, May
   2026), MacStories (On This Day), iMore, and Cult of Mac. Lead the pitch with "no subscription
-  and no network access", because that is the angle the reviewers keep rewarding.
+  required, and no servers of ours", because that is the angle the reviewers keep rewarding. The
+  yearly plan exists, so never say "no subscription" flat.
 - Product Hunt launch. SwipeSwoop got 150 upvotes there in September 2025 and Odays launched
   there too.
 - Reddit r/iphone and r/apple threads asking for a "swipe to delete" app appear weekly. Answer
@@ -282,7 +294,9 @@ Six weeks to TestFlight, one developer.
 
 Week 1 and 2. PhotoKit spike and the feed. Fetch by creation date across years, fall back to the
 week, then to unreviewed days. Moments grouping by time gap and location. Review state store
-keyed by asset local identifier.
+keyed by the asset's local identifier for the on-device cache and by its iCloud identifier
+(PhotoKit's cloud identifier mapping) for the synced record, because the local identifier differs
+per device and would make synced photos come back for review.
 
 Week 3. Swipe deck, three piles plus maybe, pending trash, one batched delete at commit, byte
 counter from asset resources.
@@ -310,7 +324,9 @@ Technical notes.
   Sharpness: Laplacian variance on the thumbnail.
 - Live Photo to still: create a new still asset from the photo resource, then queue the original
   into pending trash. Video shrink: export at a lower bitrate with AVFoundation, then queue the
-  original.
+  original. In both cases copy the creation date, location, and favorite flag onto the new
+  asset, re-add it to every album the original was in, and render from the edited version so
+  adjustments survive. Without that step the replacement silently drops the user's organization.
 - Interactive widgets run through App Intents. Keep and star are safe from the widget. Delete
   queues only.
 - iCloud-optimized libraries stall on full-resolution loads. Review on thumbnails, load full
