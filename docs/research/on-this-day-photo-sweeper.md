@@ -223,8 +223,8 @@ Tier 4, trust.
 
 Constraints. Under ten letters. No collision with PhotoSweeper, Timehop, Swipewipe, This Day, or
 the "Rewind" and "Years" families. Distinct in App Store search. A plausible `.app` domain. The
-collision column reports what an App Store search surfaced; the domain and trademark checks were
-not possible from this sandbox and are on the owner.
+collision column reports what an App Store search surfaced. Domain and trademark checks were not
+part of this research and are on the owner.
 
 | Candidate | App Store collision found | Verdict |
 |---|---|---|
