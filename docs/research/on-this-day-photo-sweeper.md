@@ -3,6 +3,9 @@
 Target: App Store id 6752840632, "On This Day • Photo Sweeper", by OmarKnows LLC.
 Research date: 2026-09-08. Listing verified on device the same day.
 
+Related: [similar-apps.md](similar-apps.md) puts 33 similar apps in one feature matrix with the
+unmet needs from reviews. [product-spec.md](product-spec.md) defines what we build.
+
 ## Verdict
 
 The app is a small, well-built, honest entry in a crowded template: show the user photos taken on
