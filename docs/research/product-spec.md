@@ -55,9 +55,11 @@ The product serves all three with one loop and different first screens (see Onbo
 Things users ask for that few or no apps ship. Each has a demand source in similar-apps.md.
 
 1. Near-duplicate culling inside the day. Detection tools scan the whole library and produce
-   lists no one can review ("20,000 similar images"). Ritual apps have no detection at all. We
-   detect only within today's moments, on device, and show a burst as one card: the sharpest
-   shot proposed, the rest behind it. Demand: the top unmet need in reviews.
+   lists no one can review ("20,000 similar images"). Four ritual apps (Swoto, Swipy,
+   LuminaClean, Swipe Clean) bolt a library-wide detector next to the feed, and none runs it
+   inside today's moments or proposes a keeper in the deck. We detect only within today's
+   moments, on device, and show a burst as one card: the sharpest shot proposed, the rest behind
+   it. Demand: the top unmet need in reviews.
 2. Scope the day to a source or album. "Only the Family album", "skip screenshots", and, once
    the spike finds a supported Shared Library identifier, "only my library, not Shared". Two
    viewers do it, no cleaner does. Demand: Rewind reviewers, Memories: Relive Your Photos
@@ -80,8 +82,10 @@ Things users ask for that few or no apps ship. Each has a demand source in simil
    one-stars in the category.
 7. Stop Live Photos auto-playing. A setting, and a long-press to play. Demand: Memories: Relive
    Your Photos reviews.
-8. iPad and Mac with synced review state. Swipe & Tidy has the platforms, Sift has the sync,
-   nobody has both. Demand: PhotoSweeper Mobile and SwipePhotos exist because of it.
+8. iPad and Mac with synced review state. Swipe & Tidy has a Mac build, Sift: Organize has
+   iCloud sync, SwipePhotos has all three platforms without a memory feed, and nobody has the
+   feed, the platforms, and the sync together. Demand: PhotoSweeper Mobile and SwipePhotos exist
+   because of it.
 
 ## Enhancements that make people switch
 
@@ -91,18 +95,23 @@ The gap fillers close complaints. These create the reason to tell someone else.
    then a day with photos you have not reviewed; then a day the index knows has photos, even one
    you already reviewed, framed as "a year ago this month"; then, if the library is empty, a
    completion state. Timehop is the only app with any fallback, and it falls back to trivia.
-2. Moments, not a date. The day's photos grouped by time gap and location, with a place name
-   and a count: "Lisbon, 2019, 14 photos". The finest grain anywhere else is "by year". This is
-   the same data and ten times the feeling, and it is the unit the cull works on.
+2. Moments, not a date. The day's photos grouped by time gap, and by location when the photos
+   carry one and geocoding is on, with a label and a count: "Lisbon, 2019, 14 photos". Without a
+   usable location the label is the time of day: "Afternoon, 2019, 14 photos". The finest grain
+   anywhere else is "by year". This is the same data and ten times the feeling, and it is the
+   unit the cull works on.
 3. Keep, delete, star, maybe. The maybe pile returns in 30 days. It absorbs the guilt-deletes
    that produce "I deleted the wrong one" reviews and it is a second daily touch.
 4. The widget does the work. Interactive Home Screen widget with keep and star buttons (App
    Intents), a Lock Screen widget, StandBy, and a Watch complication that shows the memory and
-   takes a keep or star. No app in the category has any of these. Widgets are free.
-5. Honest bytes. The counter says "pending" until Recently Deleted is emptied, and shows the
-   steps to get there with a button that opens Photos. iOS has no supported link that opens that
-   album directly. Every competitor claims "storage saved" the moment you swipe, and Settings
-   disagrees with them for 30 days.
+   takes a keep or star. No app in the category has a widget with actions, a Lock Screen widget,
+   StandBy, or a Watch complication. Widgets are free.
+5. Honest bytes. The counter measures an original that is on the device by streaming it
+   through the asset resource manager, estimates an offloaded one from its pixel size and
+   duration with a "~" mark, and never downloads anything to measure it. It says "pending" until
+   Recently Deleted is emptied, and shows the steps to get there with a button that opens
+   Photos. iOS has no supported link that opens that album directly. Every competitor claims
+   "storage saved" the moment you swipe, and Settings disagrees with them for 30 days.
 6. Send it with the story attached. From the moment view, one tap opens the share sheet with
    the photo and the "N years ago today" caption already written, and iOS puts the people you
    message most at the top of that sheet. The app never reads contacts. Then & Now pairs (old
@@ -115,7 +124,7 @@ The gap fillers close complaints. These create the reason to tell someone else.
 ## Screens
 
 Today. The first screen every day. A header with the date and the year range found. Moments as
-cards, each with a place name, count, and a burst indicator. A streak chip and a pending-trash
+cards, each with a place name or a time-of-day label, a count, and a burst indicator. A streak chip and a pending-trash
 chip. If the ladder had to fall back, the header says which rung ("This week, 2021").
 
 Review. The swipe deck for one moment. A card is one photo, or one burst with the proposed
@@ -158,8 +167,8 @@ sees today's memory. Both get to Today in under 20 seconds.
 
 | Tier | Price | What it includes |
 |---|---|---|
-| Free | $0 | Today, Review, Trash, Maybe, all widgets, streak, reminders, share, star, album, sources and scopes, screenshots lane |
-| Pro lifetime | $19.99, launch at $14.99 | Cull with detection, Shrink, any-day and date-window browsing, CloudKit sync, iPad and Mac, alternate icons |
+| Free | $0 | Today, Review, Trash, Maybe, all widgets, streak, reminders, share, star, album, sources and scopes, screenshots lane, the iPad and Mac apps |
+| Pro lifetime | $19.99, launch at $14.99 | Cull with detection, Shrink, any-day and date-window browsing, CloudKit sync of review state across devices, alternate icons |
 | Pro yearly | $9.99 | Same, for people who prefer it. Family Sharing on |
 
 The paywall appears only when the user taps a Pro feature. It shows both prices with lifetime
@@ -204,14 +213,19 @@ interactive and Lock Screen widgets, StoreKit 2 with both Pro products, five lan
 
 ## Metrics
 
-| Metric | Target at 90 days |
-|---|---|
-| Day 7 retention | 35% |
-| Days reviewed per active user per week | 4 |
-| Trash committed per active user per week | 1 |
-| Free to Pro conversion, lifetime plus yearly | 3% |
-| One-star reviews mentioning data loss | 0 |
-| Median Today load on a 100K library | under 1 second |
+The shipping app records nothing, so the sources are fixed up front. Retention and conversion
+come from App Store Connect, which aggregates the users who opted into Apple's analytics. The
+per-user usage rows come from a TestFlight cohort that opts in to sharing its local counters,
+and from nowhere else. Load time is measured in development on a seeded 100K library.
+
+| Metric | Target at 90 days | Source |
+|---|---|---|
+| Day 7 retention | 35% | App Store Connect |
+| Days reviewed per active user per week | 4 | TestFlight cohort |
+| Trash committed per active user per week | 1 | TestFlight cohort |
+| Free to Pro conversion, lifetime plus yearly | 3% | App Store Connect |
+| One-star reviews mentioning data loss | 0 | App Store reviews |
+| Median Today load on a 100K library | under 1 second | Development device |
 
 ## Non-goals
 
@@ -227,8 +241,8 @@ feed and no external photo sources. No ads, ever. No weekly plan, ever. No cloud
   granted.
 - Detection quality. Ship the cull as a proposal the user confirms, never an automatic delete.
 - Performance on optimized-storage libraries. Thumbnails only in Review. Full resolution only in
-  Cull and Shrink, and Shrink fetches an offloaded original with a visible download, progress,
-  and cancel. No swipe ever waits on a network fetch.
+  Cull, Shrink, and Share, and each of those fetches an offloaded original with a visible
+  download, progress, and cancel. No swipe ever waits on a network fetch.
 - Name collisions. "On This Day" is taken many times over; the Grossmann app had to ship as
   "On This Day Rewind". Pick from the shortlist in the teardown and check the trademark before
   the first TestFlight build.
