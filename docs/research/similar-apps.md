@@ -14,45 +14,46 @@ mostly do not delete. Our product sits in the first group and borrows the best o
 
 ## Feature matrix
 
-Columns: OTD = "On This Day" feed. Sim = similar or near-duplicate detection (not just exact).
-Shrink = Live Photo to still or video compression. Trash = pending deletion with undo before
-commit. Wid = Home Screen widget. Multi = iPad, Mac, or sync beyond iPhone. Free = what the free
-tier gives. Paid = cheapest recurring and one-time prices seen.
+Columns: App carries the App Store id where one was found (SwipePhotos sells from its own site).
+OTD = "On This Day" feed. Sim = similar or near-duplicate detection (not just exact). Shrink =
+Live Photo to still or video compression. Trash = pending deletion with undo before commit. Wid =
+Home Screen widget. Multi = iPad, Mac, or sync beyond iPhone. Free = what the free tier gives.
+Paid = cheapest recurring and one-time prices seen.
 
 | App | Group | OTD | Sim | Shrink | Trash | Wid | Multi | Free | Paid | Ratings |
 |---|---|---|---|---|---|---|---|---|---|---|
-| On This Day • Photo Sweeper (target) | ritual | yes, by year | no | no | yes | yes, paid | n/f | 7 reviewed days | $1.99 mo, $19.99 yr, $59.99 life | 4, 5.0 |
-| This Day (Raymond Kim) | ritual | yes | exact only | Live to still | n/f | n/f | iPad | daily review | $3.99 mo, $29.99 yr | n/f |
-| Odays | ritual | yes, small batch | no | no | n/f | n/f | no | daily review | mo, yr, lifetime (n/f) | n/f |
-| Keep or Sweep | ritual | yes | no | no | undo | n/f | n/f | n/f | n/f | n/f |
-| SwipeSwoop | ritual | not confirmed | no | no | n/f | n/f | n/f | n/f | subscription | too few |
-| PhotoSwipe (Rica Harz) | ritual | yes | no | no | end-of-month review | n/f | n/f | n/f | $3.99 wk, $19.99 yr | too few |
-| Swoto | ritual | yes, plus random and year modes | yes, plus faces | no | n/f | n/f | n/f | n/f | subscription | too few |
-| Swipe & Tidy | ritual | no | AI blur and dup | no | mandatory review screen | n/f | Mac, visionOS | 50 swipes a day | $2.99 wk, $19.99 yr, $29.99 life | n/f |
-| Swipy | ritual | yes | yes | no | undo | n/f | 16 languages | n/f | $3.99 mo, $19.99 yr, $29.99 life, no weekly | 104, 4.5 |
-| LuminaClean | ritual and tools | yes ("Daily Bites") | yes, plus blur | both | n/f | n/f | no | 65 deletes, then 10 a day | $4.99 mo, $17.99 life | 11, 4.8 |
-| Daily Delete (In Ordinem) | ritual | implied | yes | no | n/f | n/f | n/f | free with ads | subscription | ~1,700, 4.7 |
-| Photos Cleaner: Swipe & Delete (TP) | ritual | yes | no | no | undo | yes | iPad | n/f | IAP | n/f |
-| Swipe Clean (ARK) | ritual | yes | yes | no | Quick Clean commit | n/f | iPad | 3-day trial | $4.99 wk, $19.99 yr | n/f |
-| Swipewipe (MWM) | publisher | yes, pinned | yes, plus blur and screenshots | no | bookmarks | yes, iOS 18 | Android | session cap, ~7 h cooldown, ads | $4.99 to $9.99 wk, $19.99 to $109.99 yr by region | 84K, 4.7 |
-| Slidebox (MWM) | publisher | no | manual compare | no | confirm step | n/f | iPad, Android, visionOS | basic | $4.99 mo, $49.99 yr, $19.99 one-time | 16K, 4.8 |
-| Cleanup (BPMobile) | publisher | no | yes, plus best photo | video | n/f | n/f | Android, visionOS | ads, trial | $7.99 wk, $44.99 life | 574K, 4.7 |
-| CleanMy Phone (MacPaw) | publisher | no | yes, AI categories | both | n/f | n/f | iPad | 3-day trial | ~$24.99 yr | 21.8K, 4.6 |
-| Clever Cleaner | free tool | no | yes | Live to still | n/f | n/f | iPad, visionOS | everything (2026 daily caps disputed) | none | 81K, 4.78 |
-| Favvy | free-first | no | yes, bursts | no | n/f | n/f | Android | 100 swipes a day, earnable | Pro (n/f) | iOS 4.7, Android 3.47 |
-| SwipePhotos | paid tool | no | yes | no | n/f | n/f | iPhone, iPad, Mac, one purchase | none | $34.99 yr, lifetime (n/f) | n/f |
-| Cull | one-time tool | no | burst grading | no | n/f | n/f | n/f | IAP | one-time (n/f) | too few |
-| Sift: Organize | tool | no | no | no | shake to undo | n/f | iCloud sync | n/f | n/f | n/f |
-| Sifty | tool | no | no | no | n/f | n/f | n/f | 40 photos a day | $3.99 wk, $29.99 yr | n/f |
-| Timehop | viewer | yes, plus social sources | no | no | no delete | yes | Android | free with ads | Timehop+ (n/f), 7-day trial | ~172K, 4.8 |
-| On This Day Rewind (Grossmann) | viewer | yes, by year | no | no | delete only | 4 sizes, adjustable count | iPad, Vision Pro | last 3 years | $4.99 one-time or $0.99 mo | too few |
-| Photos On This Day (Coburn) | viewer | yes, plus Shared Photos | no | no | no | yes | iPad, Vision Pro | free | n/f | n/f |
-| Memories: Relive Your Photos | viewer | yes, source selectable | no | no | delete only | yes | no | everything | none | n/f |
-| On This Day Photos | viewer | yes, any day | no | no | no | yes, tap to cycle | iPhone, iPad, Mac | n/f | n/f | n/f |
-| ThenNow | viewer | yes, plus Footprints map | no | no | no | n/f | n/f | free | IAP | n/f |
-| On This Day: Memories (APPSKY) | viewer | yes, vision-curated | no | no | curate | n/f | Mac, visionOS | n/f | n/f | too few |
-| On This Day - Daily Memories (Tiny Whale) | viewer and cleanup | yes | no | no | in-app cleanup | n/f | n/f | n/f | n/f | n/f |
-| Ayer | viewer | yes, Then & Now collages | no | no | no | yes | iPad | free | n/f | n/f |
+| On This Day • Photo Sweeper (target), id6752840632 | ritual | yes, by year | no | no | yes | yes, paid | n/f | 7 reviewed days | $1.99 mo, $19.99 yr, $59.99 life | 4, 5.0 |
+| This Day (Raymond Kim), id6758584686 | ritual | yes | exact only | Live to still | n/f | n/f | iPad | daily review | $3.99 mo, $29.99 yr | n/f |
+| Odays, id6749476828 | ritual | yes, small batch | no | no | n/f | n/f | no | daily review | mo, yr, lifetime (n/f) | n/f |
+| Keep or Sweep, id6740060949 | ritual | yes | no | no | undo | n/f | n/f | n/f | n/f | n/f |
+| SwipeSwoop, id6752326592 | ritual | not confirmed | no | no | n/f | n/f | n/f | n/f | subscription | too few |
+| PhotoSwipe (Rica Harz), id6748684876 | ritual | yes | no | no | end-of-month review | n/f | n/f | n/f | $3.99 wk, $19.99 yr | too few |
+| Swoto, id6754226061 | ritual | yes, plus random and year modes | yes, plus faces | no | n/f | n/f | n/f | n/f | subscription | too few |
+| Swipe & Tidy, id6761130588 | ritual | no | AI blur and dup | no | mandatory review screen | n/f | Mac, visionOS | 50 swipes a day | $2.99 wk, $19.99 yr, $29.99 life | n/f |
+| Swipy, id1617533426 | ritual | yes | yes | no | undo | n/f | 16 languages | n/f | $3.99 mo, $19.99 yr, $29.99 life, no weekly | 104, 4.5 |
+| LuminaClean, id6757949814 | ritual and tools | yes ("Daily Bites") | yes, plus blur | both | n/f | n/f | no | 65 deletes, then 10 a day | $4.99 mo, $17.99 life | 11, 4.8 |
+| Daily Delete (In Ordinem), id1551399205 | ritual | implied | yes | no | n/f | n/f | n/f | free with ads | subscription | ~1,700, 4.7 |
+| Photos Cleaner: Swipe & Delete (TP), id6742649462 | ritual | yes | no | no | undo | yes | iPad | n/f | IAP | n/f |
+| Swipe Clean (ARK), id6475195875 | ritual | yes | yes | no | Quick Clean commit | n/f | iPad | 3-day trial | $4.99 wk, $19.99 yr | n/f |
+| Swipewipe (MWM), id1583884012 | publisher | yes, pinned | yes, plus blur and screenshots | no | bookmarks | yes, iOS 18 | Android | session cap, ~7 h cooldown, ads | $4.99 to $9.99 wk, $19.99 to $109.99 yr by region | 84K, 4.7 |
+| Slidebox (MWM), id984305203 | publisher | no | manual compare | no | confirm step | n/f | iPad, Android, visionOS | basic | $4.99 mo, $49.99 yr, $19.99 one-time | 16K, 4.8 |
+| Cleanup (BPMobile), id1510944943 | publisher | no | yes, plus best photo | video | n/f | n/f | Android, visionOS | ads, trial | $7.99 wk, $44.99 life | 574K, 4.7 |
+| CleanMy Phone (MacPaw), id1277110040 | publisher | no | yes, AI categories | both | n/f | n/f | iPad | 3-day trial | ~$24.99 yr | 21.8K, 4.6 |
+| Clever Cleaner, id1666645584 | free tool | no | yes | Live to still | n/f | n/f | iPad, visionOS | everything (2026 daily caps disputed) | none | 81K, 4.78 |
+| Favvy, id6743979781 | free-first | no | yes, bursts | no | n/f | n/f | Android | 100 swipes a day, earnable | Pro (n/f) | iOS 4.7, Android 3.47 |
+| SwipePhotos, swipephotos.com | paid tool | no | yes | no | n/f | n/f | iPhone, iPad, Mac, one purchase | none | $34.99 yr, lifetime (n/f) | n/f |
+| Cull, id6761037751 | one-time tool | no | burst grading | no | n/f | n/f | n/f | IAP | one-time (n/f) | too few |
+| Sift: Organize, id6762099897 | tool | no | no | no | shake to undo | n/f | iCloud sync | n/f | n/f | n/f |
+| Sifty, id6754003221 | tool | no | no | no | n/f | n/f | n/f | 40 photos a day | $3.99 wk, $29.99 yr | n/f |
+| Timehop, id569077959 | viewer | yes, plus social sources | no | no | no delete | yes | Android | free with ads | Timehop+ (n/f), 7-day trial | ~172K, 4.8 |
+| On This Day Rewind (Grossmann), id6754617354 | viewer | yes, by year | no | no | delete only | 4 sizes, adjustable count | iPad, Vision Pro | last 3 years | $4.99 one-time or $0.99 mo | too few |
+| Photos On This Day (Coburn), id1620659723 | viewer | yes, plus Shared Photos | no | no | no | yes | iPad, Vision Pro | free | n/f | n/f |
+| Memories: Relive Your Photos, id1037130497 | viewer | yes, source selectable | no | no | delete only | yes | no | everything | none | n/f |
+| On This Day Photos, id6467105878 | viewer | yes, any day | no | no | no | yes, tap to cycle | iPhone, iPad, Mac | n/f | n/f | n/f |
+| ThenNow, id6711347898 | viewer | yes, plus Footprints map | no | no | no | n/f | n/f | free | IAP | n/f |
+| On This Day: Memories (APPSKY), id6758696641 | viewer | yes, vision-curated | no | no | curate | n/f | Mac, visionOS | n/f | n/f | too few |
+| On This Day - Daily Memories (Tiny Whale), id6794757309 | viewer and cleanup | yes | no | no | in-app cleanup | n/f | n/f | n/f | n/f | n/f |
+| Ayer, id6755725357 | viewer | yes, Then & Now collages | no | no | no | yes | iPad | free | n/f | n/f |
 | Apple Photos (native) | native | no true same-date view | exact duplicates only | no | Recently Deleted | Featured and Memories | all | free | none | n/a |
 | Google Photos (native) | native | Memories carousel; "Rediscover this day" retired ~2020 | yes | no | trash | yes | all | free | storage | n/a |
 

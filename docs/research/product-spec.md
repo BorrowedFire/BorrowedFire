@@ -61,14 +61,18 @@ Things users ask for that few or no apps ship. Each has a demand source in simil
    "skip screenshots". Two viewers do it, no cleaner does. Demand: Rewind reviewers, Memories:
    Relive Your Photos changelog.
 3. Shared Photo Library made safe. Shared items carry a badge, and the commit screen separates
-   "yours" from "shared with family" with its own confirmation. Demand: Apple's own warning and
-   Photos On This Day's positioning.
+   "yours" from "shared with family" with its own confirmation. Caveat: PhotoKit's cloud-shared
+   source type marks shared albums, not Shared Library membership, and no supported identifier
+   for Shared Library is confirmed yet. The spike decides. If none exists, 1.0 ships a warning on
+   the commit screen that a delete from a Shared Library affects everyone in it, and the badge
+   waits. Demand: Apple's own warning and Photos On This Day's positioning.
 4. Shrink instead of delete. Live Photo to still and video re-encode from the same card, with
    the byte delta shown before commit, metadata and album membership copied to the replacement.
    Demand: "no easy way to batch convert Live Photos"; CleanMy Phone's main paid draw.
 5. Screenshots as their own lane. A screenshot never appears in the memory feed. They get a
-   separate weekly sweep, grouped by source app where iOS exposes it. Demand: a whole sub-genre
-   of screenshot-only apps exists.
+   separate weekly sweep, grouped by month in 1.0. PhotoKit only flags that an asset is a
+   screenshot, so grouping by source app needs an on-device classifier with an "unknown" bucket,
+   which is a later release. Demand: a whole sub-genre of screenshot-only apps exists.
 6. Reversible by design. Trash, batch commit, and a restore path. Demand: undo and
    review-before-delete are advertised as differentiators; data-loss reviews are the worst
    one-stars in the category.
@@ -93,12 +97,14 @@ The gap fillers close complaints. These create the reason to tell someone else.
 4. The widget does the work. Interactive Home Screen widget with keep and star buttons (App
    Intents), a Lock Screen widget, StandBy, and a Watch complication that shows the memory and
    takes a keep or star. No app in the category has any of these. Widgets are free.
-5. Honest bytes. The counter says "pending" until Recently Deleted is emptied, and offers the
-   one-tap path there. Every competitor claims "storage saved" the moment you swipe, and Settings
+5. Honest bytes. The counter says "pending" until Recently Deleted is emptied, and shows the
+   steps to get there with a button that opens Photos. iOS has no supported link that opens that
+   album directly. Every competitor claims "storage saved" the moment you swipe, and Settings
    disagrees with them for 30 days.
-6. Send it to the person in it. From the moment view, one tap opens Messages to a recent
-   contact with the photo and the "N years ago today" caption. Then & Now pairs (old photo next
-   to today's) as a share card, the format Timehop and Ayer proved.
+6. Send it with the story attached. From the moment view, one tap opens the share sheet with
+   the photo and the "N years ago today" caption already written, and iOS puts the people you
+   message most at the top of that sheet. The app never reads contacts. Then & Now pairs (old
+   photo next to today's) as a share card, the format Timehop and Ayer proved.
 7. Lifetime for the price of a year. $19.99 once. The target charges $59.99, Swipewipe charges
    that per year in some regions, and This Day is $29.99 a year.
 
@@ -116,14 +122,17 @@ moment.
 Cull. The side-by-side view for a burst. Thumbnails in a row, the sharpest proposed, tap to
 swap the keeper, swipe down to trash the rest. Full resolution loads only here.
 
-Trash. Everything pending, grouped by moment, with shared-library items in their own section.
-Restore any item. "Commit" runs bounded batches of about 500 with one system prompt each, and a
-progress bar so a 4,000-item day is eight prompts and never a crash. After commit, a card
-explains Recently Deleted and offers the shortcut.
+Trash. Everything pending, grouped by moment, with Shared Library items in their own section
+when the spike finds a supported way to identify them. Restore any item. "Commit" runs bounded
+batches of about 500 with one system prompt each, and a progress bar so a 4,000-item day is
+eight prompts and never a crash. After commit, a card explains that the items now sit in
+Recently Deleted for 30 days, shows the path (Photos, then Albums or Utilities, then Recently
+Deleted, then Delete All), and has a button that opens Photos.
 
 Maybe. The 30-day pile, sorted by return date. Items come back into Today on their day.
 
-Screenshots. A separate lane, opened weekly by a badge. Grid, select all by source app, trash.
+Screenshots. A separate lane, opened weekly by a badge. Grid grouped by month, select all in a
+group, trash. Grouping by source app comes later with an on-device classifier.
 
 Settings. Sources (library, Shared Library, specific albums), Live Photo autoplay, reminder
 time, geocoding on or off, Pro, restore purchases, privacy page.
@@ -134,11 +143,11 @@ keep or star.
 
 ## Onboarding
 
-Three screens at most. What the app does, in one sentence. The privacy statement, in one
-sentence. The Photos permission, asked with limited access first and full access explained
-after the first review. No paywall, no account, no email. The storage-full person sees a bytes
-estimate on screen one; the ritual person sees today's memory. Both get to Today in under 20
-seconds.
+Three screens at most. What the app does, in one sentence, over an example that is clearly not
+the user's library. The privacy statement, in one sentence. The Photos permission, asked with
+limited access first and full access explained after the first review. No paywall, no account,
+no email. After permission, the storage-full person sees a bytes estimate and the ritual person
+sees today's memory. Both get to Today in under 20 seconds.
 
 ## Free and Pro
 
@@ -158,7 +167,9 @@ it converts.
   suppress.
 - There is no API to restore from Recently Deleted. Our trash is the undo; after commit we point
   to the album.
-- Shared Library items are marked from the asset source and confirmed separately.
+- Shared Library items are confirmed separately once the spike finds a supported identifier.
+  PhotoKit's cloud-shared source type covers shared albums, not Shared Library. Until then the
+  commit screen warns that a delete from a Shared Library affects every participant.
 - Shrink copies creation date, location, and favorite onto the replacement, re-adds it to every
   album the original was in, renders from the edited version, and trashes the original only
   after the replacement exists.
@@ -169,20 +180,22 @@ it converts.
 The app maintains an index of days that have at least one non-screenshot asset, refreshed on
 launch and on Photos change notifications. The ladder queries the index, so the last rung cannot
 return nothing. Each rung is labeled in the Today header so the user knows why they are seeing
-it. Rungs 2 and 3 are free; rung 4 draws from the whole library and is the same engine as
-any-day browsing.
+it. Every rung is free when the ladder reaches it on its own. Rung 4 uses the same engine as
+Pro's any-day browsing, and Pro gates only the manual use of that engine, never the automatic
+fallback.
 
 ## Release plan
 
 1.0, six weeks to TestFlight. The premise list, Today with moments, Review, Trash with batching,
-Maybe, the empty-day ladder, sources and scopes, Shared Library badges, screenshots lane,
+Maybe, the empty-day ladder, sources and scopes, Shared Library handling as the spike allows,
+screenshots lane,
 interactive and Lock Screen widgets, StoreKit 2 with both Pro products, five languages.
 
 1.1. Cull with on-device detection and the burst card. Shrink for Live Photos.
 
 1.2. Video shrink. CloudKit sync. iPad. Watch complication and StandBy.
 
-1.3. Mac. Then & Now share cards. Send to the person in it.
+1.3. Mac. Then & Now share cards. Share sheet with the caption written.
 
 ## Metrics
 
@@ -208,8 +221,9 @@ feed and no external photo sources. No ads, ever. No weekly plan, ever. No cloud
 - Photos permission drop-off. Limited access first, and a working Today with whatever was
   granted.
 - Detection quality. Ship the cull as a proposal the user confirms, never an automatic delete.
-- Performance on optimized-storage libraries. Thumbnails only in Review; full resolution only in
-  Cull; no swipe ever waits on a network fetch.
+- Performance on optimized-storage libraries. Thumbnails only in Review. Full resolution only in
+  Cull and Shrink, and Shrink fetches an offloaded original with a visible download, progress,
+  and cancel. No swipe ever waits on a network fetch.
 - Name collisions. "On This Day" is taken many times over; the Grossmann app had to ship as
   "On This Day Rewind". Pick from the shortlist in the teardown and check the trademark before
   the first TestFlight build.

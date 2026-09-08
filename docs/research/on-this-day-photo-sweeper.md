@@ -224,8 +224,8 @@ Tier 2, the storage.
 9. Honest byte counts. Target: claims "real storage-saved stats". Sum real asset resource sizes,
    report iCloud-offloaded items separately, and label the total "pending" until the user empties
    Recently Deleted, because Photos keeps deleted items for up to 30 days and the app cannot
-   purge that album. Show the one-tap path to Recently Deleted so the number in Settings catches
-   up.
+   purge that album. Show the steps to Recently Deleted with a button that opens Photos, since
+   iOS has no link straight to that album, so the number in Settings catches up.
 
 Tier 3, the memory.
 
@@ -233,7 +233,9 @@ Tier 3, the memory.
     and a one-tap send to the person in the photo via Messages.
 11. Album from the day. Target: yes. Table stakes now. Match it.
 12. Shared Library and shared albums included. Target: not mentioned. Mark shared items so the
-    user knows a delete affects the family library.
+    user knows a delete affects the family library. PhotoKit's cloud-shared source type marks
+    shared albums, not Shared Library, so the badge depends on the spike finding a supported
+    identifier.
 
 Tier 4, trust.
 
@@ -286,8 +288,8 @@ the past to spark joy", which no one searches for. Working set for Winnow:
 
 | Tier | Price | What it unlocks |
 |---|---|---|
-| Free | $0 | Unlimited daily review of today's date, widgets, streak, pending trash, byte counter, star, share, album |
-| Pro lifetime | $19.99, launch at $14.99 | Burst culling, Live Photo and video shrink, maybe pile, date-window and "any day" browsing, CloudKit sync, iPad and Mac, alternate icons |
+| Free | $0 | Unlimited daily review of today's date, widgets, streak, pending trash, maybe pile, byte counter, star, share, album |
+| Pro lifetime | $19.99, launch at $14.99 | Burst culling, Live Photo and video shrink, date-window and "any day" browsing, CloudKit sync, iPad and Mac, alternate icons |
 | Pro yearly | $9.99 | Same as lifetime, for people who prefer it. Family Sharing on |
 
 No weekly plan. No monthly plan. The free tier is the whole daily ritual, so the app is usable
@@ -354,8 +356,9 @@ Technical notes.
   deletes at commit are the only way to make that tolerable.
 - There is no public API to restore from "Recently Deleted". The pending trash is ours, so undo is
   free until commit.
-- PhotoKit exposes both the personal library and the shared iCloud library through fetch
-  options. Confirm the exact source-type flags in the spike before promising shared support.
+- PhotoKit's cloud-shared source type identifies shared albums, not iCloud Shared Photo Library
+  membership, and no supported identifier for the latter is confirmed. The spike decides whether
+  Shared Library badges ship in 1.0.
 - Near-duplicate detection: Vision feature prints and a distance threshold, all on device.
   Sharpness: Laplacian variance on the thumbnail.
 - Live Photo to still: create a new still asset from the photo resource, then queue the original
@@ -366,7 +369,8 @@ Technical notes.
 - Interactive widgets run through App Intents. Keep and star are safe from the widget. Delete
   queues only.
 - iCloud-optimized libraries stall on full-resolution loads. Review on thumbnails, load full
-  resolution only for the side-by-side cull view, and never block a swipe on a network fetch.
+  resolution only for the cull view and for Shrink, which downloads an offloaded original with
+  visible progress and a cancel, and never block a swipe on a network fetch.
 
 ## Risks
 
