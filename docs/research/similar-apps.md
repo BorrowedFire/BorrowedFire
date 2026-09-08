@@ -30,7 +30,7 @@ Paid = cheapest recurring and one-time prices seen.
 | PhotoSwipe (Rica Harz), id6748684876 | ritual | yes | no | no | end-of-month review | n/f | n/f | n/f | $3.99 wk, $19.99 yr | too few |
 | Swoto, id6754226061 | ritual | yes, plus random and year modes | yes, plus faces | no | n/f | n/f | n/f | n/f | subscription | too few |
 | Swipe & Tidy, id6761130588 | ritual | no | AI blur and dup | no | mandatory review screen | n/f | Mac, visionOS | 50 swipes a day | $2.99 wk, $19.99 yr, $29.99 life | n/f |
-| Swipy, id1617533426 | ritual | yes | yes | no | undo | n/f | 16 languages | n/f | $3.99 mo, $19.99 yr, $29.99 life, no weekly | 104, 4.5 |
+| Swipy, id1617533426 | ritual | yes | yes | no | undo | n/f | n/f | n/f | $3.99 mo, $19.99 yr, $29.99 life, no weekly | 104, 4.5 |
 | LuminaClean, id6757949814 | ritual and tools | yes ("Daily Bites") | yes, plus blur | both | n/f | n/f | no | 65 deletes, then 10 a day | $4.99 mo, $17.99 life | 11, 4.8 |
 | Daily Delete (In Ordinem), id1551399205 | ritual | implied | yes | no | n/f | n/f | n/f | free with ads | subscription | ~1,700, 4.7 |
 | Photos Cleaner: Swipe & Delete (TP), id6742649462 | ritual | yes | no | no | undo | yes | iPad | n/f | IAP | n/f |
@@ -54,7 +54,7 @@ Paid = cheapest recurring and one-time prices seen.
 | On This Day: Memories (APPSKY), id6758696641 | viewer | yes, vision-curated | no | no | curate | n/f | Mac, visionOS | n/f | n/f | too few |
 | On This Day - Daily Memories (Tiny Whale), id6794757309 | viewer and cleanup | yes | no | no | in-app cleanup | n/f | n/f | n/f | n/f | n/f |
 | Ayer, id6755725357 | viewer | yes, Then & Now collages | no | no | no | yes | iPad | free | n/f | n/f |
-| Apple Photos (native) | native | no true same-date view | exact duplicates only | no | Recently Deleted | Featured and Memories | all | free | none | n/a |
+| Apple Photos (native) | native | no true same-date view | duplicates, including different resolution or format, not near-similar shots | no | Recently Deleted | Featured and Memories | all | free | none | n/a |
 | Google Photos (native) | native | Memories carousel; "Rediscover this day" retired ~2020 | yes | no | trash | yes | all | free | storage | n/a |
 
 ## Per-app notes worth keeping
@@ -118,7 +118,8 @@ one) is the format Ayer copied.
 
 Apple and Google. Apple's Memories are algorithmic mixes by date, place, and people, and Apple
 support tells users asking for true same-date behavior that it does not exist, which is the gap
-every viewer markets against. Apple's Duplicates utility only catches exact copies. A 9to5Mac
+every viewer markets against. Apple's Duplicates utility merges copies that differ in
+resolution, format, or metadata, but it does not catch near-similar shots or bursts. A 9to5Mac
 piece from 2026-08-28 says iOS 27 upgrades Memories in a big way; details were not retrievable
 and this is the main platform risk. Google retired "Rediscover this day" into the Memories
 carousel around November 2020 and community threads still ask for it back with a daily
@@ -126,7 +127,7 @@ notification across all years.
 
 ## What no one does
 
-Across all 33 rows:
+Across all 34 rows (32 apps and the two native platforms):
 
 - No Lock Screen, StandBy, or Apple Watch widget was found for any app.
 - No interactive widget. Every widget is a picture that opens the app.
@@ -145,9 +146,10 @@ From App Store review snippets, Apple and Google community threads, and comparis
 "reddit" intent in this category is mostly captured by SEO content farms (Favvy, InsanelyMac,
 JustUseApp), so first-person Reddit quotes were rare.
 
-1. Near-duplicate detection, not exact copies. "Apple's duplicate detection only finds exact
-   copies." Partly met by CleanMy Phone, Clever Cleaner, LuminaClean, Cull. Not met by any
-   ritual app.
+1. Near-similar and burst detection. Users say "Apple's duplicate detection only finds exact
+   copies". Apple's utility does merge copies that differ in resolution or format, but a crop, a
+   filter, or the next frame of a burst is never flagged. Partly met by CleanMy Phone, Clever
+   Cleaner, LuminaClean, Cull. Not met by any ritual app.
 2. Screenshot cleanup that leaves personal photos alone. A whole sub-genre of single-purpose
    apps exists for it.
 3. Batch Live Photo to still. "There's no easy way to batch convert Live Photos" natively. Met by
