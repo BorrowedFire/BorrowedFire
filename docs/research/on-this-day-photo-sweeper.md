@@ -1,106 +1,116 @@
 # On This Day • Photo Sweeper: teardown and build plan
 
-Target: App Store id 6752840632, "On This Day • Photo Sweeper".
-Research date: 2026-09-08.
+Target: App Store id 6752840632, "On This Day • Photo Sweeper", by OmarKnows LLC.
+Research date: 2026-09-08. Listing verified on device the same day.
 
 ## Verdict
 
-The app is a small, near-invisible entry in a crowded template: show the user photos taken on
-today's date in past years, let them swipe to keep or delete, count the storage saved, and sell a
-subscription. At least fifteen apps ship that exact loop. Two of them matter. Swipewipe owns the
-category by volume and charges the most. This Day (Raymond Kim) owns the "one day at a time"
-framing with the indie press and charges a fair price.
+The app is a small, well-built, honest entry in a crowded template: show the user photos taken on
+today's date in past years, let them swipe to keep or delete, count the storage saved, and sell an
+upgrade. At least fifteen apps ship that loop. Two of them matter more than the target. Swipewipe
+owns the category by volume and charges the most. This Day (Raymond Kim) owns the "one day at a
+time" framing with the indie press and charges a fair price.
 
-The opening is real but it is not "the same app with a nicer icon". The category has three
-structural weaknesses nobody has fixed: empty days, weekly billing that users hate, and a memory
-feed with no context and no way out except delete. Our version wins on those three, prices with a
-lifetime tier, and treats privacy and the widget as the product instead of features.
+The target is a side project by Omar Shahine, a Microsoft corporate vice president who started
+building iPhone apps with AI tools in September 2025 and has shipped five since. It has four
+ratings after a year. It also already does several things we planned as differentiators: pending
+deletion with undo, share a memory with date and place, create an album from the day, favorites,
+widgets, streaks, and a strict on-device privacy stance. Copying it gains nothing.
 
-## What we could verify, and what we could not
+The opening is still real. Three structural weaknesses run through the whole category and this
+app shares them: empty days, a feed with no context beyond the date, and delete as the only
+outcome. The target adds a fourth of its own: the free tier ends after seven reviewed days, which
+is the exact moment a daily habit is forming, and the lifetime price is three times the yearly.
+Our version wins on those four, keeps the daily ritual free forever, and gets the name and the
+store listing right where this one did not.
 
-Verified sources: search-engine index snippets of App Store listings, review pages, and press
-coverage. Not verified: the target's own listing page, its reviews page, and any app-intelligence
-estimate for it (Sensor Tower, Appfigures, Apptopia, AppAgg). None of those were reachable during
-research, so everything below about the target comes from index snippets, and everything about
-competitors comes from snippets of their listings, reviews, and press.
+## What we verified, and what we did not
 
-Facts we could pin down about the target:
+Verified on device from the App Store listing on 2026-09-08, and from the developer's own site and
+newsletter as indexed by search engines:
 
-- The id resolves to "On This Day • Photo Sweeper" on the App Store.
-- The only page any search engine has indexed is the Japanese storefront's "customers also
-  bought" page. No US listing page, no reviews page, no press, no Reddit, no TikTok, no Product
-  Hunt, no developer site surfaced under any query.
-- Neighboring ids hint at age. SwipeSwoop (6752326592) shipped version 1.0.0 on 2025-09-20 and
-  This Day (6758584686) shipped in early 2026, so the target's record was probably created in the
-  second half of 2025. Apple assigns the id when the record is created, which can be well before
-  release, so treat this as a hint. The version history in the manual check is the evidence.
+| Field | Value |
+|---|---|
+| Name and subtitle | On This Day • Photo Sweeper. "Tidy the past to spark joy" |
+| Developer | OmarKnows LLC, Omar Shahine. Site: omarknows.app/on-this-day |
+| Category, age rating | Photo & Video, 4+ |
+| Ratings | 4 ratings, 5.0 average. One visible review thanks the developer by first name |
+| Current version | 1.1.3, shipped about a month before this research. Added "Group by Year" |
+| Launch | Privacy policy effective 2025-09-01. The developer dates his first app to September 2025 |
+| Platform | Built for iOS 26. iPad and Mac support not stated |
+| Free tier | Everything, until the user has reviewed seven days |
+| Paid | $1.99 a month, $19.99 a year, $59.99 lifetime. Unlocks unlimited days, widgets, custom icons |
+| Privacy label claims | On-device only, zero telemetry, no analytics, no accounts, no uploads, no ads |
+
+Not verified: download or revenue estimates (no app-intelligence site indexes it), whether it
+runs on iPad, localization, the exact version history dates, and how the triage screen behaves
+beyond what the store screenshots show. The developer's newsletter post about his first year of
+apps was not reachable in full, so any numbers in it are unknown.
+
+Facts about its footprint:
+
+- The only page any search engine had indexed for the app itself was the Japanese storefront's
+  "customers also bought" page. No press, no Reddit, no TikTok, no Product Hunt. Distribution is
+  the developer's own newsletter, Threads, and X audience.
 - The name collides with PhotoSweeper, a Mac duplicate finder sold since 2011 by Overmacs, and
-  with PhotoSweeper Mobile (2024). Every search for the target's name returned those apps first.
-  That is an ASO problem the developer chose for themselves.
+  with PhotoSweeper Mobile (2024). Every search for the target's name returns those apps first.
+- The subtitle spends its 30 characters on a Marie Kondo reference with no search keyword in it.
 
-Facts we could not pin down: developer name, subtitle, description text, price points, rating
-count, version history, privacy labels, screenshots. The next section reconstructs the feature
-set from the category, and marks it as reconstruction.
+## What the app does (verified)
 
-Five-minute manual check for whoever has an iPhone in hand. Open the link, then record:
+From the listing text and screenshots.
 
-1. Developer name and whether it links to a developer page with other apps.
-2. Subtitle and the first two lines of the description.
-3. In-app purchase list with prices (scroll to Information).
-4. Rating count and average, and the date of the oldest review.
-5. Version history dates. Note the time since the last update and whether the developer has
-   other apps. One entry on an app that is months old suggests low activity, not proof of
-   abandonment.
-6. App Privacy label. "Data Not Collected" or something else.
-7. Screenshot of the paywall after install. Note trial length and default plan.
+Daily memory resurfacing.
 
-Paste those into the "Target listing" section at the end of this file.
+- Photos and videos taken on today's date across past years, grouped by year, newest first.
+- Swipe to keep or delete. Undo anytime. Deletion happens at the end of the session, with a
+  "real storage-saved" count.
+- Inline video playback and Live Photo autoplay.
+- Share a memory with its date and location, formatted for texts and stories.
+- Create an album from the day in Apple Photos. Favorite. View full metadata in place.
+- Browse any date with a date picker.
 
-## What the app does (reconstructed)
+Library upkeep. The listing says "reduce clutter and duplicates" and "clear out screenshots and
+throwaways", but it names no detection feature, so read that as marketing for the swipe flow.
 
-Treat this as the category template, not a verified feature list. Every "On This Day" cleaner we
-could read does all of it, and the target's name promises the first two.
+Habit. Streak stats, reclaimed-space total, optional daily reminder.
 
-- Daily feed of photos and videos taken on today's date in each prior year.
-- Swipe right to keep, swipe left to delete. Deleted items go to a trash list, then the app calls
-  the Photos delete, which triggers the iOS confirmation dialog.
-- Storage-saved counter and a running count of photos reviewed.
-- Streak and a daily reminder notification.
-- Home Screen widget showing today's memory.
-- Some add month-by-month browsing, a duplicates finder, or screenshot cleanup.
-- Freemium. Free tier gated by a daily swipe cap or ads. Paywall with weekly and yearly plans and
-  a three-day trial.
+Widgets. Small, medium, and large Home Screen widgets that show the day's memories and the streak
+and open the review. Paid only.
 
-## What the app does not do (and neither does the category)
+Privacy. All processing on device, no accounts, no uploads, no analytics, no ads.
 
-These gaps come from reading reviews and comparison articles across Swipewipe, Cleanup,
-Slidebox, This Day, Favvy, Clever Cleaner, LuminaClean, Odays, and the memory-viewer apps.
+The store screenshot shows a grid of the day's photos ("April 26, 50 Photos") with a filter
+control, not a card stack, so the triage view is probably a grid you tap into rather than a
+Tinder-style deck.
 
-1. Empty days. If you took no photos on this date in any prior year, the app has nothing to
-   show. A daily-habit product with a random empty day is a retention leak. No app we found has a
-   fallback.
-2. Weekly billing. The loudest complaint in every review set. Swipewipe's paywall shows $8.99 to
-   $9.99 a week, and Cleanup shows $4.99 to $11.99 a week depending on the source. Users describe
-   the trial-to-charge flow as a trap.
-3. Privacy fear. Swipewipe's privacy policy says photos may be uploaded. Reviewers flag it. The
-   free apps (Clever Cleaner, LuminaClean, Cull) all lead with "100% on device" because it sells.
-4. No context. The feed is a date. No place name, no grouping into moments, no "this was the
-   trip to Lisbon". The nostalgia half of the product is thin.
-5. Delete is the only exit. Keep or delete. Nothing to do with a good memory except leave it.
-   Timehop proved that sharing a memory is the retention loop, and none of the cleaners have it.
-6. No burst culling on the day. The storage is in the eleven near-identical shots of the same
-   sunset, not in the one screenshot. Only the general cleaners do similar-photo detection, and
-   reviewers call Swipewipe's unreliable.
-7. Crashes on bulk delete. Multiple Swipewipe reviews report crashes when deleting around 4,000
-   items at once.
-8. No Live Photo or video compression in the daily flow. This Day is the exception and gates it
-   behind Premium.
-9. No iCloud Shared Photo Library or shared albums. Photos On This Day (a viewer, not a
-   cleaner) is the only app that mentions shared photos.
-10. No iPad or Mac parity, no sync of what you already reviewed. SwipePhotos is the one
-    cross-device pick and it is a general cleaner.
-11. No undo after commit. Everything relies on the Photos "Recently Deleted" album.
-12. No interactive widget, no Lock Screen widget, no Watch, no Shortcuts.
+## What the app does not do
+
+Specific to the target, from its own listing:
+
+1. No automatic fallback on an empty day. The date picker lets the user hunt for one by hand.
+2. No grouping below the year. No moments, no place names, even though it already reads
+   location for sharing.
+3. No maybe pile. Keep or delete, then the session ends.
+4. No near-duplicate or burst detection, and no Live Photo or video compression.
+5. No mention of iCloud Shared Photo Library or shared albums.
+6. No iPad or Mac, and no sync of review state across devices.
+7. Widgets are display-only and paid. No interactive widget, Lock Screen widget, Watch, or
+   Shortcuts.
+8. The free tier is a seven-day trial by another name. After seven reviewed days the daily
+   ritual itself is paywalled.
+
+Shared with the whole category, from reviews and comparison articles across Swipewipe, Cleanup,
+Slidebox, This Day, Favvy, Clever Cleaner, LuminaClean, Odays, and the memory-viewer apps:
+
+9. Weekly billing at the publisher-owned apps. Swipewipe's paywall shows $8.99 to $9.99 a week
+   and Cleanup shows $4.99 to $11.99 a week depending on the source. Users describe the
+   trial-to-charge flow as a trap. The target avoids this, to its credit.
+10. Privacy fear. Swipewipe's privacy policy says photos may be uploaded. The free apps and the
+    target all lead with "on device" because it sells.
+11. Crashes on bulk delete. Multiple Swipewipe reviews report crashes near 4,000 items.
+12. Delete is the only exit for a good memory. Timehop proved that sharing is the retention
+    loop. The target has share and album creation, which is more than most cleaners.
 
 ## The goal
 
@@ -113,14 +123,17 @@ Two jobs fused into one habit.
   anxiety.
 
 The fusion is the insight. Nostalgia makes the chore pleasant, which makes it daily, which makes
-a subscription defensible. The target app is a bet that a focused, daily version of Swipewipe's
-"On This Day" tab can stand alone. This Day made the same bet six months later with better
-execution and got the 9to5Mac Indie App Spotlight for it.
+a paid tier defensible. The target's own tagline says it: "one day, one memory, one swipe at a
+time." Its goal is modest and personal. It was the developer's first app, built for his own
+library, with a no-account, no-ads, no-tracking ethos he applies to all five of his apps. This
+Day made the same bet a few months later with a clearer free tier and got the 9to5Mac Indie App
+Spotlight for it.
 
 ## Pricing landscape
 
 | App | Free tier | Paid | Notes |
 |---|---|---|---|
+| On This Day • Photo Sweeper (target) | Full app until seven days are reviewed | $1.99 a month, $19.99 a year, $59.99 lifetime | 4 ratings, 5.0. Widgets and icons paid only |
 | Swipewipe (MWM) | Limited swipes, ads | $8.99 to $9.99 a week, $109.99 a year. Older reviews cite $24 to $40 a year | 3-day trial. 4.7 stars, 84K US ratings. Sensor Tower estimated 400K downloads and $1M revenue in one month (early 2026). 1M+ MAU. Acquired by MWM June 2024 |
 | Cleanup (BPMobile) | Trial into weekly | $4.99 to $11.99 a week by source, $44.99 lifetime | Around 600K ratings. Auto-enrolls into weekly after trial |
 | CleanMy Phone (MacPaw) | 3-day trial | About $7.99 a month, $19.99 a year on promotion | Most polished automated cleaner |
@@ -136,10 +149,15 @@ execution and got the 9to5Mac Indie App Spotlight for it.
 | Memories: Relive Your Photos | Everything free | None | Viewer |
 
 Two pricing worlds. The publisher-owned apps (MWM, BPMobile, MacPaw) charge $5 to $12 a week and
-buy the users back with TikTok ads. The indies charge $5 to $30 a year or a one-time $5 to $18.
-Reviews punish the first group and the search term "photo cleaner no subscription" has enough
-demand that LuminaClean writes SEO posts against it. The middle is open: a free daily ritual with
-a fair lifetime unlock and no weekly plan anywhere in the app.
+buy the users back with TikTok ads. The indies charge $2 to $30 a year or a one-time $5 to $18.
+Reviews punish the first group, and the search term "photo cleaner no subscription" has enough
+demand that LuminaClean writes SEO posts against it.
+
+The target sits in the indie group on price but gets two things wrong. Its free tier is a trial
+that ends after a week of use, so the habit it is selling is the thing it takes away. And its
+lifetime is $59.99, three times the yearly, when the category norm for a one-time unlock is $5 to
+$30. The middle is open: a free daily ritual forever, a fair lifetime unlock, and no weekly plan
+anywhere in the app.
 
 ## Competitor map
 
@@ -149,9 +167,10 @@ Publisher-scale cleaners. Swipewipe, Cleanup, CleanMy Phone, Slidebox. Big audie
 pricing, paid acquisition. Swipewipe's founder Adam O'Kane launched on Product Hunt in 2022, went
 viral on TikTok with Gen Z, and sold to MWM in 2024. Their "On This Day" is one tab among many.
 
-Indie daily-ritual cleaners. This Day, Odays, the target, Keep or Sweep, SwipeSwoop, PhotoSwipe,
+Indie daily-ritual cleaners. The target, This Day, Odays, Keep or Sweep, SwipeSwoop, PhotoSwipe,
 Swoto, Swipe & Tidy, Sift, Sifty, Siftly. Most launched between mid-2025 and mid-2026. This Day
-is the one with press and a clear free tier.
+is the one with press and a clear free tier. The target is the one with the most honest privacy
+stance and the most complete "do something with the memory" set (share, album, favorite).
 
 Memory viewers with no cleanup. On This Day (Grossmann), Photos On This Day (Kyle Coburn), On
 This Day Rewind, Years, Ayer, Memories: Relive Your Photos, Rewind: Memories on This Day, On This
@@ -164,60 +183,70 @@ risk that Apple ships a native "On This Day" is the biggest external risk to the
 
 ## What we do better
 
-Ranked by how much each bet moves retention or conversion, with the cheapest bets first inside
-each tier.
+Ranked by how much each bet moves retention or conversion. Each line says whether the target
+already has it, so nobody mistakes table stakes for a moat.
 
 Tier 1, the habit.
 
-1. Never an empty day. If today's date has nothing, widen to this week in past years, then to
-   a day you have not reviewed yet, then to a day the index knows has photos, even one you
-   already reviewed. The app keeps an index of non-empty days, so the last fallback cannot come
-   up empty. If the library itself is empty, show a completion state instead of a blank feed.
-2. Moments, not a date. Group the day's photos by time gap and location, reverse-geocode the
-   place name, and label the group "Lisbon, 2019, 14 photos". Same data, ten times the feeling.
-3. Three piles plus a maybe. Keep, delete, star (writes the Photos favorite), and a maybe pile
-   that comes back in 30 days. Maybe is where most guilt-deletes go, and it stops the "I deleted
-   the wrong one" review.
-4. Pending trash with unlimited undo. Nothing leaves the library until the user taps "empty
-   trash". Commit in bounded, resumable batches of about 500 assets, so a 4,000-item session is
+1. Never an empty day. Target: no, it has a manual date picker. If today's date has nothing,
+   widen to this week in past years, then to a day you have not reviewed yet, then to a day the
+   index knows has photos, even one you already reviewed. The app keeps an index of non-empty
+   days, so the last fallback cannot come up empty. If the library itself is empty, show a
+   completion state instead of a blank feed.
+2. Moments, not a date. Target: no, it groups by year only. Group the day's photos by time gap
+   and location, reverse-geocode the place name, and label the group "Lisbon, 2019, 14 photos".
+   Same data, ten times the feeling.
+3. Three piles plus a maybe. Target: keep and delete only, plus favorite. Add a maybe pile that
+   comes back in 30 days. Maybe is where most guilt-deletes go, and it stops the "I deleted the
+   wrong one" review.
+4. Pending trash with unlimited undo. Target: yes, end-of-session deletion with undo. Match it,
+   then commit in bounded, resumable batches of about 500 assets, so a 4,000-item session is
    eight prompts instead of thousands and no single PhotoKit transaction is large enough to hit
    the bulk-delete crashes reviewers report.
-5. The widget does the work. Interactive Home Screen widget with keep and star buttons through
-   App Intents, a Lock Screen widget, StandBy, and a Watch complication. Delete from the widget
-   queues into pending trash, because the Photos confirmation dialog cannot show from a widget.
+5. The widget does the work. Target: display-only widgets, paid. Ship an interactive Home Screen
+   widget with keep and star buttons through App Intents, a Lock Screen widget, StandBy, and a
+   Watch complication, in the free tier. Delete from the widget queues into pending trash,
+   because the Photos confirmation dialog cannot show from a widget.
+6. Free daily ritual, forever. Target: free for seven reviewed days, then paywalled. The daily
+   review is the habit and the marketing. Never gate it.
 
 Tier 2, the storage.
 
-6. Cull the burst on the day. Inside a moment, detect near-duplicates on device with Vision
-   feature prints, show them side by side, pick the sharpest by default. This is where the bytes
-   are.
-7. Shrink instead of delete. Strip Live Photo motion and compress videos from the same flow, with
-   a byte count shown before you commit. This Day gates this behind Premium. We make it Pro too,
-   but the counter is free so the value is visible.
-8. Honest byte counts. Sum real asset resource sizes, not estimates, and report iCloud-offloaded
-   items separately. Label the total "pending" until the user empties Recently Deleted, because
-   Photos keeps deleted items for up to 30 days and the app cannot purge that album. Show the
-   one-tap path to Recently Deleted so the number in Settings catches up.
+7. Cull the burst on the day. Target: no detection. Inside a moment, detect near-duplicates on
+   device with Vision feature prints, show them side by side, pick the sharpest by default. This
+   is where the bytes are.
+8. Shrink instead of delete. Target: no. Strip Live Photo motion and compress videos from the
+   same flow, with a byte count shown before you commit. This Day gates this behind Premium. We
+   make it Pro too, but the counter is free so the value is visible.
+9. Honest byte counts. Target: claims "real storage-saved stats". Sum real asset resource sizes,
+   report iCloud-offloaded items separately, and label the total "pending" until the user empties
+   Recently Deleted, because Photos keeps deleted items for up to 30 days and the app cannot
+   purge that album. Show the one-tap path to Recently Deleted so the number in Settings catches
+   up.
 
 Tier 3, the memory.
 
-9. Send this memory. One tap to share the day's best photo to the person in it via Messages, or
-   save a story card. Nostalgia has a social loop. Cleaners ignore it.
-10. Shared Library and shared albums included, marked so the user knows a delete affects the
-    family library.
+10. Send this memory. Target: yes, share with date and location. Match it and add a story card
+    and a one-tap send to the person in the photo via Messages.
+11. Album from the day. Target: yes. Table stakes now. Match it.
+12. Shared Library and shared albums included. Target: not mentioned. Mark shared items so the
+    user knows a delete affects the family library.
 
 Tier 4, trust.
 
-11. Privacy as the headline. No servers of ours and no analytics SDK. The only network traffic
-    is Apple's own iCloud (for library sync and offloaded originals) and Apple's geocoder for
-    place names, and geocoding is a setting the user can turn off. App Privacy label "Data Not
-    Collected". Say it in the subtitle. The free competitors already proved this converts.
-12. No weekly plan. No trial that charges silently. A 7-day trial exists only on the annual plan
-    and the app sends a local reminder 24 hours before it converts.
-13. iPhone, iPad, and Mac from one SwiftUI codebase, with review state synced through CloudKit so
-    you never re-review a photo.
-14. Localized at launch: Japanese, German, Spanish, Portuguese (Brazil), French. The target lives
-    on the Japanese store. The category is global and most indies ship English only.
+13. Privacy as the headline. Target: yes, and stated well. Match it: no servers of ours and no
+    analytics SDK. The only network traffic is Apple's own iCloud (for library sync and offloaded
+    originals) and Apple's geocoder for place names, and geocoding is a setting the user can turn
+    off. App Privacy label "Data Not Collected". Say it in the subtitle.
+14. No weekly plan and no trial that charges silently. Target: no weekly plan either. A 7-day
+    trial exists only on the annual plan and the app sends a local reminder 24 hours before it
+    converts.
+15. iPhone, iPad, and Mac from one SwiftUI codebase, with review state synced through CloudKit so
+    you never re-review a photo. Target: iPhone only as far as the listing says.
+16. Localized at launch: Japanese, German, Spanish, Portuguese (Brazil), French. Target: not
+    stated. The category is global and most indies ship English only.
+17. A name and subtitle that search can find. Target: name collides with PhotoSweeper and the
+    subtitle has no keywords. See Names.
 
 ## Names
 
@@ -241,7 +270,8 @@ part of this research and are on the owner.
 | Sift, Sifty, Siftly, Cull | Four swipe cleaners launched on these in 2026 | Pass |
 | Retrospect, Ember, Kindling, Tinder | Trademarks in other categories | Pass |
 
-App Store title is 30 characters and the subtitle is 30. Working set for Winnow:
+App Store title is 30 characters and the subtitle is 30. The target spends its subtitle on "Tidy
+the past to spark joy", which no one searches for. Working set for Winnow:
 
 - Title: "Winnow: On This Day Cleaner" (27)
 - Subtitle: "Relive today. Tidy your photos" (30)
@@ -253,13 +283,16 @@ App Store title is 30 characters and the subtitle is 30. Working set for Winnow:
 
 | Tier | Price | What it unlocks |
 |---|---|---|
-| Free | $0 | Unlimited daily review of today's date, widget, streak, pending trash, byte counter, star |
+| Free | $0 | Unlimited daily review of today's date, widgets, streak, pending trash, byte counter, star, share, album |
 | Pro lifetime | $19.99, launch at $14.99 | Burst culling, Live Photo and video shrink, maybe pile, date-window and "any day" browsing, CloudKit sync, iPad and Mac, alternate icons |
 | Pro yearly | $9.99 | Same as lifetime, for people who prefer it. Family Sharing on |
 
 No weekly plan. No monthly plan. The free tier is the whole daily ritual, so the app is usable
 forever without paying, and the paywall shows up when the user asks for a Pro feature, never on
-first launch.
+first launch and never after day seven.
+
+Against the target: our lifetime equals its yearly, our free tier never ends, and our widgets are
+free. Against This Day: our lifetime is two thirds of its yearly.
 
 Revenue reality. Swipewipe's estimated $1M a month comes from weekly pricing plus paid TikTok
 acquisition. Fair pricing will not match that per user, so volume has to come from organic
@@ -281,7 +314,7 @@ channels and press. Sanity math before Apple's cut:
   required, and no servers of ours", because that is the angle the reviewers keep rewarding. The
   yearly plan exists, so never say "no subscription" flat.
 - Product Hunt launch. SwipeSwoop got 150 upvotes there in September 2025 and Odays launched
-  there too.
+  there too. The target never launched anywhere public.
 - Reddit r/iphone and r/apple threads asking for a "swipe to delete" app appear weekly. Answer
   them with the app.
 - Seasonal spikes: January cleanup, September new-iPhone migration, and the day the "iPhone
@@ -298,8 +331,8 @@ keyed by the asset's local identifier for the on-device cache and by its iCloud 
 (PhotoKit's cloud identifier mapping) for the synced record, because the local identifier differs
 per device and would make synced photos come back for review.
 
-Week 3. Swipe deck, three piles plus maybe, pending trash, one batched delete at commit, byte
-counter from asset resources.
+Week 3. Swipe deck, three piles plus maybe, pending trash, bounded batched delete at commit, byte
+counter from asset resources, share sheet with date and place, album from the day.
 
 Week 4. Widgets. Home Screen with interactive keep and star, Lock Screen, StandBy. Daily local
 notification. Streak.
@@ -314,8 +347,8 @@ the two releases after 1.0.
 
 Technical notes.
 
-- Photos always shows its own confirmation dialog on delete, with the item count. One batched
-  delete per session is the only way to make that tolerable.
+- Photos always shows its own confirmation dialog on delete, with the item count. Batched
+  deletes at commit are the only way to make that tolerable.
 - There is no public API to restore from "Recently Deleted". The pending trash is ours, so undo is
   free until commit.
 - PhotoKit exposes both the personal library and the shared iCloud library through fetch
@@ -336,17 +369,23 @@ Technical notes.
 
 - Apple ships a native "On This Day" in Photos. Google has had one since 2015. The cleanup half
   survives that, the memory half does not. Ship the cleanup half well.
+- The target's developer ships with AI tooling, has a newsletter audience, and added "Group by
+  Year" eleven months in. Expect him to close obvious gaps if he sees them. The moat is the
+  habit design, the pricing stance, and distribution, not the feature list.
 - Photos permission drop-off. Ask for full library access only after showing what the app does
   with a limited selection.
-- The template is cheap to copy. Fifteen apps prove it. The moat is the habit design and the
-  pricing stance, not the code.
+- The template is cheap to copy. Fifteen apps prove it.
 - Fair pricing means slower revenue. Decide up front whether this is a side product or a
   business that needs paid acquisition.
 
 ## Sources
 
+- Target listing, verified on device 2026-09-08: https://apps.apple.com/app/id6752840632
+- Target site: https://omarknows.app/on-this-day/
+- Target privacy policy: https://omar.shahine.com/apps/on-this-day-privacy
+- Developer's account of his first year of apps: https://www.omarknows.com/p/four-ios-apps-one-year-and-a-lot
+- Developer's app portfolio: https://omarknows.app/
 - App id resolution: https://apps.apple.com/jp/app/on-this-day-photo-sweeper/id6752840632?see-all=customers-also-bought-apps&platform=iphone
-- SwipeSwoop launch date (id calibration): https://huntscreens.com/en/products/swipeswoop and https://www.producthunt.com/products/swipeswoop
 - This Day, 9to5Mac Indie App Spotlight: https://9to5mac.com/2026/05/02/indie-app-spotlight-this-day-photo-cleanup-tool/
 - This Day listing: https://apps.apple.com/us/app/this-day-photo-cleaner/id6758584686
 - On This Day (Grossmann), MacStories: https://www.macstories.net/reviews/on-this-day-my-new-favorite-way-to-revisit-old-photos/
@@ -362,20 +401,9 @@ Technical notes.
 - Slidebox pricing: https://sourceforge.net/software/product/Slidebox/
 - Favvy pricing: https://www.favvyapp.com/en/pricing
 - Odays: https://www.producthunt.com/products/odays
+- SwipeSwoop launch: https://www.producthunt.com/products/swipeswoop
 - Photos On This Day: https://apps.apple.com/us/app/photos-on-this-day/id1620659723
 - On This Day: Memories (APPSKY): https://apps.apple.com/jp/app/on-this-day-memories/id6758696641
 - Google Photos Rediscover this day: https://techcrunch.com/2015/08/20/google-photos-introduces-rediscover-this-day-to-help-you-reminisce/
 - Apple Photos duplicates: https://support.apple.com/guide/iphone/merge-duplicate-photos-and-videos-iph1978d9c23/ios
 - PhotoSweeper (name collision): https://apps.apple.com/us/app/photosweeper/id463362050?mt=12
-
-## Target listing (fill in by hand)
-
-| Field | Value |
-|---|---|
-| Developer | |
-| Subtitle | |
-| In-app purchases | |
-| Rating count and average | |
-| Version history | |
-| Privacy label | |
-| Paywall (trial, default plan) | |
