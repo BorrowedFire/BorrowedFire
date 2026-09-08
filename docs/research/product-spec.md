@@ -71,7 +71,8 @@ Things users ask for that few or no apps ship. Each has a demand source in simil
    the commit screen that a delete from a Shared Library affects everyone in it, and the badge
    waits. Demand: Apple's own warning and Photos On This Day's positioning.
 4. Shrink instead of delete. Live Photo to still and video re-encode from the same card, with
-   the byte delta shown before commit, metadata and album membership copied to the replacement.
+   the byte delta shown before commit, and the supported metadata and album membership copied to
+   the replacement (see Deletion safety for what cannot be copied).
    Demand: "no easy way to batch convert Live Photos"; CleanMy Phone's main paid draw.
 5. Screenshots as their own lane. A screenshot never appears in the memory feed. They get a
    separate weekly sweep, grouped by month in 1.0. PhotoKit only flags that an asset is a
@@ -186,14 +187,18 @@ it converts.
   commit screen warns that a delete from a Shared Library affects every participant.
 - Shrink copies creation date, location, and favorite onto the replacement, re-adds it to every
   album the original was in, renders from the edited version, and trashes the original only
-  after the replacement exists.
+  after the replacement exists. Public PhotoKit cannot copy a caption or a People assignment,
+  and rendering flattens the edit history, so Shrink lists those losses per asset and asks for
+  confirmation before trashing, and skips by default any asset that has a caption or edits.
 - A session that crashes mid-commit resumes from the last completed batch.
 
 ## Empty-day ladder, precisely
 
 The app maintains an index of days that have at least one non-screenshot asset, refreshed on
 launch and on Photos change notifications. The ladder queries the index, so the last rung cannot
-return nothing. Each rung is labeled in the Today header so the user knows why they are seeing
+return nothing while the index has an entry. If the index is empty, because the library is empty
+or the granted selection holds only screenshots, Today shows the completion state and offers the
+screenshots lane. Each rung is labeled in the Today header so the user knows why they are seeing
 it. Every rung is free when the ladder reaches it on its own. Rung 4 uses the same engine as
 Pro's any-day browsing, and Pro gates only the manual use of that engine, never the automatic
 fallback.
