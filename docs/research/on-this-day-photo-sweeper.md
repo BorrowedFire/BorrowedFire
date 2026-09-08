@@ -151,10 +151,12 @@ Spotlight for it.
 | Quick Sweep | Free | $4.99, $19.99, $29.99 one-time tiers | |
 | Memories: Relive Your Photos | Everything free | None | Viewer |
 
-Two pricing worlds. The publisher-owned apps (MWM, BPMobile, MacPaw) charge $5 to $12 a week and
-buy the users back with TikTok ads. The indies charge $2 to $30 a year or a one-time $5 to $18.
-Reviews punish the first group, and the search term "photo cleaner no subscription" has enough
-demand that LuminaClean writes SEO posts against it.
+Two pricing worlds. The weekly-priced apps (Swipewipe and Cleanup at the top, Swipe Clean and
+Sifty among the small ones) charge $3 to $12 a week and buy the users back with ads. Slidebox
+and CleanMy Phone sit at $25 to $50 a year. The indies charge $2 to $30 a year, with one-time
+unlocks from $5 to $30 and two outliers at $44.99 (Cleanup) and $59.99 (the target). Reviews
+punish weekly billing, and the search term "photo cleaner no subscription" has enough demand
+that LuminaClean writes SEO posts against it.
 
 The target sits in the indie group on price but gets two things wrong. Its free tier is a trial
 that ends after a week of use, so the habit it is selling is the thing it takes away. And its
@@ -221,8 +223,10 @@ Tier 2, the storage.
 8. Shrink instead of delete. Target: no. Strip Live Photo motion and compress videos from the
    same flow, with a byte count shown before you commit. This Day gates this behind Premium. We
    make it Pro too, but the counter is free so the value is visible.
-9. Honest byte counts. Target: claims "real storage-saved stats". Sum real asset resource sizes,
-   report iCloud-offloaded items separately, and label the total "pending" until the user empties
+9. Honest byte counts. Target: claims "real storage-saved stats". Measure an original that is
+   on the device by streaming it through the asset resource manager, since PhotoKit exposes no
+   public size property, estimate an offloaded one from pixel size and duration with a "~"
+   mark, and never download to measure. Label the total "pending" until the user empties
    Recently Deleted, because Photos keeps deleted items for up to 30 days and the app cannot
    purge that album. Show the steps to Recently Deleted with a button that opens Photos, since
    iOS has no link straight to that album, so the number in Settings catches up.
@@ -288,8 +292,8 @@ the past to spark joy", which no one searches for. Working set for Winnow:
 
 | Tier | Price | What it unlocks |
 |---|---|---|
-| Free | $0 | Unlimited daily review of today's date, widgets, streak, pending trash, maybe pile, byte counter, star, share, album |
-| Pro lifetime | $19.99, launch at $14.99 | Burst culling, Live Photo and video shrink, date-window and "any day" browsing, CloudKit sync, iPad and Mac, alternate icons |
+| Free | $0 | Unlimited daily review of today's date, widgets, streak, pending trash, maybe pile, byte counter, star, share, album, the iPad and Mac apps |
+| Pro lifetime | $19.99, launch at $14.99 | Burst culling, Live Photo and video shrink, date-window and "any day" browsing, CloudKit sync of review state across iPhone, iPad, and Mac, alternate icons |
 | Pro yearly | $9.99 | Same as lifetime, for people who prefer it. Family Sharing on |
 
 No weekly plan. No monthly plan. The free tier is the whole daily ritual, so the app is usable
@@ -337,7 +341,8 @@ keyed by the asset's local identifier for the on-device cache and by its iCloud 
 per device and would make synced photos come back for review.
 
 Week 3. Swipe deck, three piles plus maybe, pending trash, bounded batched delete at commit, byte
-counter from asset resources, share sheet with date and place, album from the day.
+counter (measured when the original is local, estimated when offloaded), share sheet with date
+and place, album from the day.
 
 Week 4. Widgets. Home Screen with interactive keep and star, Lock Screen, StandBy. Daily local
 notification. Streak.
@@ -347,8 +352,8 @@ Store assets.
 
 Week 6. Polish, large-library performance pass (100K assets), localization pass, TestFlight.
 
-Pro features (burst culling, Live Photo and video shrink, CloudKit sync, iPad and Mac) ship in
-the two releases after 1.0.
+Pro features (burst culling, Live Photo and video shrink, CloudKit sync) and the iPad and Mac
+apps ship across the three releases after 1.0, in the order product-spec.md gives.
 
 Technical notes.
 
@@ -369,8 +374,8 @@ Technical notes.
 - Interactive widgets run through App Intents. Keep and star are safe from the widget. Delete
   queues only.
 - iCloud-optimized libraries stall on full-resolution loads. Review on thumbnails, load full
-  resolution only for the cull view and for Shrink, which downloads an offloaded original with
-  visible progress and a cancel, and never block a swipe on a network fetch.
+  resolution only for the cull view, Shrink, and Share, each of which downloads an offloaded
+  original with visible progress and a cancel, and never block a swipe on a network fetch.
 
 ## Risks
 

@@ -49,7 +49,7 @@ Paid = cheapest recurring and one-time prices seen.
 | On This Day Rewind (Grossmann), id6754617354 | viewer | yes, by year | no | no | delete only | 4 sizes, adjustable count | iPad, Vision Pro | last 3 years | $4.99 one-time or $0.99 mo | too few |
 | Photos On This Day (Coburn), id1620659723 | viewer | yes, plus Shared Photos | no | no | no | yes | iPad, Vision Pro | free | n/f | n/f |
 | Memories: Relive Your Photos, id1037130497 | viewer | yes, source selectable | no | no | delete only | yes | no | everything | none | n/f |
-| On This Day Photos, id6467105878 | viewer | yes, any day | no | no | no | yes, tap to cycle | iPhone, iPad, Mac | n/f | n/f | n/f |
+| On This Day Photos, id6467105878 | viewer | yes, any day | no | no | no | yes, refreshes through the day | iPhone, iPad, Mac | n/f | n/f | n/f |
 | ThenNow, id6711347898 | viewer | yes, plus Footprints map | no | no | no | n/f | n/f | free | IAP | n/f |
 | On This Day: Memories (APPSKY), id6758696641 | viewer | yes, vision-curated | no | no | curate | n/f | Mac, visionOS | n/f | n/f | too few |
 | On This Day - Daily Memories (Tiny Whale), id6794757309 | viewer and cleanup | yes | no | no | in-app cleanup | n/f | n/f | n/f | n/f | n/f |
@@ -130,15 +130,17 @@ notification across all years.
 Across all 34 rows (32 apps and the two native platforms):
 
 - No Lock Screen, StandBy, or Apple Watch widget was found for any app.
-- No interactive widget. Every widget is a picture that opens the app.
+- No widget with keep, delete, or star actions. On This Day Photos' widget cycles photos on its
+  own; every other widget is a picture that opens the app.
 - No documented empty-day behavior except Timehop's trivia fallback.
 - No cleaner lets you scope "On This Day" to an album or a source, although two viewers do.
 - No app groups a day into moments by time and place. The finest grain anywhere is "by year".
 - No app labels reclaimed storage as pending until Recently Deleted is emptied.
 - No app pairs the daily ritual with near-duplicate culling inside the same day. The detection
   tools scan the whole library; the ritual apps have no detection.
-- No ritual app supports iPhone, iPad, and Mac with synced review state. Swipe & Tidy has the
-  platforms, Sift: Organize has the sync, nobody has both.
+- No ritual app supports iPhone, iPad, and Mac with synced review state. Swipe & Tidy has a Mac
+  build, Sift: Organize has iCloud sync, SwipePhotos has the three platforms without a memory
+  feed, and nobody has the feed, the platforms, and the sync together.
 
 ## Unmet needs, ranked by how often they came up
 
