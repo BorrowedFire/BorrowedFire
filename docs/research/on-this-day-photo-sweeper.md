@@ -168,8 +168,8 @@ anywhere in the app.
 
 Four groups.
 
-Publisher-scale cleaners. Swipewipe, Cleanup, CleanMy Phone, Slidebox. Big audiences, weekly
-pricing, paid acquisition. Swipewipe's founder Adam O'Kane launched on Product Hunt in 2022, went
+Publisher-scale cleaners. Swipewipe, Cleanup, CleanMy Phone, Slidebox. Big audiences and paid
+acquisition. Swipewipe and Cleanup bill weekly; Slidebox and CleanMy Phone bill yearly. Swipewipe's founder Adam O'Kane launched on Product Hunt in 2022, went
 viral on TikTok with Gen Z, and sold to MWM in 2024. Their "On This Day" is one tab among many.
 
 Indie daily-ritual cleaners. The target, This Day, Odays, Keep or Sweep, SwipeSwoop, PhotoSwipe,
@@ -234,7 +234,8 @@ Tier 2, the storage.
 Tier 3, the memory.
 
 10. Send this memory. Target: yes, share with date and location. Match it and add a story card
-    and a one-tap send to the person in the photo via Messages.
+    and a share sheet with the caption already written, where iOS suggests the people you
+    message most. The app never reads contacts.
 11. Album from the day. Target: yes. Table stakes now. Match it.
 12. Shared Library and shared albums included. Target: not mentioned. Mark shared items so the
     user knows a delete affects the family library. PhotoKit's cloud-shared source type marks
@@ -246,7 +247,8 @@ Tier 4, trust.
 13. Privacy as the headline. Target: yes, and stated well. Match it: no servers of ours and no
     analytics SDK. The only network traffic is Apple's own iCloud (for library sync and offloaded
     originals) and Apple's geocoder for place names, and geocoding is a setting the user can turn
-    off. App Privacy label "Data Not Collected". Say it in the subtitle.
+    off. App Privacy label "Data Not Collected". Say it in the first line of the description and on
+    the paywall, since the subtitle's 30 characters are spent on search terms.
 14. No weekly plan and no trial that charges silently. Target: no weekly plan either. A 7-day
     trial exists only on the annual plan and the app sends a local reminder 24 hours before it
     converts.

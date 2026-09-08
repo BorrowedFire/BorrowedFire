@@ -137,7 +137,8 @@ Across all 34 rows (32 apps and the two native platforms):
 - No app groups a day into moments by time and place. The finest grain anywhere is "by year".
 - No app labels reclaimed storage as pending until Recently Deleted is emptied.
 - No app pairs the daily ritual with near-duplicate culling inside the same day. The detection
-  tools scan the whole library; the ritual apps have no detection.
+  tools scan the whole library, and the four ritual apps that bundle a detector (Swoto, Swipy,
+  LuminaClean, Swipe Clean) run it library-wide too, never inside today's moments.
 - No ritual app supports iPhone, iPad, and Mac with synced review state. Swipe & Tidy has a Mac
   build, Sift: Organize has iCloud sync, SwipePhotos has the three platforms without a memory
   feed, and nobody has the feed, the platforms, and the sync together.
@@ -151,7 +152,8 @@ JustUseApp), so first-person Reddit quotes were rare.
 1. Near-similar and burst detection. Users say "Apple's duplicate detection only finds exact
    copies". Apple's utility does merge copies that differ in resolution or format, but a crop, a
    filter, or the next frame of a burst is never flagged. Partly met by CleanMy Phone, Clever
-   Cleaner, LuminaClean, Cull. Not met by any ritual app.
+   Cleaner, LuminaClean, Cull, and library-wide by Swoto, Swipy, and Swipe Clean. No ritual app
+   runs it inside the day.
 2. Screenshot cleanup that leaves personal photos alone. A whole sub-genre of single-purpose
    apps exists for it.
 3. Batch Live Photo to still. "There's no easy way to batch convert Live Photos" natively. Met by
