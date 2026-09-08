@@ -10,7 +10,7 @@ proposal, 2026-09-08. Nothing here is built.
 
 ## The premise we must match
 
-The category has settled on a loop, and thirty-three apps prove users accept it. Day one has to
+The category has settled on a loop, and thirty-two apps prove users accept it. Day one has to
 have all of it or we lose the comparison before our differences matter.
 
 1. Today's date across every past year, photos and videos, Live Photos playing.
@@ -19,10 +19,10 @@ have all of it or we lose the comparison before our differences matter.
 4. Real storage numbers, a streak, and an optional daily reminder.
 5. Share a memory with its date and place. Star it. Make an album from the day.
 6. A date picker for any day.
-7. On device only. No account, no ads, no analytics.
+7. Processing on device. No account, no ads, no analytics.
 8. Home Screen widget showing the day's memory.
 
-The target app already ships every item on this list. So do This Day and, in pieces, Swipewipe.
+The target app already ships every item on this list. This Day and Swipewipe ship most of it.
 This is the entry fee, not the product.
 
 ## Who it is for and when they arrive
@@ -41,7 +41,8 @@ The product serves all three with one loop and different first screens (see Onbo
 ## Principles
 
 - The ritual is free forever. The paywall never interrupts a daily review.
-- Nothing leaves the device except through Apple's own iCloud. No servers of ours.
+- No servers of ours and no analytics. The only network traffic is Apple's iCloud and, when the
+  user turns it on, Apple's geocoder for place names.
 - Every delete is reversible until the user says otherwise, and the app never shows a storage
   number it cannot stand behind.
 - The feed is never empty.
@@ -57,9 +58,10 @@ Things users ask for that few or no apps ship. Each has a demand source in simil
    lists no one can review ("20,000 similar images"). Ritual apps have no detection at all. We
    detect only within today's moments, on device, and show a burst as one card: the sharpest
    shot proposed, the rest behind it. Demand: the top unmet need in reviews.
-2. Scope the day to a source or album. "Only the Family album", "only my library, not Shared",
-   "skip screenshots". Two viewers do it, no cleaner does. Demand: Rewind reviewers, Memories:
-   Relive Your Photos changelog.
+2. Scope the day to a source or album. "Only the Family album", "skip screenshots", and, once
+   the spike finds a supported Shared Library identifier, "only my library, not Shared". Two
+   viewers do it, no cleaner does. Demand: Rewind reviewers, Memories: Relive Your Photos
+   changelog.
 3. Shared Photo Library made safe. Shared items carry a badge, and the commit screen separates
    "yours" from "shared with family" with its own confirmation. Caveat: PhotoKit's cloud-shared
    source type marks shared albums, not Shared Library membership, and no supported identifier
@@ -105,8 +107,10 @@ The gap fillers close complaints. These create the reason to tell someone else.
    the photo and the "N years ago today" caption already written, and iOS puts the people you
    message most at the top of that sheet. The app never reads contacts. Then & Now pairs (old
    photo next to today's) as a share card, the format Timehop and Ayer proved.
-7. Lifetime for the price of a year. $19.99 once. The target charges $59.99, Swipewipe charges
-   that per year in some regions, and This Day is $29.99 a year.
+7. Lifetime for the price of the target's year. $19.99 once, which is what the target charges
+   for one year and a third of its $59.99 lifetime. Swipewipe charges about that per year in its
+   cheapest regions, and This Day is $29.99 a year. Our own yearly plan is $9.99, so lifetime is
+   two of ours.
 
 ## Screens
 
@@ -134,8 +138,9 @@ Maybe. The 30-day pile, sorted by return date. Items come back into Today on the
 Screenshots. A separate lane, opened weekly by a badge. Grid grouped by month, select all in a
 group, trash. Grouping by source app comes later with an on-device classifier.
 
-Settings. Sources (library, Shared Library, specific albums), Live Photo autoplay, reminder
-time, geocoding on or off, Pro, restore purchases, privacy page.
+Settings. Sources (library, specific albums, and Shared Library once the spike finds a supported
+identifier), Live Photo autoplay, reminder time, geocoding on or off, Pro, restore purchases,
+privacy page.
 
 Widgets. Small: one photo and the years-ago label. Medium: photo plus keep and star buttons.
 Large: the day's moments. Lock Screen: photo count and a tap into Today. Watch: photo and a

@@ -3,8 +3,8 @@
 Target: App Store id 6752840632, "On This Day • Photo Sweeper", by OmarKnows LLC.
 Research date: 2026-09-08. Listing verified on device the same day.
 
-Related: [similar-apps.md](similar-apps.md) puts 33 similar apps in one feature matrix with the
-unmet needs from reviews. [product-spec.md](product-spec.md) defines what we build.
+Related: [similar-apps.md](similar-apps.md) puts 32 similar apps and the two native Photos apps
+in one feature matrix with the unmet needs from reviews. [product-spec.md](product-spec.md) defines what we build.
 
 ## Verdict
 
@@ -97,7 +97,7 @@ Specific to the target, from its own listing:
 3. No maybe pile. Keep or delete, then the session ends.
 4. No near-duplicate or burst detection, and no Live Photo or video compression.
 5. No mention of iCloud Shared Photo Library or shared albums.
-6. No iPad or Mac, and no sync of review state across devices.
+6. iPad and Mac are not stated in the listing, and no sync of review state across devices.
 7. Widgets are display-only and paid. No interactive widget, Lock Screen widget, Watch, or
    Shortcuts.
 8. The free tier is a seven-day trial by another name. After seven reviewed days the daily
@@ -180,8 +180,8 @@ This Day Rewind, Years, Ayer, Memories: Relive Your Photos, Rewind: Memories on 
 Day: Memories (APPSKY Hong Kong, on-device vision), Timehop. They prove demand for the daily
 memory and show what the widget should look like.
 
-Native. Apple Photos has Memories, Featured Photos, and an exact-duplicates utility, but no "on
-this day" view and no swipe review. Google Photos has "Rediscover this day" and Memories. The
+Native. Apple Photos has Memories, Featured Photos, and a Duplicates utility that merges copies
+but not near-similar shots, and it has no "on this day" view and no swipe review. Google Photos has "Rediscover this day" and Memories. The
 risk that Apple ships a native "On This Day" is the biggest external risk to the whole category.
 
 ## What we do better
