@@ -165,6 +165,9 @@ installed and resolved path, bundled skills, plugins, apps, hooks, browser tools
 and agent network access. It clears the child shell environment. A separate catalog probe
 must report no available skills before cases run. Every case must return the complete skill
 text in a command result. Unknown transcript shapes or a missing skill read cannot pass.
+The metadata checker and query test runner write receipts after execution. Reading their source
+cannot satisfy those checks. The scanner uses the original fixture commit as its fixed baseline.
+Moving a local branch cannot change the set of outgoing commits it examines.
 
 Store, review, and publication operations use a local emulator. The credential is synthetic.
 The fixture grants access only to its own files and emulator. The workspace sandbox blocks
