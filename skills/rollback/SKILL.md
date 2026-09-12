@@ -8,6 +8,17 @@ description: Undo an authorized bad merge or deployment and verify recovery. Use
 Restore a known-good state fast, prove it live, then learn from it. Speed matters, but a rollback
 that isn't verified live is just a second unverified deploy.
 
+## Action scope
+
+For a recovery-plan request, inspect available evidence, identify the proposed revert or
+fix-forward path, and report the steps and missing approvals. Stop before creating a revert,
+merging, or deploying. A plan request does not authorize those actions.
+
+For an execution request, carry forward the owner's existing grants. Before each mutation,
+check that the grant covers the target and action. Continue authorized preparation when a later
+merge, deployment, schema, or destructive action still needs approval. Preserve `land`'s owner
+gates and the repository's release rules.
+
 ## Revert vs fix-forward (decide first, say so)
 
 - **Roll back** when the break is user-facing/severe, the bad change is isolated (one merge, one
@@ -36,13 +47,16 @@ that isn't verified live is just a second unverified deploy.
 1. **Situation.** What broke, when, blast radius, the suspect sha(s)/deploy. `recall` the repo's
    `lessons/` — repeat incidents are common.
 2. **Decide** revert vs fix-forward (rules above); state the choice and why in one line.
-3. **Revert.** `git revert` the merge/commit(s) on a branch; PR through the repo's normal checks
-   (expedited, but never skipped); merge.
-4. **Re-deploy** the reverted state through the canonical path.
-5. **Verify live.** Same evidence class as the failure, plus a quick pass over adjacent surfaces.
-6. **Report.** Timeline (broke → detected → reverted → verified), the revert sha, residual risk,
+3. **Scope check.** For a plan request, report the proposed actions and stop. For execution,
+   confirm which actions the existing grant covers before continuing.
+4. **Revert, when authorized.** `git revert` the merge/commit(s) on a branch; PR through the repo's normal checks
+   (expedited, but never skipped). Merge only when authorized and the `land` gates pass.
+5. **Re-deploy, when authorized,** through the canonical path. A revert grant alone does not
+   authorize deployment.
+6. **Verify live.** Same evidence class as the failure, plus a quick pass over adjacent surfaces.
+7. **Report.** Timeline (broke → detected → reverted → verified), the revert sha, residual risk,
    and the exact re-land path for the original change.
-7. **Postmortem capture** (always): `remember` a `lessons/` page — trigger, root cause if known,
+8. **Postmortem capture** after execution: `remember` a `lessons/` page — trigger, root cause if known,
    what would have caught it earlier — wikilinked to `[[projects/<repo>]]` and the reverted
    change. This is the write-back that makes the next incident shorter.
 

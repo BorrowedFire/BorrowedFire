@@ -114,4 +114,51 @@ class SkillResourcesTest < Minitest::Test
     _, success = validate
     assert success
   end
+
+  def test_used_reference_styles_reject_missing_resources
+    ['[Guide][resource]', '[resource][]', '[resource]'].each do |usage|
+      skill(body: "#{usage}\n\n[resource]: missing.md\n")
+      report, success = validate
+      refute success
+      assert_equal 1, report['links']
+    end
+  end
+
+  def test_empty_inline_labels_and_image_alt_text_still_check_resources
+    ['[](missing.md)', '![](diagram.svg)'].each do |usage|
+      skill(body: usage)
+      report, success = validate
+      refute success
+      assert_equal 1, report['links']
+    end
+  end
+
+  def test_reference_labels_normalize_case_and_whitespace
+    File.write(File.join(@source, 'a guide.md'), 'A guide.')
+    skill(body: "[Guide][The   Guide]\n\n[the guide]:\n  <a guide.md> \"Optional title\"\n")
+    report, success = validate
+    assert success
+    assert_equal 1, report['links']
+  end
+
+  def test_unused_and_example_definitions_do_not_activate_resources
+    skill(body: "[Guide](https://example.test)\n`[Unused]`\n\\[Escaped]\n```md\n[Fenced]\n```\n\n[Guide]: missing.md\n[Unused]: missing.md\n[Escaped]: missing.md\n[Fenced]: missing.md\n")
+    report, success = validate
+    assert success
+    assert_equal 0, report['links']
+  end
+
+  def test_reference_links_follow_installed_transitive_resources
+    skill(body: "[Guide][guide]\n\n[guide]: guide.md\n")
+    File.write(File.join(@source, 'guide.md'), "[Receipt][]\n\n[receipt]: receipt.md\n")
+    File.write(File.join(@source, 'receipt.md'), 'Receipt.')
+    installed = File.join(@root, 'installed')
+    File.symlink(@source, installed)
+    report, success = validate(installed)
+    assert success
+    assert_equal 2, report['links']
+    File.unlink(File.join(@source, 'receipt.md'))
+    _, success = validate(installed)
+    refute success
+  end
 end
