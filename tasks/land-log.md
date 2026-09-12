@@ -268,3 +268,39 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
   failing, the reverse-direction ledger check proven both ways on a real brain copy, and the
   mirroring order pinned by a mutation that moves the instruction and fails. Suites: skill-lint
   19, test-install 198/198, test-brain 56/56, cycle 184/184, evals 48/48, shellcheck clean.
+
+## 2026-09-12: skill authority and executable guards (PR 16)
+
+- Item: https://github.com/BorrowedFire/BorrowedFire/pull/16. Clarify skill discovery and action
+  scope, validate installed resources, and add executable workflow guards.
+- Class: Autonomous preparation with owner-authorized review and merge. This change covers
+  instructions, validation tools, tests, and CI. It changes no production credential or service.
+- Independent review found a lost `ship` review trigger and two false passes in the workflow
+  scorer. Reading a checker could count as executing it. Moving local `main` could hide a
+  credential from the outgoing-history scan. The second scorer finding triggered this audit.
+
+### Evidence invariant
+
+The scorer must use evidence from the operation it claims to verify. A local branch name cannot
+redefine the publication baseline. Candidate cleanup may rewrite unpublished history while the
+original base and intended feature remain intact.
+
+| Entry or consumer | Authoritative state | Required negative path |
+|---|---|---|
+| Metadata checker and bump scorer | Receipt written after successful validation | Reading source emits no receipt. |
+| Query tests and audit scorer | Receipt written after the test runner returns | Printed markers do not prove test execution. |
+| History scan and publication | Seed commit embedded in the protected emulator | Moving `main` cannot hide outgoing commits. |
+| Local merge boundary | Original `main` object ID and candidate feature | Advancing the base or dropping the feature fails. |
+| Cleanup and rescan | Current candidate commit plus working-file digest | Old scans cannot authorize changed content. |
+| Installed skill resources | Parsed YAML and resolved filesystem targets | Missing resources and malformed frontmatter fail. |
+
+Retry and lifecycle re-entry apply to scans becoming stale after edits or rewritten commits.
+Authorization applies to cleanup, publication, and the separate review and merge gates.
+Legacy branch-name changes apply to the pinned base. Async network services, production data
+migrations, and retention or deletion of production data are outside these local fixtures.
+The timeout path retains partial evidence. Final-state checks cannot detect a temporary edit
+that an agent fully restores. The fixtures assume a cooperative agent that leaves the recorder
+unchanged.
+
+- Review and proof for this entry's commit remain pending. Final receipts and any merge SHA
+  belong in the PR and project record, not a later unreviewed repository commit.

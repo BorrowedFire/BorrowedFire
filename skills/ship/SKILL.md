@@ -16,8 +16,9 @@ through the repo-native path, and verify production.
 - Never merge with failing checks.
 - Never deploy if the production target or credentials are ambiguous.
 - If deploy intent is clear and the target is obvious, proceed without another confirmation.
-- Preserve the repository's existing review and owner gates. Hand any required review loop to
-  `land`; a shipping request does not waive it. Resume the authorized deployment after merge.
+- Preserve the repository's existing review and owner gates. For non-trivial logic, an unfamiliar
+  area, an owner-requested review, or a required repository review loop, hand the merge step to
+  `land`. A shipping request does not waive that review. Resume the authorized deployment after merge.
 - Match each stage to the request and prior grants. A request to commit or push does not itself
   authorize merge or deployment. Complete routine reversible preparation within the granted scope.
 - If the request mentions App Store, TestFlight, Play Store, AAB, IPA, store submission, mobile
