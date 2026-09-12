@@ -13,7 +13,7 @@ err() { echo "ERROR: $*" >&2; ERRORS=$((ERRORS + 1)); }
 
 # Parse the actual frontmatter and follow the installed Markdown resource graph.
 if command -v ruby >/dev/null 2>&1; then
-  ruby "$ROOT/tools/validate-skills.rb" "$SKILLS_DIR" || err "skill resource validation failed"
+  ruby "$ROOT/tools/validate-skills.rb" --copy-layout "$SKILLS_DIR" || err "skill resource validation failed"
 else
   err "Ruby is required for YAML and skill resource validation"
 fi

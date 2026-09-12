@@ -4,8 +4,11 @@ require 'yaml'
 require 'json'
 require 'pathname'
 require 'uri'
+require 'tmpdir'
+require 'fileutils'
 
 json_output = ARGV.delete('--json')
+copy_layout = ARGV.delete('--copy-layout')
 roots = ARGV.empty? ? [File.expand_path('../skills', __dir__)] : ARGV
 errors = []
 skills = []
@@ -27,10 +30,42 @@ roots.each do |root|
 end
 errors << 'No skill entrypoints found' if skills.empty?
 
+copy_boundary = nil
+if copy_layout
+  staging = Dir.mktmpdir('skill-copy-validation-')
+  at_exit { FileUtils.remove_entry(staging) if File.exist?(staging) }
+  copy_boundary = File.join(staging, 'skills')
+  FileUtils.mkdir_p(copy_boundary)
+  skills = skills.map do |path|
+    if File.symlink?(File.dirname(path))
+      errors << "#{path}: copied skill roots must be directories, not symlinks"
+      next nil
+    end
+    destination = File.join(copy_boundary, File.basename(File.dirname(path)))
+    if File.exist?(destination)
+      errors << "#{path}: duplicate skill name in copied layout"
+      next nil
+    end
+    # Match install.sh: copy each skill directory, not loose files beside it.
+    begin
+      FileUtils.cp_r(File.dirname(path), destination, dereference_root: true)
+    rescue SystemCallError => e
+      errors << "#{path}: cannot stage copied skill (#{e.class})"
+      next nil
+    end
+    File.join(destination, 'SKILL.md')
+  end.compact
+  copy_boundary = File.realpath(copy_boundary)
+end
+
 checked_links = 0
 visited = {}
 check_links = lambda do |path|
   canonical = File.realpath(path)
+  if copy_boundary && !canonical.start_with?(copy_boundary + File::SEPARATOR)
+    errors << "#{path}: resource escapes the copied skill layout"
+    return
+  end
   return if visited[canonical]
   visited[canonical] = true
   text = File.read(canonical, encoding: 'UTF-8')
@@ -61,7 +96,7 @@ check_links = lambda do |path|
   targets = []
   # Match complete links before shortcut references so an inline label cannot activate
   # a same-named definition. Reference labels ignore case and repeated whitespace.
-  links_prose.scan(/(?<!\\)\[([^\]\n]*)\](?:\((<[^>]+>|[^\s)]+)(?:\s+["'][^\n]*?["'])?\)|\[([^\]\n]*)\])?/) do |label, inline, reference|
+  links_prose.scan(/(?<!\\)\[([^\]\n]*)\](?:\(\s*(<[^>]+>|[^\s)]+)(?:\s+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\)))?\s*\)|\[([^\]\n]*)\])?/) do |label, inline, reference|
     target = inline || definitions[normalize_label.call(reference.nil? || reference.empty? ? label : reference)]
     targets << target if target
   end
@@ -77,6 +112,11 @@ check_links = lambda do |path|
     resolved = File.expand_path(target, File.dirname(canonical))
     unless File.exist?(resolved)
       errors << "#{canonical}: missing local resource #{target}"
+      next
+    end
+    if copy_boundary && File.realpath(resolved) != copy_boundary &&
+       !File.realpath(resolved).start_with?(copy_boundary + File::SEPARATOR)
+      errors << "#{canonical}: local resource escapes the copied skill layout: #{target}"
       next
     end
     check_links.call(resolved) if File.file?(resolved) && File.extname(resolved) == '.md'

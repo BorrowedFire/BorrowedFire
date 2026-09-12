@@ -283,7 +283,7 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
 
 The scorer must use evidence from the operation it claims to verify. A local branch name cannot
 redefine the publication baseline. Candidate cleanup may rewrite unpublished history while the
-original base and every existing candidate file remain intact. New evidence files may be added.
+original base and every existing candidate file remain intact. Only the named land log may be added.
 
 | Entry or consumer | Authoritative state | Required negative path |
 |---|---|---|
@@ -314,3 +314,35 @@ failed the service-action check. The fixture prompt now states that recorder bou
 
 - Review and proof for this entry's commit remain pending. Final receipts and any merge SHA
   belong in the PR and project record, not a later unreviewed repository commit.
+
+### Owner-authorized repair after review round 2
+
+The second hosted review exposed six related gaps after the audit. The workflow stopped, and
+the owner authorized one bounded repair round covering all six. The original merge grant remains
+subject to passing review, proof, and CI.
+
+| Boundary | Authoritative state | Negative and re-entry paths |
+|---|---|---|
+| Candidate additions | Complete original path sets plus the named land log | Reject extra product files, including ignored cache paths, symlink evidence, and executable evidence at final state and publication. |
+| Read-only Git state | Semantic index entries and flags, file modes and link targets | Reject staged owner edits and hidden index changes without comparing mutable stat caches. |
+| Execution lifetime | The subprocess group, independent of its leader | Clean normal, timed-out, and interrupted exits; a surviving child cannot keep writing after return. |
+| Required report | Final JSON message and executed per-test observations | Reject wrong conclusions, unrelated or missing test identities, unauthorized next actions, and commentary substituted for a final report. |
+| Multiline resources | Parsed link destination across Markdown whitespace | Check missing and existing destinations, wrapped titles, images, and reference forms. |
+| Copied dependencies | The per-skill directory copies the installer produces | Exclude loose sibling files and reject symlinked source folders and external targets, including symlinked assets and entrypoints. |
+
+Lifecycle and retry apply to publication snapshots, restored files after publication, and process
+group cleanup after an early leader exit. Authorization applies to permitted file additions,
+unchanged owner staging, and the report's proposed next action. Retention and cleanup apply to
+partial evidence and temporary copy layouts. Legacy state applies to linked versus copied skills
+and existing index flags. Async suspension applies to surviving child processes. Production data
+migrations and external network state do not apply to these local fixtures.
+
+The fixtures assume a cooperative agent that leaves recorders intact and does not escape its
+process group. They do not detect every temporary file edit restored before any observation.
+Those limits remain explicit. This audit and its regression evidence must pass fresh review
+before merge; this entry does not claim its own commit has passed.
+
+Rung 4 proof: all five fresh Astra scenarios passed before the final cache-path check. The 42 workflow
+regressions and 23 resource tests passed. The resource suite invokes the installer's actual
+preflight and proves that a repository-only resource fails copied-layout validation. Process
+tests run a child that ignores SIGTERM and verify cleanup after normal and timed-out leader exits.
