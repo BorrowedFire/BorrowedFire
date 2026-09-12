@@ -1,6 +1,6 @@
 ---
 name: remember
-description: Capture anything worth keeping into the brain — a private, git-backed markdown memory shared by every agent and machine. Use when the user says "/remember", "remember this", "note this down", "log this decision", "add to my brain", "save this for later", "capture this", after a meeting/call recap, when a durable decision is made, or when another skill (land, maintainer, rollback, qa-audit, bootstrap) writes back a lesson, gotcha, or registry entry. Write-side of the memory system; `recall` reads, `digest` consolidates. NOT for repo code/docs changes (edit the repo) and NOT for secrets (never stored).
+description: Capture durable decisions, lessons, people, and project status in Prometheus. Owns memory writes and synchronization.
 ---
 
 # Remember
@@ -9,7 +9,7 @@ Turn a passing signal — a person met, a decision made, a gotcha hit, an idea �
 typed markdown page in the brain, committed and pushed so every other agent and machine sees it.
 Capture must be **fast, safe, and lossless**; understanding can wait for `digest`.
 
-`references/brain-schema.md` is authoritative for the brain location, directory tree, page format,
+[brain schema](references/brain-schema.md) is authoritative for the brain location, directory tree, page format,
 registry frontmatter, sync protocol, and degradation ladder. Do not invent conventions here.
 (`recall` and `digest` also depend on that file; the three install together.)
 
@@ -76,4 +76,4 @@ pushes its own memory; `digest` never reads other machines' workspaces.
 
 ## Related
 
-`recall` (read side) · `digest` (consolidation) · schema: `references/brain-schema.md`.
+`recall` (read side) · `digest` (consolidation) · schema: [brain schema](references/brain-schema.md).

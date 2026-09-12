@@ -18,6 +18,9 @@ Borrowed Fire is the system; Prometheus, the one who borrowed the fire, is its m
 
 ## Quick start
 
+The installer requires Bash, Git, and Ruby with its standard YAML library. Skill validation
+parses frontmatter and follows local Markdown references before installation.
+
 ```sh
 git clone https://github.com/BorrowedFire/BorrowedFire.git
 cd BorrowedFire

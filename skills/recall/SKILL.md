@@ -1,6 +1,6 @@
 ---
 name: recall
-description: Retrieve from the brain — the private git-backed markdown memory written by `remember`. Use when the user says "/recall", "recall", "what do we know about X", "have we met/discussed X before", "check my brain", "search my notes", "what did we decide about X", or at the start of any task where prior context (people, projects, decisions, lessons) would change the plan. Read-side of the memory system. NOT for searching repo code (use normal code search) and NOT a general web/knowledge lookup — it answers only from the brain.
+description: Retrieve relevant Prometheus memory before substantive repository work or when prior decisions, people, or project context matter.
 ---
 
 # Recall

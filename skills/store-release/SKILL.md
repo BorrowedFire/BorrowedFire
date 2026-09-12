@@ -1,6 +1,6 @@
 ---
 name: store-release
-description: Store-release closeout for App Store and Play Store. Use when the user says "/store-release", "store release", "orbit", "send to App Store", "submit to TestFlight", "release to Play Store", "create the store release", "tag the iOS release", "tag the Android release", "bump to the next build", or asks to create GitHub releases for mobile store builds. NOT for ordinary backend/web deploys (`ship`) and NOT for landing unmerged code (`land`).
+description: Prepare or execute requested mobile release stages, including version bumps, builds, uploads, and store submission. Preserve owner submission and rollout gates.
 ---
 
 # Store Release
@@ -18,9 +18,12 @@ in the system — it is **owner-gated by default**.
   (version/build, processing/submission status) before proceeding — never infer it from the repo.
 - **Owner gate:** actually *submitting* for store review (or promoting a track/rollout) requires
   explicit owner confirmation in this run, unless the invocation pre-authorized it ("submit
-  without asking"). Everything before submission (bump, build, tag, GitHub Release) is autonomous.
+  without asking"). Execute only the release stages the request authorizes. A version or build
+  bump does not authorize a binary upload, tag publication, GitHub Release, or store submission.
+- Carry prior grants forward. Complete all authorized preparation before asking at a remaining
+  gate. The sequence below is conditional on the selected stages, not permission for every stage.
 - Never reuse a live or closed store version/build.
-- Update repo metadata, GitHub Release metadata, and release docs together.
+- Keep metadata consistent across the release surfaces included in the authorized stages.
 - Create tags only after the commit that contains the exact version/build metadata is pushed.
 - Prefer staged rollout where the store supports it (phased release on iOS, staged rollout
   percentage on Play); know the halt mechanism before you submit — halting a bad rollout is the
@@ -30,8 +33,9 @@ in the system — it is **owner-gated by default**.
 
 ## Flow
 
-1. Identify scope: iOS, Android, or both. If a brain is available, `recall` the project's registry
-   page and `lessons/` for prior release gotchas.
+1. Identify platform and stages: metadata bump, build/archive, upload, tag, GitHub Release, store
+   submission, or rollout. Use the user's request and prior grants. If a brain is available,
+   `recall` the project's registry page and `lessons/` for prior release gotchas.
 2. Verify current store state (per the rule above):
    - iOS: App Store Connect version/build, processing state, submission state.
    - Android: Play Console track assignment, `versionName`, `versionCode`, release status.
@@ -39,20 +43,23 @@ in the system — it is **owner-gated by default**.
    - XcodeGen (`project.yml` → `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, then regenerate),
      raw `.xcodeproj` build settings, or a fastlane versioning lane — whichever the repo uses.
    - Android: Gradle `versionName` / `versionCode`, store notes, and release docs.
-4. Pick the next valid train and bump through the detected convention.
-5. Run release-grade checks: build/test/archive/export or repo release workflow dry-run as
-   appropriate.
-6. Commit exact files, push, PR/merge through normal checks (hand to `land` if the diff warrants a
-   review loop).
-7. Tag the merged release commit:
+4. If a metadata bump is requested, apply the requested valid version/build through the detected
+   convention. Otherwise verify that the existing metadata matches the selected release artifact.
+5. Run checks required for the selected stages. A metadata-only change needs metadata validation
+   and required repository checks; it does not require an upload or production release workflow.
+6. If repository publication is authorized, commit exact files and push through the normal PR,
+   review, proof, and merge gates. A metadata-only request may end with validated local changes.
+7. When tag publication is authorized, tag the merged release commit:
    - iOS: `ios/v<version>-build<build>`
    - Android: `android/v<versionName>-build<versionCode>`
-8. Create/update the GitHub Release with version, build/code, platform, track, commit,
+8. When GitHub Release publication is authorized, create/update it with version, build/code, platform, track, commit,
    artifact/workflow links, and store status. (Release notes content: `changelog`, with `signal`
    for promotional tone.)
-9. **Owner gate**, then upload/submit or trigger the repo-native release workflow.
-10. Verify processing/submission/live state in the store.
-11. Record final state in `docs/releases/` and report evidence. Capture release gotchas via
+9. When upload or submission is authorized, use the repo-native path. Satisfy the **owner gate**
+   before store submission or rollout promotion. Inspect a workflow's effects before triggering it.
+10. Verify the processing, submission, or live state for the stages that ran.
+11. Report the stages completed and their evidence. Update `docs/releases/` when the requested
+    release or repository convention needs that record. Capture durable release gotchas via
     `remember` to `lessons/`.
 
 ## Handoff

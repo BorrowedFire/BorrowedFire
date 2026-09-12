@@ -1,6 +1,6 @@
 ---
 name: reel-maker
-description: Plan, script, produce, render, and validate short-form marketing videos and Instagram Reels from product context, screenshots, copy gates, and repo-native video tooling. Use when the user asks to make a reel, short-form video, launch video, app announcement video, product demo video, Instagram video post, video script plus render, or to improve weak video copy before production.
+description: Produce short marketing videos and reels through the selected project pipeline, from concept to rendered and visually checked output.
 ---
 
 # Reel Maker
@@ -69,4 +69,4 @@ If the local repo already has a stricter package shape, follow the local repo.
 ## References
 
 - `references/dependencies.json`: skill dependency manifest and upstream mapping.
-- `references/spark-reel-contract.md`: Spark-specific execution contract.
+- [spark reel contract](references/spark-reel-contract.md): Spark-specific execution contract.
