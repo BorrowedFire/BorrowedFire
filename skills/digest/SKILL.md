@@ -1,6 +1,6 @@
 ---
 name: digest
-description: Consolidate the brain — the "dream cycle" for the git-backed memory. Promote inbox captures into typed pages, ingest outboxes, dedupe entities, repair wikilinks, distill lessons, refresh INDEX.md, and report brain health. Use when the user says "/digest", "digest", "process my inbox", "consolidate my brain", "clean up my notes", "run the dream cycle", on a schedule (weekly cron or /loop is a good default), or when `recall` reports contradictions/duplicates. NOT for capturing new material (`remember`) or answering questions (`recall`).
+description: Consolidate Prometheus memory, repair its graph, and refresh its index. Use for brain maintenance or the scheduled consolidation cycle.
 ---
 
 # Digest

@@ -12,6 +12,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Lint skills
         run: bash tools/skill-lint.sh
+      - name: Validate installed skill resources (symlink and copy fixtures)
+        run: ruby tests/test-skill-resources.rb
       - name: Lint the brain template
         run: bash tools/brain-lint.sh --template prometheus-template
       - name: Syntax-check shell scripts
@@ -26,3 +28,5 @@ jobs:
         run: bash tests/test-prometheus-cycle.sh
       - name: Doctrine eval scorer (recorded transcripts, no API calls)
         run: bash tests/test-evals.sh
+      - name: Workflow guard scorer (local fixtures, no API calls)
+        run: python3 -B tests/test-workflow-guards.py

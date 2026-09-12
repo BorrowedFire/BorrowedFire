@@ -1,6 +1,6 @@
 ---
 name: bootstrap
-description: Wire a new (or newly adopted) repo, app, or idea into the Borrowed Fire system. Use when the user says "/bootstrap", "bootstrap this repo", "set up a new project", "start a new app/idea", "register this repo", or "make this repo work with the system". Creates the agent context file, CI, conventions the other skills assume, and the brain registry page. NOT for initializing the brain itself (`remember` offers that) and NOT for shipping code (`ship`/`land`).
+description: Register a project in Borrowed Fire or set up its repository conventions. Apply only the requested registration or repository setup scope.
 ---
 
 # Bootstrap
@@ -11,6 +11,9 @@ Bootstrap wires a project up once so the system works from day one.
 
 ## Rules
 
+- Resolve the requested setup scope first. Registering an idea or repository means creating or
+  updating its brain page. Modify agent instructions, CI, or repository conventions only when
+  repository setup is part of the request. Apply the flow only to the authorized components.
 - **Idempotent and additive.** Detect what exists; never overwrite a hand-written context file,
   CI config, or README — extend or propose instead.
 - **Match the repo's stack.** CI, test lane, and lint come from what the repo actually uses;
@@ -40,8 +43,8 @@ Bootstrap wires a project up once so the system works from day one.
 6. **Protection checklist.** Exact owner steps (or commands) for branch protection, required
    checks, and the review bot's installation (`land` needs `@codex review` reachable, or the
    registry set to `review_bot: none`).
-7. **Report.** What was created/extended, the registry page path, the owner checklist, and the
-   one-line handoff: the repo is now workable by `maintainer`.
+7. **Report.** State what was created or extended, the registry page path, and any owner checklist.
+   Do not claim the repository is ready for `maintainer` when only registration was requested.
 
 ## Related
 

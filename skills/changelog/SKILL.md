@@ -1,6 +1,6 @@
 ---
 name: changelog
-description: Assemble factual release notes and changelogs from merged history. Invoked by `store-release` (step 8) and `ship`, or explicitly when the user says "/changelog", "changelog", "write the release notes", "what's in this release", "summarize what shipped", or "update the CHANGELOG". Produces user-facing store notes, GitHub Release bodies, and CHANGELOG.md entries from PRs/commits — delegating promotional tone to `signal`. NOT for announcement/launch marketing copy (`signal`) and NOT for creating the release itself (`store-release` / `ship`).
+description: Write factual changelogs and release notes from the changes included in a selected release or build.
 ---
 
 # Changelog

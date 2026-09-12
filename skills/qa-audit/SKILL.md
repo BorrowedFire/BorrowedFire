@@ -1,6 +1,6 @@
 ---
 name: qa-audit
-description: Build and run a bounded, repo-native QA audit loop for a feature, app surface, release candidate, or small repo. Use when the user says "/qa-audit", "qa audit", "repo quality audit", "QA audit", "test matrix", "audit this release candidate", "find defects", "feature inventory", or wants a reusable agent loop that discovers features, builds durable QA artifacts, executes tests/manual checks, logs defects, fixes safe issues, and reports confidence without pretending the whole codebase is proven. NOT for landing one existing PR (`land`), store releases (`store-release`), continuous backlog orchestration (`maintainer`), or copy tuning (`signal`).
+description: Audit a bounded app surface or release candidate and report defects with evidence. Fix code only when the requested scope authorizes fixes.
 ---
 
 # QA Audit
@@ -10,9 +10,9 @@ execute the best available checks, record defects, fix what is safe and in scope
 report confidence plus remaining risk.
 
 This skill is intentionally bounded. It is not a promise to test an entire codebase forever, and
-it should not become spreadsheet theater. The output is durable repo evidence under the selected
-artifact directory (default `qa/`), backed by real commands, app paths, screenshots, logs, test
-results, or review notes.
+it should not become spreadsheet theater. Back the report with real commands, app paths,
+screenshots, logs, test results, or review notes. A focused audit may use one report. Use the
+full artifact set when the user requests a reusable audit or names an artifact directory.
 
 ## When to Use
 
@@ -43,37 +43,44 @@ Optional flags:
 | Flag | Default | Effect |
 |---|---:|---|
 | `--no-fix` | off | Audit only; do not edit code. |
-| `--fix-safe` | on | Fix narrow, high-confidence defects that stay inside scope. |
+| `--fix-safe` | on only when the request includes fixes | Fix narrow, high-confidence defects that stay inside scope. |
 | `--max-defects N` | 25 | Stop discovery once the defect list is large enough to need triage. |
 | `--max-passes N` | 2 | Limit fix/regression loops. |
-| `--artifact-dir PATH` | `qa` | Write audit artifacts somewhere else. |
+| `--artifact-dir PATH` | unset | Write the reusable artifact set to this directory. |
 
-`--no-fix` overrides `--fix-safe`. Resolve `<audit-dir>` once from `--artifact-dir` (default
-`qa`) and use that same path for every pass, artifact, and report.
+`--no-fix` overrides `--fix-safe`. An audit-only request does not authorize implementation or
+test edits. Carry forward a prior grant to fix the scoped defects without asking again.
 
-## Required Artifacts
+For a reusable audit, resolve `<audit-dir>` once from `--artifact-dir`, or use `qa` if the user
+requested durable repository artifacts without naming a directory. For a focused audit, use the
+same evidence categories in one report and keep temporary evidence outside the repository.
 
-Create or update these files in the repo unless the user asks for a different location:
+## Reusable audit artifacts
+
+When the requested audit needs the full artifact set, create or update:
 
 - `<audit-dir>/feature-inventory.md` - entrypoints, screens/routes/endpoints/jobs/configs discovered from code.
 - `<audit-dir>/test-matrix.md` - checks mapped to features, risk, method, owner/agent status, and evidence.
 - `<audit-dir>/defects.md` - defects with severity, repro, evidence, status, fix commit if any, and regression result.
 - `<audit-dir>/coverage-summary.md` - confidence, what was proven, what was not proven, residual risks, and next decisions.
 
-**Artifact policy:** artifacts are committed on the audit branch (they are the evidence trail).
-Whether they merge to the default branch is the owner's standing convention per repo — if
-unstated, keep them on the audit branch/PR and ask once in the report.
+**Artifact policy:** commit repository artifacts only when the request or existing repository
+convention calls for it. A request to inspect and report does not itself require a commit or PR.
+Use the selected output form throughout the loop. Keep the evidence categories in the focused
+report, or use their corresponding files above for a reusable audit.
 
 ## Operating Loop
 
 1. **Preflight.** Read repo instructions, current branch, dirty state, package/build/test scripts,
    CI config, app surfaces, and recent changes. `recall` the repo's `lessons/` and registry page
-   if a brain is available. Do not edit yet.
+   if a brain is available. Preserve unrelated edits. If a check regenerates tracked files, use
+   an isolated copy or worktree that preserves the intended candidate. Do not reset or clean the
+   user's checkout to restore a test baseline. Do not edit yet.
 2. **Scope.** Define the audit boundary in one sentence: repo, surface, target users,
    environments, and explicit non-goals.
-3. **Discover features from code.** Build `feature-inventory.md` from routes, screens, components,
+3. **Discover features from code.** Build the feature inventory from routes, screens, components,
    API handlers, jobs, config, migrations, tests, and docs. Mark inferred items as inferred.
-4. **Build the matrix.** Create `test-matrix.md` with happy paths, edge cases, auth/permission
+4. **Build the matrix.** Record happy paths, edge cases, auth/permission
    checks, error states, data integrity, accessibility/usability where relevant, and regression
    checks for recently changed areas.
 5. **Execute checks.** Run repo-native automated tests first, then targeted manual or tool-driven
@@ -88,13 +95,13 @@ unstated, keep them on the audit branch/PR and ask once in the report.
    the denylist unless separately authorized.
 8. **Regress.** Re-run the exact failing check plus adjacent checks after each fix. Update defect
    status with the proof.
-9. **Summarize.** Update `coverage-summary.md` with confidence, completed evidence, untested
+9. **Summarize.** Record coverage confidence, completed evidence, untested
    surfaces, open defects by severity, and decision-ready next steps. Capture recurring defect
    patterns via `remember` to `lessons/`.
 
 **Evidence rungs.** Grade every piece of recorded evidence on the proof ladder in `land`'s Live
-Proof Gate, and write the rung next to the evidence in `test-matrix.md` and `defects.md`. In
-`coverage-summary.md`, "proven" means rung 4 or higher: the check ran real code or drove the real
+Proof Gate, and write the rung next to the evidence in the test matrix and defect records. In
+the coverage summary, "proven" means rung 4 or higher: the check ran real code or drove the real
 surface. Rungs 1-3 (a claim, a cited line, a walked-through argument) are review notes. List them
 under "not proven" with the rung each reached.
 
@@ -108,12 +115,11 @@ fix/regression pass:
 3. Mark lifecycle re-entry, async suspension, authorization identity/role, migration/legacy state,
    retention/deletion/cleanup, and retry/idempotency as `applicable`, `not applicable` with a
    reason, or `unverified`.
-4. Add the resulting state and negative paths to `<audit-dir>/test-matrix.md`.
+4. Add the resulting state and negative paths to the test matrix.
 5. When fixing is allowed, fix the smallest coherent invariant boundary, add regression coverage
    for each exposed transition, and rerun focused plus adjacent-consumer checks. When `--no-fix`
    is active, do not edit implementation or tests; record the candidate boundary, required
-   regressions, and missing proof in `<audit-dir>/defects.md` and
-   `<audit-dir>/coverage-summary.md`.
+   regressions, and missing proof in the defect records and coverage summary.
 
 A new validated related defect after this audit and a subsequent pass, an unbounded invariant, or
 a required product/security/architecture decision ends the pass and becomes a decision-ready
@@ -170,7 +176,7 @@ Final report should be short and evidence-first:
 
 ```
 QA Audit: <scope>
-Artifacts: <audit-dir>/feature-inventory.md, <audit-dir>/test-matrix.md, <audit-dir>/defects.md, <audit-dir>/coverage-summary.md
+Artifacts: <links, only when the audit created separate artifacts>
 
 Proven:
 - <feature/check -> evidence>

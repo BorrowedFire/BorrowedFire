@@ -1,6 +1,6 @@
 ---
 name: signal
-description: Front door for the Corey Haines Marketing Skills trove when drafting, tuning, reviewing, or strategy-checking any potential user-facing copy or marketing message. Use when the user says "/signal", "signal", "run signal", "signal this copy", "run Marketing Skills", "Corey Haines", or asks to write, rewrite, review, tune, sharpen, or create copy for an app, website, landing page, App Store listing, Google Play listing, promotional text, social post, reel/video script, email, onboarding flow, paywall, pricing surface, ad, SEO page, notification, in-product microcopy, lifecycle message, sales asset, or other customer-facing text — including promotional launch copy. NOT for factual release notes/changelogs (`changelog`) and NOT for repo docs/README engineering prose.
+description: Select marketing guidance for customer-facing strategy or copy. Use the specialist that changes the answer and preserve product-specific contracts.
 ---
 
 # Signal
@@ -10,7 +10,7 @@ description: Front door for the Corey Haines Marketing Skills trove when draftin
 Use this as the front door for the Corey Haines Marketing Skills. First infer the surface,
 audience, stage, and job of the message, then load and follow the most relevant specialist
 marketing skill instead of guessing from generic copy instincts. Locate the trove per
-`references/trove-locations.md` — including what to do when it is missing.
+[trove locations](references/trove-locations.md) — including what to do when it is missing.
 
 ## Workflow
 
@@ -38,10 +38,10 @@ marketing skill instead of guessing from generic copy instincts. Locate the trov
      context and state assumptions.
 
 3. **Route to specialist skill(s)**
-   - Read `references/corey-haines-marketing-skills.md` for the catalog.
-   - Read `references/surface-routing.md` and select the smallest useful set of specialist skills.
+   - Read [corey haines marketing skills](references/corey-haines-marketing-skills.md) for the catalog.
+   - Read [surface routing](references/surface-routing.md) and select the smallest useful set of specialist skills.
    - Open each selected skill's `SKILL.md` from the trove root found via
-     `references/trove-locations.md` and follow the relevant workflow.
+     [trove locations](references/trove-locations.md) and follow the relevant workflow.
    - Default sequence for most copy work: `product-marketing` context if needed -> surface
      specialist -> `copy-editing` final pass.
    - For ambiguous "run Marketing Skills" requests, prefer a light research/positioning/context
