@@ -1,6 +1,6 @@
 ---
 name: ship
-description: One-command closeout for committing, pushing, merging, deploying, and verifying. Use when the user says "/ship", "ship", "takeoff", "ship it", "commit merge deploy", "merge and deploy", or "push this live". The trusted happy-path closeout including deploy. NOT for driving a PR through a rigorous review loop (`land`), NOT for App Store/Play/TestFlight builds (`store-release`), and NOT for undoing a bad deploy (`rollback`).
+description: Close out authorized work through commit, push, merge, deployment, and verification. Use for shipping changes. Mobile store builds use store-release.
 ---
 
 # Ship
@@ -16,8 +16,10 @@ through the repo-native path, and verify production.
 - Never merge with failing checks.
 - Never deploy if the production target or credentials are ambiguous.
 - If deploy intent is clear and the target is obvious, proceed without another confirmation.
-- If the diff deserves a full review loop (non-trivial logic, unfamiliar area, or the owner asks
-  for review), hand the merge step to `land` and resume here for deploy.
+- Preserve the repository's existing review and owner gates. Hand any required review loop to
+  `land`; a shipping request does not waive it. Resume the authorized deployment after merge.
+- Match each stage to the request and prior grants. A request to commit or push does not itself
+  authorize merge or deployment. Complete routine reversible preparation within the granted scope.
 - If the request mentions App Store, TestFlight, Play Store, AAB, IPA, store submission, mobile
   release tags, or binary version/build bumps, hand off to `store-release`.
 
@@ -35,9 +37,12 @@ through the repo-native path, and verify production.
 2. Run focused tests first; run broader gates when risk or repo policy warrants it.
 3. If on default branch or detached HEAD, create a branch (prefix per Tool adapters).
 4. Commit logical file groups with repo-style messages.
-5. Push branch and create/update PR with tests and deploy plan.
-6. Wait for required checks; merge using repo convention, defaulting to squash.
-7. Deploy from the canonical source, usually updated default branch.
+5. Scan the exact outgoing content for secrets before publication. Push the branch and
+   create/update the PR within the authorized scope, with tests and any requested deploy plan.
+6. Satisfy all required reviews, proof, checks, and owner gates for the current candidate.
+   Merge only when authorized, using repo convention, defaulting to squash.
+7. If deployment is authorized, verify the intended commit and target immediately before
+   deploying from the canonical source, usually updated default branch.
 8. Verify production with real evidence: live route, SQL/RPC, logs, workflow, store status, or
    function response.
 9. **If verification fails:** stop — do not stack further deploys on a broken state. Report what

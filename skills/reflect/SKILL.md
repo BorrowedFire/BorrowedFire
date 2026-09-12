@@ -1,6 +1,6 @@
 ---
 name: reflect
-description: Turn completed work into durable, verified improvement in Prometheus. Use when the user says "/reflect", "reflect on this", or "capture what we learned", or when a caller names the former skill name borrowedfire-learn. Otherwise run automatically at the end of every substantive task or meaningful checkpoint—implementation, diagnosis, review, merge, release, rollback, planning decision, or owner correction—and in scheduled fleet-maintenance mode. Extract reusable lessons, decisions, owner preferences, and exact-current project-status changes; deduplicate against the brain; persist them through `remember`; and let `digest` consolidate recurring patterns. No-op when nothing durable changed. NOT for speculative conclusions, routine success logs, secrets, autonomous product-repo edits, or self-modifying skills without normal review.
+description: Capture verified, reusable lessons after substantive work through remember. Deduplicate first. Skip routine success and speculative conclusions.
 ---
 
 # Reflect
@@ -10,8 +10,8 @@ what was actually established, retain only durable signal, connect it to prevent
 through the existing memory protocol. A clean no-op is a successful result.
 
 `remember` remains the write authority, `digest` remains the only restructurer, and
-`remember/references/brain-schema.md` remains the schema authority. Read
-`references/cycle-contract.md` when running in scheduled fleet mode or configuring automation.
+[memory schema](../remember/references/brain-schema.md) remains the schema authority. Read
+[cycle contract](references/cycle-contract.md) when running in scheduled fleet mode or configuring automation.
 
 ## Non-negotiable boundaries
 

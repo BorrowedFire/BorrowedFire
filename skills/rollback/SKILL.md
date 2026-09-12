@@ -1,6 +1,6 @@
 ---
 name: rollback
-description: Undo a bad merge or deploy and prove recovery — the inverse of `ship`. Use when the user says "/rollback", "rollback", "roll it back", "revert the deploy", "that release broke production", "undo that merge", or when `ship`'s post-deploy verification fails, or `land`'s summary flags an auto-merge worth reverting. Reverts code, re-deploys the last good state, verifies recovery live, and writes the postmortem lesson. NOT for landing fixes forward (`land` — often the better choice; this skill says when) and NOT for halting store rollouts (`store-release` owns store mechanisms).
+description: Undo an authorized bad merge or deployment and verify recovery. Use when rollback is requested or an incident needs a recovery plan.
 ---
 
 # Rollback
@@ -15,15 +15,16 @@ that isn't verified live is just a second unverified deploy.
 - **Fix forward** (via `land`) when the revert itself is risky — schema already migrated, data
   written in the new shape, other work stacked on top. A revert that fights a migration is worse
   than a targeted fix.
-- When data/schema is involved, reverting **code** is usually safe; reverting a **migration** is
-  denylist territory (`land`'s `references/denylist.md`) — owner-gated, always.
+- When data/schema is involved, verify that the old code can consume the current data before
+  choosing rollback. Reverting a migration remains owner-gated under land's denylist.
 
 ## Rules
 
 - Work from evidence: reproduce or observe the breakage before acting (error, log line, failing
   route) — a rollback on a hunch can destroy a good deploy during an unrelated incident.
-- Revert with history, never rewrite: `git revert <sha>` (land's summaries and ship's reports give
-  the sha — one command by design). Never force-push; never `reset` a shared branch.
+- Revert with history. Inspect the target commit's parents first. A squash or ordinary commit
+  uses `git revert <sha>`. A merge commit needs an explicitly verified mainline parent with
+  `git revert -m <parent> <sha>`. Do not guess the parent. Never force-push or reset a shared branch.
 - Re-deploy through the same repo-native path `ship` used — no ad-hoc production surgery.
 - Verify recovery with the **same live evidence class that failed**: if a route 500'd, that route
   200s; if an RPC misbehaved, the RPC now returns the expected shape.

@@ -1,6 +1,6 @@
 ---
 name: session-closeout
-description: Audit a task against what the user requested and what the agent can prove it completed. Use only when the user explicitly invokes `$session-closeout`, says "session closeout", or directly asks for the requested/completed/missing/unasked/unverified five-line audit. Never invoke it automatically for routine handoffs, task completion, shipping, reflection, or a normal final response. NOT for performing missing work or shipping changes (`ship`).
+description: Audit requested, completed, missing, unasked, and unverified work when the user explicitly requests a session closeout.
 ---
 
 # Session Closeout

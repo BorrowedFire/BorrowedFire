@@ -12,6 +12,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Lint skills
         run: bash tools/skill-lint.sh
+      - name: Validate installed skill resources (symlink and copy fixtures)
+        run: ruby tests/test-skill-resources.rb
       - name: Lint the brain template
         run: bash tools/brain-lint.sh --template prometheus-template
       - name: Syntax-check shell scripts

@@ -1,6 +1,6 @@
 ---
 name: land
-description: Autonomously drive ONE branch/PR through commit, review (adversarial + Codex), auto-fix, live proof, and merge-when-clean — surfacing only a decision-ready ask if it cannot finish. The single-PR worker primitive that `maintainer` orchestrates. Use when the user says "/land", "land", "land this", "autoland", "take this through review and merge", "run the review loop", or wants one change shepherded to merge without babysitting. Works in Claude Code, Codex, and other SKILL.md harnesses (see Tool adapters). NOT for deploys or closeout without a review loop (`ship`), NOT for cutting App Store/Play/TestFlight builds (`store-release`), and NOT a general "go achieve a goal" command.
+description: Take one authorized branch or PR through review, fixes, proof, and merge. Preserve existing owner gates. Excludes deployments and store releases.
 ---
 
 # Land
@@ -23,21 +23,15 @@ it and surface it in the summary. If autonomous work remains, do it and report t
 
 - **Autonomous** — clear, bounded, reproducible, with a real **live-proof path**. Drive to merge.
 - **Needs-owner** — product choice, security/privacy/irreversible call, missing credential/access,
-  no live proof, or it touches the **denylist** (`references/denylist.md`, plus the project
+  no live proof, or it touches the **denylist** ([denylist](references/denylist.md), plus the project
   registry's `denylist_extra`). Drive to decision-ready, then emit one Owner Decision Brief.
 - **Ignored** — only when the owner explicitly said so. Leave it untouched.
 
-## Tool adapters
+## Runtime capabilities
 
-The mechanics below are runtime-neutral (`git`, `gh`, and `@codex review` — the GitHub bot,
-identical everywhere). Steps that map per runtime:
-
-| Abstract step | Claude Code | Codex | Other harnesses |
-|---|---|---|---|
-| adversarial review (gate #1) | `/code-review` or a review subagent | `autoreview` | strongest available independent review pass |
-| delegate / spawn a worker | background `Agent` subagent | a Codex thread / `codex exec` | one worker process/session |
-| self-paced polling | `ScheduleWakeup` or a backgrounded shell loop | a backgrounded task | backgrounded loop |
-| branch prefix | `claude/<slug>` | `codex/<slug>` | `<harness>/<slug>` |
+Before dispatch or review, read [references/runtime-capabilities.md](references/runtime-capabilities.md).
+Resolve mechanics from the tools this session exposes and the configured fleet. A missing tool
+does not waive a review gate. Use the repository's branch convention, or `<harness>/<slug>`.
 
 ## Inputs
 
@@ -48,7 +42,7 @@ identical everywhere). Steps that map per runtime:
 | `branch` | current | Branch to land. |
 | `--no-auto-merge` | auto-merge **ON** | Stop at the merge gate for owner approval. |
 | `--max-rounds N` | `4` | Review rounds before forcing a decision-ready escalation. |
-| `--reviewer` | `codex` | `codex` (default) or `adversarial-only` fallback when Codex is down/unavailable. |
+| `--reviewer` | `codex` | `codex` requests both review gates. `adversarial-only` prepares local review and proof; it permits merge only when the registry explicitly says `review_bot: none`. |
 
 Default posture: **auto-merge ON** for Autonomous low/medium-risk diffs; **always owner-gated** for
 the denylist.
@@ -76,14 +70,18 @@ mechanical conflicts (imports, adjacent-line churn, lockfiles by regeneration); 
 touching the same logic the branch changes is a *semantic* conflict — stop and escalate
 decision-ready rather than guessing an integration.
 
-**2 · Commit + push + PR.** Commit intended changes (clear message). Push. Open the PR if missing —
+**2 · Scan + commit + push + PR.** Before the first push or external review bundle, scan the exact
+outgoing commits and uncommitted changes for keys, tokens, credentials, and `.env` content. Use the
+repository's secret scanner when present and inspect the outgoing files. A detected secret stops
+publication until it is removed from every outgoing commit. Scan again when later edits or commits
+change the outgoing content. Verify scanner findings; a documented inert fixture may be a false
+positive, but uncertainty does not permit publication. Commit intended changes (clear message). Push. Open the PR if missing —
 body = problem / root cause / fix / **how it was proven** / scope. Use full clickable URLs, never
 bare `#123`.
 
-**3 · Adversarial review (gate #1).** First, **secrets pre-scan** the diff (keys, tokens,
-credentials, `.env`-ish content) before it goes to any reviewer — a leaked secret in a PR or a
-review bundle is already published. Then run a local adversarial pass (see Tool adapters) and
-apply/verify its real findings now. This is the *second independent reviewer* — a single green
+**3 · Adversarial review (gate #1).** Run an independent adversarial pass through the available
+runtime capability and apply/verify its real findings. Before sending a revised bundle, repeat
+step 2's scan for any outgoing content that changed. This is the *second independent reviewer* — a single green
 check is **necessary but not sufficient**.
 
 **4 · Trigger Codex (gate #2).** `gh pr comment <PR> --body "@codex review"`. A push alone does
@@ -92,8 +90,8 @@ check is **necessary but not sufficient**.
 summary must say the Codex gate was absent.)
 
 **5 · Poll for the verdict (self-paced).** Record baseline counts first (`cc` = Codex issue
-comments, `cr` = Codex reviews), then poll until a new one appears (see Tool adapters). Codex runs
-~2–50 min — never busy-wait; sleep 75–90s between checks. The bot login matches `codex` (e.g.
+comments, `cr` = Codex reviews), then wait for a new one through the runtime's supported event or
+polling mechanism. Use bounded waits and obey the runtime's communication limits. The bot login matches `codex` (e.g.
 `chatgpt-codex-connector`). *Bot behavior details here were observed as of 2026-07 — if the bot's
 comment shapes change, re-verify before trusting the parsing rules below.*
 
@@ -108,7 +106,8 @@ comment shapes change, re-verify before trusting the parsing rules below.*
 a fact.*
 - **Validate it** against reality (read the code; query the live system; `ls`/grep the file).
   About half of real findings are doc-gaps, already-handled, or stale re-posts.
-- **Real →** fix **narrowly** (match shipped reality; no redesign/scope-creep). Re-push, GOTO 4.
+- **Real →** fix **narrowly** (match shipped reality; no redesign/scope-creep). Repeat the scan
+  for changed outgoing content, re-push, GOTO 4.
 - **False / stale →** do **not** edit correct code to silence it. Post an evidence-backed
   **refutation** on the PR, re-review. (Stale re-posts are often self-contradicted within one
   review — "file missing" alongside "I checked that file".)
@@ -146,9 +145,13 @@ follow-ups with the analysis preserved, and escalate rather than continuing spec
 · a **new validated related finding surfaces after the invariant audit and subsequent re-review**,
 showing the model is still incomplete · the **same finding recurs after a genuine fix** ·
 cumulative fixes push the diff past **2× the frozen scope baseline** (files or non-test LOC from
-step 0) without an explicit owner scope expansion · the reviewer is silent ~60 min · any denylist
-trigger. These are hard stops, not suggestions — an owner who wants another round will say so; do
+step 0) without an explicit owner scope expansion · the reviewer is silent ~60 min.
+These are hard stops, not suggestions — an owner who wants another round will say so; do
 not pre-spend it for them.
+
+A denylist trigger changes the item to Needs-owner. Stop actions that need an ungranted
+permission, continue authorized preparation, and preserve the owner gate at merge. A proof
+requirement does not grant permission to change a live system or deploy a candidate.
 
 **9 · Live Proof Gate (gate #3) — pre-merge, not optional.** Prove the *exact final candidate*
 works through its real changed path. **Never infer a waiver from "review clean" or "tests pass."**
@@ -180,15 +183,17 @@ current head (or `review_bot: none` acknowledged) · **live proof recorded and p
 rung floor for its class** · CI/tests green where
 a lane exists · diff **not** in the denylist. If `--no-auto-merge`, stop here with a brief.
 
-**11 · Close out.** Post the summary; append a dated entry to the land log (`tasks/land-log.md` in
-the repo — commit it with the work; item, classification, gates, decisions, merge sha or the exact
-owner ask). Write any new gotcha / false-positive pattern back via `remember` to the brain's
+**11 · Close out.** Include any repository land-log entry in the candidate before its final review
+and proof. Record the item, classification, decisions, and evidence known then. Do not claim the
+entry's own commit has already passed review. Record the actual merge SHA and final gate receipts
+in the PR summary or the private project log after merge. Do not create an unreviewed repository
+commit just to add the merge SHA. Write any new gotcha / false-positive pattern back via `remember` to the brain's
 `lessons/`, wikilinked to `[[projects/<repo>]]` (outbox fallback if the brain is unreachable) — so
 the next run, on any machine, needs the owner less.
 
 ## High-risk denylist — ALWAYS owner-gated at merge (even with auto-merge ON)
 
-See `references/denylist.md` (authoritative) plus the project registry's `denylist_extra`. Drive to
+See [denylist](references/denylist.md) (authoritative) plus the project registry's `denylist_extra`. Drive to
 clean + proven, then **stop at the merge gate**.
 
 ## Authorization boundaries
@@ -197,6 +202,10 @@ Invoking land authorizes the full chain *except* the denylist. Still: push ≠ a
 scope-creep; CI-fix stays within the PR's intent; stop cleanly at the last authorized boundary and
 report the exact next action. Deploys and release/build cuts are never in scope (`ship` /
 `store-release`).
+
+Within the authorized scope, continue through implementation, fixes, and required verification.
+Carry prior grants forward without repeated approval. Stop at an unmet owner gate, unavailable
+required evidence, or a decision that changes scope.
 
 ## Owner Decision Brief (the only thing you ever send the owner)
 
@@ -231,12 +240,10 @@ command (`rollback` consumes these).
 
 ## Honest ceiling
 
-The mechanics (dual-signal, sha-match, branch-currency, polling, re-trigger, live-proof execution)
-are ~100% reliable. The auto-fix/auto-merge is *consistent, tireless, audited* judgment — not
-*better* than a careful human pass (same model, same ceiling). So: verify before editing, prove
-before merging, escalate ambiguity.
+Checks establish only the properties they exercise. Review and proof can still miss defects.
+Verify findings before editing, tie evidence to the final candidate, and report missing evidence.
 
 ## Related
 
 `maintainer` (orchestrates many lands) · `ship` (deploy closeout) · `rollback` (undo a bad land) ·
-`remember`/`recall` (lessons write-back/preflight) · `references/denylist.md`.
+`remember`/`recall` (lessons write-back/preflight) · [denylist](references/denylist.md).
