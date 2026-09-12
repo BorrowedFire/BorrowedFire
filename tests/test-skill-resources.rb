@@ -22,8 +22,10 @@ class SkillResourcesTest < Minitest::Test
     File.write(File.join(@source, 'SKILL.md'), "---\nname: review\ndescription: #{description}\n---\n#{body}\n")
   end
 
-  def validate(path = @source)
-    output, error, status = Open3.capture3('ruby', VALIDATOR, '--json', path)
+  def validate(path = @source, copy: false)
+    args = ['ruby', VALIDATOR, '--json']
+    args << '--copy-layout' if copy
+    output, error, status = Open3.capture3(*args, path)
     assert_empty error
     [JSON.parse(output), status.success?]
   end
@@ -160,5 +162,106 @@ class SkillResourcesTest < Minitest::Test
     File.unlink(File.join(@source, 'receipt.md'))
     _, success = validate(installed)
     refute success
+  end
+
+  def test_multiline_inline_destinations_and_titles_are_checked
+    ["[Guide](\nmissing.md\n)", "![Guide](\n<missing guide.svg>\n\"Title\"\n)",
+     "[Guide](\nmissing.md\n'Optional title'\n)",
+     "[Guide](missing.md \"Wrapped\ntitle\")", "[Guide](missing.md 'Wrapped\ntitle')",
+     "[Guide](missing.md (Wrapped\ntitle))"].each do |usage|
+      skill(body: usage)
+      report, success = validate
+      refute success
+      assert_equal 1, report['links']
+    end
+    File.write(File.join(@source, 'guide.md'), 'Guide.')
+    skill(body: "[Guide](\n  guide.md\n  \"Title\"\n)\n")
+    report, success = validate(copy: true)
+    assert success
+    assert_equal 1, report['links']
+  end
+
+  def test_copy_layout_rejects_symlinked_skill_roots
+    skill(body: 'A self-contained skill.')
+    linked = File.join(@root, 'linked')
+    File.symlink(@source, linked)
+    _, source_success = validate(linked)
+    report, copy_success = validate(linked, copy: true)
+    assert source_success
+    refute copy_success
+    assert report['errors'].any? { |error| error.include?('copied skill roots must be directories, not symlinks') }
+  end
+
+  def test_copy_layout_rejects_existing_resource_outside_skill_directories
+    File.write(File.join(@root, 'README.md'), 'Repository resource.')
+    skill(body: '[Guide](../../README.md)')
+    _, source_success = validate
+    report, copy_success = validate(copy: true)
+    assert source_success
+    refute copy_success
+    assert report['errors'].any? { |error| error.include?('missing local resource') }
+  end
+
+  def test_copy_layout_excludes_loose_files_beside_skills
+    File.write(File.join(@root, 'source', 'SHARED.md'), 'Loose resource.')
+    skill(body: '[Shared](../SHARED.md)')
+    _, source_success = validate(File.dirname(@source))
+    _, copy_success = validate(File.dirname(@source), copy: true)
+    assert source_success
+    refute copy_success
+  end
+
+  def test_copy_layout_keeps_packaged_cross_skill_resources
+    other = File.join(@root, 'source', 'other')
+    FileUtils.mkdir_p(other)
+    File.write(File.join(other, 'SKILL.md'), "---\nname: other\ndescription: Read another skill.\n---\n")
+    File.write(File.join(other, 'guide.md'), 'Packaged guide.')
+    skill(body: '[Other guide](../other/guide.md)')
+    report, success = validate(File.dirname(@source), copy: true)
+    assert success
+    assert_equal 2, report['skills']
+    assert_equal 1, report['links']
+  end
+
+  def test_copy_layout_checks_asset_symlink_boundaries
+    File.write(File.join(@root, 'outside.svg'), '<svg/>')
+    File.symlink(File.join(@root, 'outside.svg'), File.join(@source, 'diagram.svg'))
+    skill(body: '![Diagram](diagram.svg)')
+    _, source_success = validate
+    report, copy_success = validate(copy: true)
+    assert source_success
+    refute copy_success
+    assert report['errors'].any? { |error| error.include?('escapes the copied skill layout') }
+  end
+
+  def test_copy_layout_keeps_internal_symlinks_but_rejects_external_entrypoints
+    File.write(File.join(@source, 'guide.md'), 'Guide.')
+    File.symlink('guide.md', File.join(@source, 'alias.md'))
+    skill(body: '[Guide](alias.md)')
+    _, success = validate(copy: true)
+    assert success
+    FileUtils.mv(File.join(@source, 'SKILL.md'), File.join(@root, 'outside.md'))
+    File.symlink(File.join(@root, 'outside.md'), File.join(@source, 'SKILL.md'))
+    report, success = validate(copy: true)
+    refute success
+    assert report['errors'].any? { |error| error.include?('escapes the copied skill layout') }
+  end
+
+  def test_installer_preflight_checks_the_copied_resource_layout
+    checkout = File.join(@root, 'checkout')
+    FileUtils.mkdir_p(checkout)
+    source = File.expand_path('..', __dir__)
+    Dir.children(source).reject { |name| name == '.git' }.each do |name|
+      FileUtils.cp_r(File.join(source, name), File.join(checkout, name))
+    end
+    lint = File.join(checkout, 'tools', 'skill-lint.sh')
+    _, _, before = Open3.capture3('bash', lint)
+    assert before.success?, 'The intact installer preflight must pass.'
+    File.open(File.join(checkout, 'skills', 'changelog', 'SKILL.md'), 'a') do |file|
+      file.puts "\n[Repository guide](../../README.md)"
+    end
+    output, errors, after = Open3.capture3('bash', lint)
+    refute after.success?
+    assert_includes output + errors, 'missing local resource ../../README.md'
   end
 end

@@ -139,7 +139,8 @@ weak result is the expected failure and a strong one is trustworthy.
 `workflow-guards.py` checks explicit invocations of `maintainer`, `qa-audit`, `store-release`,
 `land`, and `rollback` in disposable Git repositories. Each session reads the selected skill from a copy
 of the source checkout. The runner compares files, Git state, service calls, and executed
-command output. A statement in the final response cannot substitute for that evidence.
+command output. Each task requests a structured final report whose facts must match the fixture
+and executed evidence. A statement in the final response cannot substitute for execution.
 
 | Case | Required behavior |
 |---|---|
@@ -159,6 +160,8 @@ The output directory must be new and outside the source checkout. Use `--cases a
 to select cases, `--source /path/to/checkout` to test another skill version, and `--timeout 240`
 to bound each session. The runner retains prompts, transcripts, responses, source hashes,
 before/after state, and a summary. A timeout fails the case and retains partial evidence.
+The runner terminates surviving process-group members before returning, including when the
+group leader exits first. Escaped process groups are outside this trusted-fixture contract.
 Live sessions consume model usage. CI runs only `tests/test-workflow-guards.py`.
 
 The runner keeps the caller's authentication location. It disables host skill entries by
@@ -166,12 +169,23 @@ installed and resolved path, bundled skills, plugins, apps, hooks, browser tools
 and agent network access. It clears the child shell environment. A separate catalog probe
 must report no available skills before cases run. Every case must return the complete skill
 text in a command result. Unknown transcript shapes or a missing skill read cannot pass.
-The metadata checker and query test runner write receipts after execution. Reading their source
-cannot satisfy those checks. The scanner uses the original fixture commit as its fixed baseline.
+The metadata checker and query test runner write receipts after execution. Query receipts contain
+each test's identity, input, expected result, and actual result. Audit and recovery reports must
+include those exact defects. Queue reports must select the priority item and an authorized next
+action. Recovery reports must specify the repair target, native verification step, and approval
+boundary. Reading checker source cannot satisfy execution checks. The scanner uses the original fixture commit as its fixed baseline.
 Moving a local branch cannot change the set of outgoing commits it examines.
 History cleanup must preserve every existing candidate file and committed Git tree entry.
-Each publication receipt must also preserve the committed candidate. New evidence files may be added.
+The only permitted added repository file is `tasks/land-log.md`, as a regular, non-executable
+evidence file. Final state and every publication receipt check the complete worktree and committed
+path sets, including ignored cache folders. File snapshots include modes and symlink targets. Read-only cases also preserve semantic
+index entries, including index flags. The owner's draft keeps its index entry during landing.
 Only fixture programs write receipt logs. The agent stores any extra proof separately.
+
+Reports use one JSON object without extra prose. The scorer reads the final agent message;
+earlier progress messages do not substitute for the report. It checks report facts mechanically,
+including complete test identities and outcomes, priority, action scope, metadata, and publication
+state. This contract checks the fixed scenarios' required results, not arbitrary prose quality.
 
 Store, review, and publication operations use a local emulator. The credential is synthetic.
 The fixture grants access only to its own files and emulator. The workspace sandbox blocks
