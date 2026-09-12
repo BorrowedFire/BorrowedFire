@@ -6,6 +6,7 @@ require 'pathname'
 require 'uri'
 require 'tmpdir'
 require 'fileutils'
+require_relative 'markdown-resources'
 
 json_output = ARGV.delete('--json')
 copy_layout = ARGV.delete('--copy-layout')
@@ -71,42 +72,28 @@ check_links = lambda do |path|
   text = File.read(canonical, encoding: 'UTF-8')
   # Fenced examples are not declarations of installed resources.
   fence = nil
-  prose = text.each_line.reject do |line|
+  prose = text.each_line.map do |line|
     if fence
       closing = /\A {0,3}#{Regexp.escape(fence[0])}{#{fence.length},}[ \t]*\r?\n?\z/
       fence = nil if line.match?(closing)
-      true
+      line.gsub(/[^\r\n]/, ' ')
     elsif (opening = line.match(/\A {0,3}(`{3,}|~{3,})[^\r\n]*\r?\n?\z/))
       fence = opening[1]
-      true
+      line.gsub(/[^\r\n]/, ' ')
     else
-      false
+      line
     end
   end.join
   # Inline code can contain a Markdown example intended for a future product file.
-  links_prose = prose.gsub(/(`+).*?\1/m, '')
-  normalize_label = ->(label) { label.strip.gsub(/\s+/, ' ').downcase }
-  definitions = {}
-  # Definitions declare destinations. Only references used in prose activate them.
-  links_prose = links_prose.gsub(/^ {0,3}\[([^\]\n]+)\]:[ \t]*(?:\n[ \t]*)?(<[^>\n]+>|[^\s]+)[^\n]*$/) do
-    label, destination = Regexp.last_match.captures
-    definitions[normalize_label.call(label)] ||= destination
-    ''
-  end
-  targets = []
-  # Match complete links before shortcut references so an inline label cannot activate
-  # a same-named definition. Reference labels ignore case and repeated whitespace.
-  links_prose.scan(/(?<!\\)\[([^\]\n]*)\](?:\(\s*(<[^>]+>|[^\s)]+)(?:\s+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^)\\])*\)))?\s*\)|\[([^\]\n]*)\])?/) do |label, inline, reference|
-    target = inline || definitions[normalize_label.call(reference.nil? || reference.empty? ? label : reference)]
-    targets << target if target
-  end
-  targets += prose.scan(%r{`((?:/Users|/home)/[^`\n]+)`}).flatten
-  targets.uniq.each do |target|
-    target = target.sub(/^</, '').sub(/>$/, '')
+  links_prose = MarkdownResources.mask_inline_code(prose)
+  targets = MarkdownResources.targets(links_prose).map { |target| [target, false] }
+  targets += prose.scan(%r{`((?:/Users|/home)/[^`\n]+)`}).flatten.map { |target| [target, true] }
+  targets.uniq.each do |target, literal_path|
     next if target.start_with?('#') || target.match?(/\A[a-z][a-z0-9+.-]*:/i)
     # Root-relative URLs describe a product route. Explicit home paths describe local files.
     next if target.start_with?('/') && !target.start_with?('/Users/', '/home/')
-    target = URI::DEFAULT_PARSER.unescape(target.split('#', 2).first.to_s)
+    # Split URL components before decoding: %3F and %23 are literal filename bytes.
+    target = URI::DEFAULT_PARSER.unescape(target.split(/[?#]/, 2).first.to_s) unless literal_path
     next if target.empty?
     checked_links += 1
     resolved = File.expand_path(target, File.dirname(canonical))

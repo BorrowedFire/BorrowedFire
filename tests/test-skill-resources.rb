@@ -264,4 +264,121 @@ class SkillResourcesTest < Minitest::Test
     refute after.success?
     assert_includes output + errors, 'missing local resource ../../README.md'
   end
+
+  def test_balanced_links_resolve_complete_destinations
+    cases = [
+      ['[Guide [advanced]](guide.md)', ['guide.md']],
+      ['[[Guide](guide.md)]', ['guide.md']],
+      ['[See [Guide](guide.md)]', ['guide.md']],
+      ["[See [guide]]\n\n[guide]: guide.md", ['guide.md']],
+      ['[Guide \\[advanced\\]](guide.md)', ['guide.md']],
+      ["[Guide\nadvanced](guide.md)", ['guide.md']],
+      ['[Guide](guide(one(two)).md)', ['guide(one(two)).md']],
+      ['[Guide](guide\\(one\\).md)', ['guide(one).md']],
+      ['[Guide](<a guide(one).md>)', ['a guide(one).md']],
+      ['[![Alt](image.svg)](guide.md)', ['guide.md', 'image.svg']],
+      ['[Outer [Guide](guide.md)](inactive.md)', ['guide.md']],
+      ['![Alt [Guide](inactive.md)](image.svg)', ['image.svg']],
+      ["[Guide [advanced]][resource]\n\n[resource]: guide(one(two)).md", ['guide(one(two)).md']],
+      ["[ReSoUrCe][]\n\n[resource]: guide.md?raw=1#usage", ['guide.md']],
+      ["[resource]\n\n[resource]: guide.md", ['guide.md']],
+      ["[resource]\n\n[resource]: guide.md \"Wrapped\n[text](unused.md)\"", ['guide.md']],
+      ['[Guide](guide.md "Title with \\"quotes\\" and [text](unused.md)")', ['guide.md']]
+    ]
+    cases.each do |body, paths|
+      skill(body: body)
+      missing, success = validate(copy: true)
+      refute success, body
+      assert_equal paths.length, missing['links'], body
+      paths.each { |path| File.write(File.join(@source, path), 'Resource.') }
+      present, success = validate(copy: true)
+      assert success, "#{body}: #{present['errors']}"
+      assert_equal paths.length, present['links'], body
+      paths.each { |path| File.unlink(File.join(@source, path)) }
+    end
+  end
+
+  def test_uri_paths_drop_suffixes_before_decoding_once
+    {
+      'guide.md?raw=1#usage' => 'guide.md',
+      'guide%23part.md#usage' => 'guide#part.md',
+      'a%3Fb.md?raw=1' => 'a?b.md',
+      'a+b.md' => 'a+b.md',
+      '%252e.md' => '%2e.md'
+    }.each do |url, path|
+      skill(body: "[Guide](#{url})")
+      report, success = validate(copy: true)
+      refute success
+      assert_equal 1, report['links']
+      File.write(File.join(@source, path), 'Resource.')
+      report, success = validate(copy: true)
+      assert success, report['errors'].inspect
+      assert_equal 1, report['links']
+      File.unlink(File.join(@source, path))
+    end
+    skill(body: '[Section](#usage) [Query](?raw=1)')
+    report, success = validate(copy: true)
+    assert success
+    assert_equal 0, report['links']
+  end
+
+  def test_encoded_paths_keep_copy_boundaries_and_reject_nul
+    File.write(File.join(@root, 'outside.md'), 'Outside.')
+    ['%2e%2e/%2e%2e/outside.md', 'guide%00.md'].each do |url|
+      skill(body: "[Guide](#{url})")
+      report, success = validate(copy: true)
+      refute success
+      refute_empty report['errors']
+    end
+  end
+
+  def test_inner_reference_takes_precedence_over_outer_link
+    File.write(File.join(@source, 'advanced.md'), 'Guide.')
+    skill(body: "[Guide [advanced]](inactive.md)\n\n[advanced]: advanced.md\n")
+    report, success = validate
+    assert success
+    assert_equal 1, report['links']
+  end
+
+  def test_malformed_balancing_does_not_emit_truncated_destinations
+    ['[Guide](guide(one.md)', '[Guide [advanced(guide.md)',
+     '[Guide](guide.md "unclosed title)', '[Guide](<guide.md)'].each do |body|
+      skill(body: body)
+      report, success = validate
+      assert success, report['errors'].inspect
+      assert_equal 0, report['links'], body
+    end
+  end
+
+  def test_exact_backtick_spans_preserve_link_boundaries
+    skill(body: "``code ` [Example](missing.md)``\n[label]`code`(missing.md)\n")
+    report, success = validate
+    assert success
+    assert_equal 0, report['links']
+    skill(body: "``code ` example`` [Guide](missing.md)")
+    report, success = validate
+    refute success
+    assert_equal 1, report['links']
+  end
+
+  def test_unmatched_outer_label_keeps_a_valid_inner_link
+    skill(body: '[Unmatched [Guide](missing.md)')
+    report, success = validate
+    refute success
+    assert_equal 1, report['links']
+  end
+
+  def test_reference_label_requires_adjacency
+    File.write(File.join(@source, 'one.md'), 'First guide.')
+    File.write(File.join(@source, 'two.md'), 'Second guide.')
+    skill(body: "[one] [two]\n\n[one]: one.md\n[two]: two.md\n")
+    report, success = validate
+    assert success
+    assert_equal 2, report['links']
+    File.unlink(File.join(@source, 'one.md'))
+    report, success = validate
+    refute success
+    assert_equal 2, report['links']
+    assert report['errors'].any? { |error| error.include?('missing local resource one.md') }
+  end
 end

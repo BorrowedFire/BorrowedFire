@@ -20,11 +20,13 @@ Borrowed Fire is the system; Prometheus, the one who borrowed the fire, is its m
 
 The installer requires Bash, Git, and Ruby with its standard YAML library. Skill validation
 parses frontmatter and validates resources in the directory layout that copy installation
-produces. It checks relative Markdown links, including multiline destinations, and explicit
+produces. It checks inline and reference-style Markdown links, including balanced labels,
+parentheses in destinations, multiline titles, and URL queries. It also checks explicit
 home-directory file links. Source skill folders must be directories. Copy validation rejects
 symlinked skill folders because the installer preserves those links. Resources must stay inside
 the copied skill directories, including targets reached through symlinks. Validation excludes
-web URLs, root-relative product routes, and code examples.
+web URLs, root-relative product routes, and fenced or inline code examples. The resource scanner
+supports these link forms; it is not a complete Markdown renderer.
 
 ```sh
 git clone https://github.com/BorrowedFire/BorrowedFire.git
