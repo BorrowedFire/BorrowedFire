@@ -49,7 +49,22 @@ check_links = lambda do |path|
     end
   end.join
   # Inline code can contain a Markdown example intended for a future product file.
-  targets = prose.gsub(/(`+).*?\1/m, '').scan(/\[[^\]\n]*\]\((<[^>]+>|[^\s)]+)(?:\s+["'][^\n]*?["'])?\)/).flatten
+  links_prose = prose.gsub(/(`+).*?\1/m, '')
+  normalize_label = ->(label) { label.strip.gsub(/\s+/, ' ').downcase }
+  definitions = {}
+  # Definitions declare destinations. Only references used in prose activate them.
+  links_prose = links_prose.gsub(/^ {0,3}\[([^\]\n]+)\]:[ \t]*(?:\n[ \t]*)?(<[^>\n]+>|[^\s]+)[^\n]*$/) do
+    label, destination = Regexp.last_match.captures
+    definitions[normalize_label.call(label)] ||= destination
+    ''
+  end
+  targets = []
+  # Match complete links before shortcut references so an inline label cannot activate
+  # a same-named definition. Reference labels ignore case and repeated whitespace.
+  links_prose.scan(/(?<!\\)\[([^\]\n]*)\](?:\((<[^>]+>|[^\s)]+)(?:\s+["'][^\n]*?["'])?\)|\[([^\]\n]*)\])?/) do |label, inline, reference|
+    target = inline || definitions[normalize_label.call(reference.nil? || reference.empty? ? label : reference)]
+    targets << target if target
+  end
   targets += prose.scan(%r{`((?:/Users|/home)/[^`\n]+)`}).flatten
   targets.uniq.each do |target|
     target = target.sub(/^</, '').sub(/>$/, '')

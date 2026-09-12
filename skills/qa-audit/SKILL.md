@@ -66,8 +66,8 @@ When the requested audit needs the full artifact set, create or update:
 
 **Artifact policy:** commit repository artifacts only when the request or existing repository
 convention calls for it. A request to inspect and report does not itself require a commit or PR.
-Use the selected output form throughout the loop; file names below identify evidence categories
-when the focused audit uses a single report.
+Use the selected output form throughout the loop. Keep the evidence categories in the focused
+report, or use their corresponding files above for a reusable audit.
 
 ## Operating Loop
 
@@ -78,9 +78,9 @@ when the focused audit uses a single report.
    user's checkout to restore a test baseline. Do not edit yet.
 2. **Scope.** Define the audit boundary in one sentence: repo, surface, target users,
    environments, and explicit non-goals.
-3. **Discover features from code.** Build `feature-inventory.md` from routes, screens, components,
+3. **Discover features from code.** Build the feature inventory from routes, screens, components,
    API handlers, jobs, config, migrations, tests, and docs. Mark inferred items as inferred.
-4. **Build the matrix.** Create `test-matrix.md` with happy paths, edge cases, auth/permission
+4. **Build the matrix.** Record happy paths, edge cases, auth/permission
    checks, error states, data integrity, accessibility/usability where relevant, and regression
    checks for recently changed areas.
 5. **Execute checks.** Run repo-native automated tests first, then targeted manual or tool-driven
@@ -95,13 +95,13 @@ when the focused audit uses a single report.
    the denylist unless separately authorized.
 8. **Regress.** Re-run the exact failing check plus adjacent checks after each fix. Update defect
    status with the proof.
-9. **Summarize.** Update `coverage-summary.md` with confidence, completed evidence, untested
+9. **Summarize.** Record coverage confidence, completed evidence, untested
    surfaces, open defects by severity, and decision-ready next steps. Capture recurring defect
    patterns via `remember` to `lessons/`.
 
 **Evidence rungs.** Grade every piece of recorded evidence on the proof ladder in `land`'s Live
-Proof Gate, and write the rung next to the evidence in `test-matrix.md` and `defects.md`. In
-`coverage-summary.md`, "proven" means rung 4 or higher: the check ran real code or drove the real
+Proof Gate, and write the rung next to the evidence in the test matrix and defect records. In
+the coverage summary, "proven" means rung 4 or higher: the check ran real code or drove the real
 surface. Rungs 1-3 (a claim, a cited line, a walked-through argument) are review notes. List them
 under "not proven" with the rung each reached.
 
@@ -115,12 +115,11 @@ fix/regression pass:
 3. Mark lifecycle re-entry, async suspension, authorization identity/role, migration/legacy state,
    retention/deletion/cleanup, and retry/idempotency as `applicable`, `not applicable` with a
    reason, or `unverified`.
-4. Add the resulting state and negative paths to `<audit-dir>/test-matrix.md`.
+4. Add the resulting state and negative paths to the test matrix.
 5. When fixing is allowed, fix the smallest coherent invariant boundary, add regression coverage
    for each exposed transition, and rerun focused plus adjacent-consumer checks. When `--no-fix`
    is active, do not edit implementation or tests; record the candidate boundary, required
-   regressions, and missing proof in `<audit-dir>/defects.md` and
-   `<audit-dir>/coverage-summary.md`.
+   regressions, and missing proof in the defect records and coverage summary.
 
 A new validated related defect after this audit and a subsequent pass, an unbounded invariant, or
 a required product/security/architecture decision ends the pass and becomes a decision-ready
@@ -177,7 +176,7 @@ Final report should be short and evidence-first:
 
 ```
 QA Audit: <scope>
-Artifacts: <audit-dir>/feature-inventory.md, <audit-dir>/test-matrix.md, <audit-dir>/defects.md, <audit-dir>/coverage-summary.md
+Artifacts: <links, only when the audit created separate artifacts>
 
 Proven:
 - <feature/check -> evidence>

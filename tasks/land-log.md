@@ -283,16 +283,19 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
 
 The scorer must use evidence from the operation it claims to verify. A local branch name cannot
 redefine the publication baseline. Candidate cleanup may rewrite unpublished history while the
-original base and intended feature remain intact.
+original base and every existing candidate file remain intact. New evidence files may be added.
 
 | Entry or consumer | Authoritative state | Required negative path |
 |---|---|---|
 | Metadata checker and bump scorer | Receipt written after successful validation | Reading source emits no receipt. |
 | Query tests and audit scorer | Receipt written after the test runner returns | Printed markers do not prove test execution. |
 | History scan and publication | Seed commit embedded in the protected emulator | Moving `main` cannot hide outgoing commits. |
-| Local merge boundary | Original `main` object ID and candidate feature | Advancing the base or dropping the feature fails. |
+| Local merge boundary | Original `main` object ID and existing candidate files | Advancing the base, changing a file, or dropping a file fails. |
+| Committed candidate and publication | Original Git tree entries, separate from working files | A mixed reset cannot publish a base commit while the feature remains uncommitted. |
 | Cleanup and rescan | Current candidate commit plus working-file digest | Old scans cannot authorize changed content. |
-| Installed skill resources | Parsed YAML and resolved filesystem targets | Missing resources and malformed frontmatter fail. |
+| Installed skill resources | Parsed YAML and resolved filesystem targets | Missing inline or referenced resources and malformed frontmatter fail. |
+| Recovery planning | The owner's grant for each action | A plan request stops before revert, merge, or deployment. |
+| Focused audit output | The selected report or reusable artifact mode | Evidence categories do not imply repository file writes. |
 
 Retry and lifecycle re-entry apply to scans becoming stale after edits or rewritten commits.
 Authorization applies to cleanup, publication, and the separate review and merge gates.
@@ -301,6 +304,13 @@ migrations, and retention or deletion of production data are outside these local
 The timeout path retains partial evidence. Final-state checks cannot detect a temporary edit
 that an agent fully restores. The fixtures assume a cooperative agent that leaves the recorder
 unchanged.
+
+The first hosted review also found candidate-file integrity and reference-link gaps, plus
+contradictory rollback and focused-audit instructions. These belong to the initial review cycle.
+Regression cases cover file deletion and modification, full/collapsed/shortcut references,
+unused definitions, empty inline/image labels, mixed resets, and recovery plans. Receipt logs belong to the fixture checkers; extra
+agent proof belongs in separate files. An earlier run appended its proof to the receipt log and
+failed the service-action check. The fixture prompt now states that recorder boundary.
 
 - Review and proof for this entry's commit remain pending. Final receipts and any merge SHA
   belong in the PR and project record, not a later unreviewed repository commit.
