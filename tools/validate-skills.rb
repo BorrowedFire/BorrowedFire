@@ -54,6 +54,8 @@ check_links = lambda do |path|
   targets.uniq.each do |target|
     target = target.sub(/^</, '').sub(/>$/, '')
     next if target.start_with?('#') || target.match?(/\A[a-z][a-z0-9+.-]*:/i)
+    # Root-relative URLs describe a product route. Explicit home paths describe local files.
+    next if target.start_with?('/') && !target.start_with?('/Users/', '/home/')
     target = URI::DEFAULT_PARSER.unescape(target.split('#', 2).first.to_s)
     next if target.empty?
     checked_links += 1

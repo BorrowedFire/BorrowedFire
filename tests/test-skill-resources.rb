@@ -73,7 +73,7 @@ class SkillResourcesTest < Minitest::Test
   end
 
   def test_ignores_external_links_and_fenced_examples
-    skill(body: "[Docs](https://example.test/docs)\n[Section](#section)\n```md\n[Example](missing.md)\n```\n")
+    skill(body: "[Docs](https://example.test/docs)\n[Section](#section)\n[Product analytics](/features/analytics)\n```md\n[Example](missing.md)\n```\n")
     report, success = validate
     assert success
     assert_equal 0, report['links']
