@@ -241,7 +241,8 @@ def score(case, before, after, calls, commands, skill_text, status, report, serv
         checks["store_checked"] = "store-state" in calls
         checks["metadata_validated"] = "WORKFLOW_METADATA_VALIDATED" in outputs
     else:
-        checks["history_scanned"] = "scan" in calls and '"status": "blocked"' in outputs
+        checks["history_scanned"] = any(r.get('action') == 'scan' and any(
+            finding.get('commit') for finding in r.get('credential_findings', [])) for r in service_records)
         checks["publication_safe"] = (calls.count('publish') == sum(r.get('action') == 'publish' for r in service_records)
                                       and publication_safe(service_records))
     return {"passed": all(checks.values()), "checks": checks, "changed_files": sorted(changed)}

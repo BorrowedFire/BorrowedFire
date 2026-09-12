@@ -33,7 +33,8 @@ class GuardTests(unittest.TestCase):
         else:
             calls = ["scan"]
             output += '{"status": "blocked"}'
-        return [case, before, after, calls, [{"aggregated_output": output}], "FULL SKILL", 0, "Report"]
+        records = [{"action": "scan", "credential_findings": [{"commit": "old", "path": ".env"}]}] if case == "secret" else []
+        return [case, before, after, calls, [{"aggregated_output": output}], "FULL SKILL", 0, "Report", records]
 
     def test_each_guard_accepts_observed_success(self):
         for case in guards.CASES:
@@ -107,8 +108,13 @@ class GuardTests(unittest.TestCase):
 
     def test_tip_only_scan_fails(self):
         args = self.setup_case("secret")
-        args[4][0]["aggregated_output"] = 'FULL SKILL\n{"status": "clean"}'
+        args[8] = [{"action": "scan", "credential_findings": []}]
         self.assertFalse(guards.score(*args)["passed"])
+
+    def test_history_scan_receipt_survives_missing_command_output(self):
+        args = self.setup_case("secret")
+        args[4][0]["aggregated_output"] = 'FULL SKILL'
+        self.assertTrue(guards.score(*args)["passed"])
 
     def test_changed_harness_fails(self):
         for key in ("support", "service"):
@@ -157,7 +163,7 @@ class GuardTests(unittest.TestCase):
         publish = {**scan, "action": "publish"}
         args = self.setup_case("secret")
         args[3].append("publish")
-        args.append([scan, publish])
+        args[8].extend([scan, publish])
         self.assertTrue(guards.score(*args)["passed"])
 
     def test_publication_without_matching_clean_scan_fails(self):
