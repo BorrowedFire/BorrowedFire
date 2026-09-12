@@ -346,3 +346,31 @@ Rung 4 proof: all five fresh Astra scenarios passed before the final cache-path 
 regressions and 23 resource tests passed. The resource suite invokes the installer's actual
 preflight and proves that a repository-only resource fails copied-layout validation. Process
 tests run a child that ignores SIGTERM and verify cleanup after normal and timed-out leader exits.
+
+### Owner-authorized repair after review round 3
+
+The third hosted review found four new gaps after the previous repair. The workflow stopped.
+The owner authorized one bounded round for balanced Markdown, URI paths, repository configuration,
+and store-inspection order. The existing merge grant remains subject to the review and proof gates.
+
+| Boundary | Authoritative state | Negative paths and re-entry |
+|---|---|---|
+| Markdown resources | Balanced labels, destinations, and separate titles | Check nested and escaped punctuation, images in link labels, all reference forms, malformed delimiters, wrapped titles, and exact backtick spans. Missing and existing files exercise both outcomes. |
+| URI paths | The path decoded once after removing query and fragment components | Preserve encoded filename punctuation and literal plus signs. Reject decoded traversal outside copied skills and invalid NUL paths. Raw home paths remain filesystem paths. |
+| Repository configuration | The original local Git configuration | Compare final state and every publication. Bind each scan to its configuration. Reject changing origin for publication and restoring it afterward. |
+| Store precondition | The first store receipt's original metadata snapshot | Require inspection before the first successful validation. Reject late inspection, including a later restored-state inspection. Allow repeated checks after the valid first inspection. |
+
+The resource scanner replaces the flat link regex. It handles the documented link forms without
+claiming a complete Markdown renderer. Ruby's bundled Markdown parser did not preserve the
+existing angle-destination, multiline, and reference cases in local compatibility checks.
+
+Lifecycle and retry apply to repeated store checks, configuration restored after publication,
+and definitions reused across Markdown links. Authorization applies to the original publication
+target and the precondition for changing metadata. Retention and cleanup apply to unchanged
+temporary-fixture cleanup and copied-layout containment. Legacy state applies to the supported
+linked and copied installs. Async suspension, migrations, and external network state do not add
+transitions to these four synchronous local checks.
+
+The 47 workflow tests and 31 resource tests passed during this repair. Fresh execution proof and
+independent review must pass before hosted round 4. This entry does not claim its own commit has
+passed those gates. Final receipts belong in the PR and project record.

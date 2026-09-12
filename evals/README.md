@@ -180,6 +180,11 @@ The only permitted added repository file is `tasks/land-log.md`, as a regular, n
 evidence file. Final state and every publication receipt check the complete worktree and committed
 path sets, including ignored cache folders. File snapshots include modes and symlink targets. Read-only cases also preserve semantic
 index entries, including index flags. The owner's draft keeps its index entry during landing.
+All cases preserve repository-local Git configuration at final state. Each landing publication
+also preserves the original configuration and matches the preceding scan's configuration.
+The final report uses a scan that matches the final configuration, head, and working files.
+The build case requires the first store inspection to observe the original metadata before
+the first successful validation. Later inspections and validations are allowed.
 Only fixture programs write receipt logs. The agent stores any extra proof separately.
 
 Reports use one JSON object without extra prose. The scorer reads the final agent message;
