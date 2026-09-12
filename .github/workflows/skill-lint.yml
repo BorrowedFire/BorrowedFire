@@ -28,3 +28,5 @@ jobs:
         run: bash tests/test-prometheus-cycle.sh
       - name: Doctrine eval scorer (recorded transcripts, no API calls)
         run: bash tests/test-evals.sh
+      - name: Workflow guard scorer (local fixtures, no API calls)
+        run: python3 -B tests/test-workflow-guards.py

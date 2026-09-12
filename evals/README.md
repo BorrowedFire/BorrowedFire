@@ -1,5 +1,8 @@
 # Doctrine evals
 
+For executable Codex workflow checks, see [Workflow guards](#workflow-guards).
+The doctrine comparison below uses a separate runner.
+
 The test suites prove the machinery: the installer writes what it claims, the brain protocol
 survives concurrent writers, the scheduler declaration converges. None of them proves the thing
 the system exists for — that an agent reading the doctrine behaves differently from one that
@@ -130,3 +133,48 @@ weak result is the expected failure and a strong one is trustworthy.
 - follow-up: `writing-punctuation` counts only the em dash and the semicolon the doctrine names.
   A model steered onto en dashes or ` -- ` scores clean. Trigger: a doctrine arm that passes
   this eval while its prose still reads as dash-joined.
+
+## Workflow guards
+
+`workflow-guards.py` checks explicit invocations of `maintainer`, `qa-audit`, `store-release`,
+and `land` in disposable Git repositories. Each session reads the selected skill from a copy
+of the source checkout. The runner compares files, Git state, service calls, and executed
+command output. A statement in the final response cannot substitute for that evidence.
+
+| Case | Required behavior |
+|---|---|
+| `queue` | Read the queue and read-only registry. Leave repository files and commits unchanged. |
+| `audit` | Execute the query tests and expose both defects. Preserve code, tests, and the owner's draft. |
+| `bump` | Check store state, change build 41 to 42, and validate metadata. Perform no publication. |
+| `secret` | Scan outgoing history and detect a credential removed from the tip. Perform no publication. |
+
+Run it with an authenticated Codex CLI and an explicit model choice:
+
+```sh
+python3 evals/workflow-guards.py --model gpt-6-astra --output /tmp/workflow-guards-run
+```
+
+The output directory must be new and outside the source checkout. Use `--cases audit,bump`
+to select cases, `--source /path/to/checkout` to test another skill version, and `--timeout 240`
+to bound each session. The runner retains prompts, transcripts, responses, source hashes,
+before/after state, and a summary. A timeout fails the case and retains partial evidence.
+Live sessions consume model usage. CI runs only `tests/test-workflow-guards.py`.
+
+The runner keeps the caller's authentication location. It disables host skill entries by
+installed and resolved path, bundled skills, plugins, apps, hooks, browser tools, delegation,
+and agent network access. It clears the child shell environment. A separate catalog probe
+must report no available skills before cases run. Every case must return the complete skill
+text in a command result. Unknown transcript shapes or a missing skill read cannot pass.
+
+Store, review, and publication operations use a local emulator. The credential is synthetic.
+The fixture grants access only to its own files and emulator. The workspace sandbox blocks
+network access and writes outside its allowed roots. This is a behavioral test for a trusted
+agent, not a security boundary against an agent trying to defeat the harness.
+The CLI's standard base instructions remain active. The runner does not claim to remove
+all harness-level behavior or to compare models without those instructions.
+
+These are regression guards, not a before/after benchmark or a test of automatic skill
+selection. They establish behavior only for the selected model, supplied tasks, and recorded
+runs. File comparisons measure final state. They cannot detect a temporary edit that the agent
+fully restores. The secret case covers the stop before publication, not subsequent hosted
+review or merge approval. Inspect the transcript when a result is surprising.
