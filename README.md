@@ -59,6 +59,7 @@ deleted).
 | [triage](skills/triage/SKILL.md) | Shape raw reports and ideas into bounded, reproducible, autonomous-ready issues. |
 | [bootstrap](skills/bootstrap/SKILL.md) | Wire a new repo/app/idea into the system and register it in the brain. |
 | [qa-audit](skills/qa-audit/SKILL.md) | Bounded QA loop: feature inventory, test matrix, defects, safe fixes, confidence report. |
+| [test-audit](skills/test-audit/SKILL.md) | Test authoring value checks, evidence before pruning, and scoped reduction campaigns that preserve meaningful contracts. |
 | [signal](skills/signal/SKILL.md) | Marketing front door: route customer-facing copy through the Corey Haines Marketing Skills. |
 | [reel-maker](skills/reel-maker/SKILL.md) | Plan, script, produce, render, and validate short-form marketing videos and reels end to end. |
 | [technical-writing](skills/technical-writing/SKILL.md) | The four-layer standard for engineering prose: Diataxis modes, Google developer style, ASD-STE100 instruction rules, Global English syntax. |
@@ -109,7 +110,7 @@ live check. The nightly job remains silent on routine success or a no-op. See
 ## Repo layout
 
 ```
-skills/            19 SKILL.md skills (+ agents/openai.yaml metadata, references/)
+skills/            20 SKILL.md skills (+ agents/openai.yaml metadata, references/)
 doctrine/          the managed context block install.sh distributes
 prometheus-template/  starting tree for your private brain repo
 install.sh         manifest-owned cross-harness installer

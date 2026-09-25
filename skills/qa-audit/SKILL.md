@@ -66,6 +66,9 @@ unstated, keep them on the audit branch/PR and ask once in the report.
 
 ## Operating Loop
 
+Apply `test-audit`'s authoring gate when adding regression coverage. A QA request does not start
+a test-pruning campaign; audit test value only within the requested scope.
+
 1. **Preflight.** Read repo instructions, current branch, dirty state, package/build/test scripts,
    CI config, app surfaces, and recent changes. `recall` the repo's `lessons/` and registry page
    if a brain is available. Do not edit yet.

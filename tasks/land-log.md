@@ -268,3 +268,19 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
   failing, the reverse-direction ledger check proven both ways on a real brain copy, and the
   mirroring order pinned by a mutation that moves the instruction and fails. Suites: skill-lint
   19, test-install 198/198, test-brain 56/56, cycle 184/184, evals 48/48, shellcheck clean.
+
+## 2026-09-25 — test-value guidance and pruning campaigns
+
+- Item: add a short test-value rule to both doctrine variants and a portable `test-audit` skill.
+  The owner authorized installation and merge. `land` and `qa-audit` use the authoring gate.
+- Scope: instruction and metadata changes. A requested campaign defaults to 20% fewer cases
+  with at most a 2 percentage point drop in each available coverage metric. Distinct contract
+  protection, repository thresholds, and existing authorization take precedence over the target.
+- Proof prepared, rung 4: skill lint and copied-resource validation pass. The installer matrix
+  passes 198 checks. Three disposable forward trials exercise authoring, audit-only behavior,
+  and a campaign. The authoring trial adds no test for a comment-only edit. The audit preserves
+  a failing regression and reports the product defect without edits. The campaign removes four
+  of 20 cases while retaining measured line and branch coverage and passing mutation controls.
+- Review and merge: pending on this candidate. Record final gate receipts and the merge commit
+  in the PR and private project log after landing. The independent skill-cleanup PR is outside
+  this change.

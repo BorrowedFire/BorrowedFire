@@ -21,6 +21,9 @@ it and surface it in the summary. If autonomous work remains, do it and report t
 
 ## Classify first
 
+Apply `test-audit`'s authoring gate to new or changed tests. Keep review and fixes within the
+authorized change. A landing task does not start a test-pruning campaign.
+
 - **Autonomous** — clear, bounded, reproducible, with a real **live-proof path**. Drive to merge.
 - **Needs-owner** — product choice, security/privacy/irreversible call, missing credential/access,
   no live proof, or it touches the **denylist** (`references/denylist.md`, plus the project

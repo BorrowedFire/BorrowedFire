@@ -1,0 +1,7 @@
+interface:
+  display_name: "Test audit"
+  short_description: "Keep useful tests and prune redundant coverage"
+  default_prompt: "Use $test-audit to evaluate the scoped tests and identify which contracts each test protects."
+
+policy:
+  allow_implicit_invocation: true
