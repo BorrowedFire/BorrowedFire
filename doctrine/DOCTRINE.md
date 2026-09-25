@@ -1,5 +1,5 @@
 <!-- BEGIN BORROWEDFIRE DOCTRINE -->
-## Borrowed Fire doctrine (v6 — managed by install.sh, do not hand-edit)
+## Borrowed Fire doctrine (v7 — managed by install.sh, do not hand-edit)
 
 **Memory.** Prometheus is the private git-backed brain. Resolve it through `$PROMETHEUS_DIR`, then
 `~/.config/borrowedfire/brain`, then `~/prometheus`. Before substantive repo work, use `recall` for
@@ -17,6 +17,12 @@ name the sanctioned exceptions, so a rule cannot forbid an operation the system 
 `unslop` on prose before it ships. Use `technical-writing` for docs, READMEs, RFCs, design notes,
 `SKILL.md` bodies, PR descriptions, and commit messages. It owns the full four-layer standard
 (Diataxis, Google developer style, ASD-STE100, Global English) and the review checklist.
+
+**Tests.** Before adding a test, name the behavior or independent contract it protects, the
+credible regression that makes it fail, and why existing coverage misses that regression. Extend
+existing cases when they cover the same risk. A small edit with no uncovered risk needs no new test.
+Judge test cleanup by retained protection. A reduction target or unchanged code coverage does
+not justify losing the only test of a current contract.
 
 **Learning.** After every substantive task reaches a stable checkpoint, run `reflect` automatically
 before the final honesty audit; no user prompt is required. Capture only verified, reusable deltas,
@@ -50,6 +56,7 @@ local tier when one is available. Never hardcode private endpoints, caps, or pro
 | shape a report or idea into an issue | `triage` |
 | register a new repo/app/idea | `bootstrap` |
 | bounded QA loop | `qa-audit` |
+| test value, duplication, or a pruning campaign | `test-audit` |
 | marketing / customer-facing copy | `signal` |
 | short-form marketing video or reel | `reel-maker` |
 | engineering prose: docs, RFCs, PR descriptions, commit messages | `technical-writing` |

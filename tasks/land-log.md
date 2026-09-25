@@ -268,3 +268,32 @@ Dated entries appended by `land` runs — item, classification, gates, decisions
   failing, the reverse-direction ledger check proven both ways on a real brain copy, and the
   mirroring order pinned by a mutation that moves the instruction and fails. Suites: skill-lint
   19, test-install 198/198, test-brain 56/56, cycle 184/184, evals 48/48, shellcheck clean.
+
+## 2026-09-25 — test-value guidance and pruning campaigns
+
+- Item: add a short test-value rule to both doctrine variants and a portable `test-audit` skill.
+  The owner authorized installation and merge. `land` and `qa-audit` carry the authoring questions.
+- Scope: instruction and metadata changes. A requested campaign defaults to 20% fewer cases
+  with at most a 2 percentage point drop in each available coverage metric. Distinct contract
+  protection, repository thresholds, and existing authorization take precedence over the target.
+- Proof prepared, rung 4: skill lint and copied-resource validation pass. The installer matrix
+  passes 198 checks. Three disposable forward trials exercise authoring, audit-only behavior,
+  and a campaign. The authoring trial adds no test for a comment-only edit. The audit preserves
+  a failing regression and reports the product defect without edits. The campaign removes four
+  of 20 cases while retaining measured line and branch coverage and passing mutation controls.
+- Hosted round 1 found that the callers required an optional skill the installer could skip.
+  A disposable install reproduced success with a foreign `test-audit` left in place. Both
+  callers now contain the short authoring gate and require no lookup of the optional skill.
+  The corrected install preserves the foreign skill while keeping the caller gates available.
+- The next independent pass caught an overbroad ban on tests when a change introduces no new
+  risk. A regression can protect an existing uncovered risk. The callers now use the skill's
+  existing value rule, and the doctrine names uncovered risk.
+- Bounded invariant audit: inspected both doctrine variants, both caller gates, the skill's
+  three modes, metadata, and installer collision behavior. New behavior, existing bugs, and
+  uncovered QA contracts may need tests. Duplicate proof and comment-only edits need none.
+  Static contracts retain their exception. Audit-only scope still permits no edits. Installer
+  re-entry and foreign-skill handling use the existing matrix and the added disposable proof.
+  No service lifecycle, asynchronous state, credential, or data migration changes are involved.
+- Review and merge: pending on this candidate. Record final gate receipts and the merge commit
+  in the PR and private project log after landing. The independent skill-cleanup PR is outside
+  this change.

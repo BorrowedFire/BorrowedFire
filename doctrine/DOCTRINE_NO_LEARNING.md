@@ -1,5 +1,5 @@
 <!-- BEGIN BORROWEDFIRE DOCTRINE -->
-## Borrowed Fire doctrine (v6 reduced mode — managed by install.sh, do not hand-edit)
+## Borrowed Fire doctrine (v7 reduced mode — managed by install.sh, do not hand-edit)
 
 **Memory.** Prometheus is the private git-backed brain. Resolve it through `$PROMETHEUS_DIR`, then
 `~/.config/borrowedfire/brain`, then `~/prometheus`. Before substantive repo work, use `recall` for
@@ -16,6 +16,12 @@ Prefer a period to an em dash or a semicolon. Scope every "never" and "always" t
 name the sanctioned exceptions, so a rule cannot forbid an operation the system requires. The
 writing skills are not mandated in this state because the installer could not verify them. Apply
 the rules above by hand until a successful Borrowed Fire install restores the full doctrine.
+
+**Tests.** Before adding a test, name the behavior or independent contract it protects, the
+credible regression that makes it fail, and why existing coverage misses that regression. Extend
+existing cases when they cover the same risk. A small edit with no uncovered risk needs no new test.
+Judge test cleanup by retained protection. A reduction target or unchanged code coverage does
+not justify losing the only test of a current contract.
 
 **Reduced mode.** Part of the Borrowed Fire skill stack is not installer-owned, so this context
 carries only the capabilities the installer could verify. Automatic learning is disabled and the
@@ -46,6 +52,7 @@ local tier when one is available. Never hardcode private endpoints, caps, or pro
 | shape a report or idea into an issue | `triage` |
 | register a new repo/app/idea | `bootstrap` |
 | bounded QA loop | `qa-audit` |
+| test value, duplication, or a pruning campaign | `test-audit` |
 | marketing / customer-facing copy | `signal` |
 | short-form marketing video or reel | `reel-maker` |
 | audit requested vs completed work at session end | `session-closeout` |
