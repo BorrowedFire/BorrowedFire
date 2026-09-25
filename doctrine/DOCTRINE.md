@@ -20,7 +20,7 @@ name the sanctioned exceptions, so a rule cannot forbid an operation the system 
 
 **Tests.** Before adding a test, name the behavior or independent contract it protects, the
 credible regression that makes it fail, and why existing coverage misses that regression. Extend
-existing cases when they cover the same risk. A small edit with no new risk needs no new test.
+existing cases when they cover the same risk. A small edit with no uncovered risk needs no new test.
 Judge test cleanup by retained protection. A reduction target or unchanged code coverage does
 not justify losing the only test of a current contract.
 

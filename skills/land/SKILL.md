@@ -23,7 +23,7 @@ it and surface it in the summary. If autonomous work remains, do it and report t
 
 Before adding or changing a test, name the behavior or independent contract it protects, the
 credible regression that makes it fail, and why existing coverage misses that regression.
-Add no new test when the change introduces no distinct testable risk. Extend an existing case
+If no distinct risk needs protection, add no test. Extend an existing case
 when it covers the same risk. Keep review and fixes within the authorized change. A landing
 task does not start a test-pruning campaign.
 
