@@ -457,3 +457,19 @@ integrity cases now cover surplus copied and linked entries. A real bisect fixtu
 clean detached checkout and its operation log. Both bisect markers block the shared Git guard
 before either repository can advance. These checks extend the ownership and lifecycle matrix
 above; they do not change the approved-release protocol or overwrite local work.
+
+### Source bytes, process ownership, and resource evidence
+
+The next review exposed two more updater boundaries. Git status is not evidence that source
+bytes match a commit when index flags or ignored entries hide changes. The updater rejects
+hidden index flags and compares the complete source checkout with Git tree modes and blob hashes
+before acceptance, after advancing to the approved commit, and after installation. Unexpected
+entries block updates, including ignored files. A cached current receipt cannot waive that check.
+
+The updater owns each child process group until cleanup finishes. Normal completion, timeout,
+SIGTERM, and KeyboardInterrupt pass through cleanup before the lock can be released. Real signal
+tests verify that interrupted descendant processes cannot make a later write. An uncatchable
+SIGKILL remains outside Python cleanup; ordinary launchd termination uses SIGTERM.
+
+The resource validator treats file URIs as local resources and applies copied-tree containment.
+These changes extend the existing resource contracts rather than changing their authority.

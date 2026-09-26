@@ -5,7 +5,10 @@ import json
 from pathlib import Path
 import subprocess
 import shutil
+import signal
+import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -116,6 +119,49 @@ class SyncTests(unittest.TestCase):
             with self.assertRaisesRegex(sync.Blocked, 'harness set changed'):
                 sync.sync_source(self.config, self.brain, {})
         self.assertEqual(self.git(self.clone, 'rev-parse', 'HEAD'), self.first)
+
+    def test_hidden_source_changes_cannot_reuse_current_receipt(self):
+        # Linked installs must match Git objects, not the same altered source directory.
+        self.record(self.first)
+        prior = {'revision': self.first, 'status': 'current'}
+        for flag in ('assume-unchanged', 'skip-worktree'):
+            with self.subTest(flag=flag):
+                self.git(self.clone, 'update-index', '--' + flag, 'skills/demo/SKILL.md')
+                (self.clone / 'skills/demo/SKILL.md').write_text('hidden edit')
+                self.assertEqual(self.git(self.clone, 'status', '--porcelain'), '')
+                with self.assertRaisesRegex(sync.Blocked, 'hidden index flags'):
+                    sync.sync_source(self.config, self.brain, prior)
+                (self.clone / 'skills/demo/SKILL.md').write_text('old skill\n')
+                self.git(self.clone, 'update-index', '--no-' + flag, 'skills/demo/SKILL.md')
+        (self.clone / '.git/info/exclude').write_text('.env\n')
+        ignored = self.clone / 'skills/demo/.env'
+        ignored.write_text('private local content')
+        self.assertEqual(self.git(self.clone, 'status', '--porcelain'), '')
+        with self.assertRaisesRegex(sync.Blocked, 'Source entries differ'):
+            sync.sync_source(self.config, self.brain, prior)
+        self.assertEqual(ignored.read_text(), 'private local content')
+        self.assertEqual(self.git(self.clone, 'rev-parse', 'HEAD'), self.first)
+
+    def test_source_bytes_and_modes_do_not_depend_on_git_status(self):
+        sync.verify_source(self.clone, self.first)
+        path = self.clone / 'skills/demo/SKILL.md'
+        for change in ('bytes', 'mode', 'link', 'directory'):
+            with self.subTest(change=change):
+                if change == 'bytes':
+                    path.write_text('different')
+                elif change == 'mode':
+                    path.chmod(0o755)
+                elif change == 'link':
+                    path.unlink()
+                    path.symlink_to(self.seed / 'skills/demo/SKILL.md')
+                else:
+                    (self.clone / 'skills/demo/extra').mkdir()
+                with self.assertRaisesRegex(sync.Blocked, 'Source entries differ'):
+                    sync.verify_source(self.clone, self.first)
+                if path.is_symlink():
+                    path.unlink()
+                path.write_text('old skill\n')
+                path.chmod(0o644)
 
     def test_partial_install_with_existing_harness_stops_for_reconciliation(self):
         context = self.root / 'installed/AGENTS.md'
@@ -262,6 +308,40 @@ class SyncTests(unittest.TestCase):
         for _ in range(2):
             with self.assertRaisesRegex(sync.Blocked, 'exit 7'):
                 sync.sync_source(self.config, self.brain, {})
+
+class CommandTests(unittest.TestCase):
+    def test_interruptions_stop_descendant_writes(self):
+        # A detached child group used to survive updater SIGTERM or KeyboardInterrupt.
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            with self.subTest(signum=signum), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                ready, written = root / 'ready', root / 'orphan-write'
+                child = ('from pathlib import Path; import time; '
+                         'Path(' + repr(str(ready)) + ').touch(); time.sleep(1); '
+                         'Path(' + repr(str(written)) + ').touch(); time.sleep(10)')
+                leader = ('import subprocess,sys; '
+                          'subprocess.Popen([sys.executable,"-c",' + repr(child) + ']); '
+                          'import time; time.sleep(20)')
+                wrapper = ('import importlib.util,sys; '
+                           's=importlib.util.spec_from_file_location("sync",' + repr(str(Path(sync.__file__))) + '); '
+                           'm=importlib.util.module_from_spec(s); s.loader.exec_module(m); '
+                           'm.run([sys.executable,"-c",' + repr(leader) + '])')
+                proc = subprocess.Popen([sys.executable, '-B', '-c', wrapper],
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                try:
+                    deadline = time.monotonic() + 5
+                    while not ready.exists() and time.monotonic() < deadline:
+                        time.sleep(0.02)
+                    self.assertTrue(ready.exists())
+                    proc.send_signal(signum)
+                    proc.wait(timeout=5)
+                    self.assertNotEqual(proc.returncode, 0)
+                    time.sleep(1.1)
+                    self.assertFalse(written.exists())
+                finally:
+                    if proc.poll() is None:
+                        proc.kill()
+                        proc.wait()
 
 if __name__ == '__main__':
     unittest.main()

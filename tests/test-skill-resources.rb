@@ -76,6 +76,37 @@ class SkillResourcesTest < Minitest::Test
     assert report['errors'].any? { |error| error.include?('symlink escapes') }
   end
 
+  def test_file_uris_are_local_resources_and_cannot_escape_copy_layout
+    outside = File.join(@root, 'outside guide.md')
+    File.write(outside, 'Local resource.')
+    encoded = outside.gsub(' ', '%20')
+    ["file://#{encoded}", "FILE://#{encoded}", "file://localhost#{encoded}",
+     "file&#58;//#{encoded}"].each do |target|
+      skill(body: "[Local](#{target})")
+      _, source_success = validate
+      assert source_success, target
+      report, copy_success = validate(copy: true)
+      refute copy_success, target
+      assert report['errors'].any? { |error| error.include?('escapes the copied skill layout') }
+    end
+    File.write(outside, '[Missing](missing.md)')
+    report, success = validate
+    refute success
+    assert report['errors'].any? { |error| error.include?('missing.md') }
+    File.unlink(outside)
+    _, success = validate
+    refute success
+  end
+
+  def test_rejects_file_uris_with_unsupported_hosts_or_relative_paths
+    ['file://other-host/etc/passwd', 'file:relative.md', 'file:///bad%zz.md'].each do |target|
+      skill(body: "[Local](#{target})")
+      report, success = validate(copy: true)
+      refute success, target
+      refute_empty report['errors']
+    end
+  end
+
   def test_rejects_invalid_yaml_that_line_matching_accepts
     skill(description: 'Run the queue. Routing: review.')
     report, success = validate

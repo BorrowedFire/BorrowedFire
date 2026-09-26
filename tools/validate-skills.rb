@@ -101,9 +101,24 @@ check_links = lambda do |path|
   targets = MarkdownResources.targets(links_prose).map { |target| [target, false] }
   targets += prose.scan(%r{`((?:/Users|/home)/[^`\n]+)`}).flatten.map { |target| [target, true] }
   targets.uniq.each do |target, literal_path|
-    next if target.start_with?('#') || target.match?(/\A[a-z][a-z0-9+.-]*:/i)
+    file_uri = target.match?(/\Afile:/i)
+    if file_uri
+      begin
+        uri = URI.parse(target)
+        unless [nil, '', 'localhost'].include?(uri.host&.downcase) && uri.path&.start_with?('/')
+          errors << "#{canonical}: unsupported local file URI #{target}"
+          next
+        end
+        target = uri.path
+      rescue URI::InvalidURIError
+        errors << "#{canonical}: invalid local file URI #{target}"
+        next
+      end
+    else
+      next if target.start_with?('#') || target.match?(/\A[a-z][a-z0-9+.-]*:/i)
+    end
     # Root-relative URLs describe a product route. Explicit home paths describe local files.
-    next if target.start_with?('/') && !target.start_with?('/Users/', '/home/')
+    next if !file_uri && target.start_with?('/') && !target.start_with?('/Users/', '/home/')
     # Split URL components before decoding: %3F and %23 are literal filename bytes.
     target = URI::DEFAULT_PARSER.unescape(target.split(/[?#]/, 2).first.to_s) unless literal_path
     next if target.empty?
