@@ -11,6 +11,13 @@ err() { echo "ERROR: $*" >&2; ERRORS=$((ERRORS + 1)); }
 
 [ -d "$SKILLS_DIR" ] || { err "no skills/ directory at $ROOT"; exit 1; }
 
+# Parse the actual frontmatter and follow the installed Markdown resource graph.
+if command -v ruby >/dev/null 2>&1; then
+  ruby "$ROOT/tools/validate-skills.rb" --copy-layout "$SKILLS_DIR" || err "skill resource validation failed"
+else
+  err "Ruby is required for YAML and skill resource validation"
+fi
+
 # Names of skills that no longer exist; must not be referenced in any SKILL.md body.
 # (Frontmatter descriptions may keep old names as trigger phrases - bodies may not.)
 STALE_NAMES="takeoff autoland orbit repo-quality-audit blackbox debrief reentry resupply flightplan postcard launchpad afterglow ember rekindle tend hearth borrowedfire-learn"

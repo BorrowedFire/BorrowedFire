@@ -1,6 +1,6 @@
 ---
 name: triage
-description: Turn a raw bug report, feature idea, or vague complaint into a bounded, reproducible, decision-ready issue. Invoked by `maintainer` for unshaped queue items or explicitly when the user says "/triage", "triage this", "shape this issue", "write this up as an issue", "turn this idea into a ticket", or pastes a bug report/crash log/user complaint. Produces the issue, not the fix. NOT for implementing (`land` after triage), NOT for prioritizing a whole backlog (`maintainer`), and NOT for memory capture (`remember` — though ideas worth keeping get a brain page too).
+description: Turn a report or idea into a bounded issue draft with evidence and acceptance criteria. Publish it only when filing is authorized.
 ---
 
 # Triage
@@ -35,15 +35,18 @@ raises the fraction of the queue that needs no owner time.
 - Keep the reporter's words in a quoted block; shape around them, don't overwrite them.
 - Ideas (not defects) get the same shaping — problem, who benefits, acceptance criteria — plus a
   brain capture: `remember` to the project's registry page (or `inbox/` if no project exists yet).
-- File where the work lives: GitHub issue in the affected repo, labeled per repo convention.
+- Drafting and filing are distinct scopes. A pasted report or a request to assess it calls for a
+  draft. When filing is requested or already authorized, use the affected repository's issue
+  tracker and label conventions. Carry that grant forward without another approval question.
 
 ## Flow
 
 1. Ingest the raw material (message, log, crash, complaint, idea).
 2. Search for duplicates (repo issues + brain).
 3. Reproduce or gather evidence; quick code recon for the affected surface.
-4. Write the shaped issue (structure above); file it; cross-link duplicates/related.
-5. Report: issue URL, classification, severity, and — if Autonomous — the one-line handoff
+4. Write the shaped issue (structure above). If filing is authorized, file it and link related
+   issues. Otherwise return the draft without publishing it.
+5. Report: issue URL or draft, classification, severity, and — if Autonomous — the one-line handoff
    (`maintainer` can now delegate it, or run `land` directly).
 
 ## Related

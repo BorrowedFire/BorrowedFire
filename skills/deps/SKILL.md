@@ -1,6 +1,6 @@
 ---
 name: deps
-description: Dependency and security-update loop. Invoked by `maintainer` for dependency-update PRs (Dependabot/Renovate) or explicitly when the user says "/deps", "update dependencies", "handle the dependabot PRs", "security updates", "bump the deps", or "audit vulnerabilities". Batches updates by risk, reads changelogs on majors, and lands each batch through `land`. NOT for general refactors, NOT for adding new dependencies to implement a feature, and NOT a substitute for `land`'s gates — it feeds them.
+description: Review and update dependencies in bounded batches. Use for dependency upgrades or security advisories, with existing review and approval gates.
 ---
 
 # Deps

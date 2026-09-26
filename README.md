@@ -18,6 +18,16 @@ Borrowed Fire is the system; Prometheus, the one who borrowed the fire, is its m
 
 ## Quick start
 
+The installer requires Bash, Git, and Ruby with its standard YAML library. Skill validation
+parses frontmatter and validates resources in the directory layout that copy installation
+produces. It checks inline and reference-style Markdown links, including balanced labels,
+parentheses in destinations, multiline titles, and URL queries. It also checks explicit
+home-directory file links. Source skill folders must be directories. Copy validation rejects
+symlinked skill folders because the installer preserves those links. Resources must stay inside
+the copied skill directories, including targets reached through symlinks. Validation excludes
+web URLs, root-relative product routes, and fenced or inline code examples. The resource scanner
+supports these link forms; it is not a complete Markdown renderer.
+
 ```sh
 git clone https://github.com/BorrowedFire/BorrowedFire.git
 cd BorrowedFire
@@ -133,3 +143,36 @@ that supports the SKILL.md convention.
 - [Inventory Manager](https://github.com/BorrowedFire/Inventory-Manager): Apple-style macOS
   inventory workspace for local hardware tracking, deployments, stockrooms, budgets, backups, and
   Sparkle updates.
+
+## Automatic fleet updates
+
+Use a separate per-user updater on each Mac. It runs at login and every 15 minutes while the
+user session is available. Sleeping or offline machines catch up when they can run again.
+Prometheus updates use fast-forward only. Dirty, busy, divergent, or unpushed memory checkouts
+stay untouched. The updater does not commit or push memory on an agent's behalf.
+
+Borrowed Fire updates require a release record in the private brain at
+`notes/borrowedfire-release-channel.md`. Its YAML frontmatter contains `release_commit` (the full
+40-character merged SHA), `release_status: approved`, and `review_url` (the reviewed Borrowed Fire
+PR). The landing workflow promotes that record only after review and proof. The updater also
+checks that the approved commit belongs to published main. Newer unapproved commits wait.
+
+Install the updater from the reviewed source checkout:
+
+```sh
+python3 tools/install-fleet-sync.py --source /absolute/path/to/BorrowedFire --brain /absolute/path/to/prometheus
+```
+
+On an OpenClaw host, add `--openclaw-workspace /absolute/path/to/workspace`. This uses the existing
+copy-mode installer. The updater preserves unrelated context and unmanaged skills. It verifies
+managed skill files and doctrine after installation. If an installation fails, it records the
+failure and does not claim the machine is current. A partial installation or local edit requires
+reconciliation before automatic installation can continue. It never resets, rebases, stashes,
+or deletes local changes. Reconcile divergent source history before enabling updates.
+
+Read `~/.local/share/borrowedfire-sync/status.json` for the last check, installed revision, and
+blocker. Existing agent sessions may retain earlier instructions; new sessions load the updated
+files. The nightly learning controller remains separate from software distribution.
+
+To stop the updater, unload `com.borrowedfire.fleet-sync` with `launchctl bootout` for the user's
+GUI domain, then remove its LaunchAgent plist. Preserve the repositories and status record.
