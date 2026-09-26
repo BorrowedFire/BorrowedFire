@@ -2,6 +2,7 @@
 """Protect memory edits and prevent unreviewed or divergent software installation."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import shutil
@@ -69,6 +70,150 @@ class SyncTests(unittest.TestCase):
             '\nreview_url: https://github.com/BorrowedFire/BorrowedFire/pull/99\n---\n')
         self.git(self.brain, 'add', 'notes/borrowedfire-release-channel.md')
         self.git(self.brain, 'commit', '--allow-empty', '-m', 'release record')
+
+    def private_fixture(self):
+        context = self.root / 'installed/AGENTS.md'
+        context.parent.mkdir()
+        skills = context.parent / 'skills'
+        shutil.copytree(self.clone / 'skills', skills)
+        (skills / 'demo/.borrowedfire-copy').touch()
+        (skills / '.borrowedfire-manifest').write_text('demo copy\n')
+        alias = context.parent / 'CLAUDE.md'
+        alias.symlink_to('AGENTS.md')
+        self.config['harnesses'] = [{'context': str(p), 'skills': str(skills)} for p in (context, alias)]
+        self.config['private_context'] = 'config/agent-instructions.md'
+        (self.seed / 'tools').mkdir()
+        (self.seed / 'tools/skill-lint.sh').write_text('exit 0\n')
+        shutil.copy2(Path(__file__).resolve().parents[1] / 'tools/sync-fleet.py',
+                     self.seed / 'tools/sync-fleet.py')
+        # The real installer's atomic symlink behavior is exercised by test-install.sh.
+        (self.seed / 'install.sh').write_text(
+            'set -eu\nprivate=""\nwhile [ "$#" -gt 0 ]; do\n'
+            'case "$1" in --context-file) private="$2"; shift;; esac\nshift\ndone\n'
+            'test -n "$private"\npython3 -B tools/sync-fleet.py --render-context "$private" > "' + str(context) + '"\n'
+            'printf "installed\\n" >> "' + str(context.parent / 'installs') + '"\n')
+        self.git(self.seed, 'add', 'tools', 'install.sh')
+        self.git(self.seed, 'commit', '-m', 'context-aware fixture installer')
+        self.git(self.seed, 'push', 'origin', 'main')
+        self.git(self.clone, 'pull', '--ff-only')
+        self.target = self.git(self.clone, 'rev-parse', 'HEAD')
+        self.record(self.target)
+        initial = self.private_record('first')
+        context.write_text(initial)
+        return context, alias, initial
+
+    def private_record(self, label):
+        path = self.brain / 'config/agent-instructions.md'
+        path.parent.mkdir(exist_ok=True)
+        body = ('---\n# Private host instructions\nOwner context ' + label + '\n---\n'
+                '<!-- BEGIN BORROWEDFIRE DOCTRINE -->\nPrivate rules ' + label + '\n'
+                '<!-- END BORROWEDFIRE DOCTRINE -->\nLocal access notes ' + label + '\n')
+        path.write_text('---\ntype: note\n---\n' + body)
+        self.git(self.brain, 'add', 'config/agent-instructions.md')
+        self.git(self.brain, 'commit', '-m', 'private instructions ' + label)
+        return body
+
+    def test_scheduler_reinstallation_preserves_private_enrollment(self):
+        home = self.root / 'home'
+        (home / '.codex').mkdir(parents=True)
+        (self.clone / 'tools').mkdir()
+        (self.clone / 'tools/sync-fleet.py').touch()
+        installer = Path(__file__).resolve().parents[1] / 'tools/install-fleet-sync.py'
+        args = [sys.executable, '-B', str(installer), '--source', str(self.clone),
+                '--brain', str(self.brain), '--prepare-only']
+        with patch.dict(os.environ, {'HOME': str(home), 'CODEX_HOME': str(home / '.codex')}):
+            self.command(*args)
+            path = home / '.local/share/borrowedfire-sync/config.json'
+            config = json.loads(path.read_text())
+            config['private_context'] = 'config/agent-instructions.md'
+            config['private_context_targets'] = [str(home / '.codex/AGENTS.md')]
+            path.write_text(json.dumps(config))
+            self.command(*args, '--interval', '600')
+            self.assertEqual(json.loads(path.read_text()), config)
+            path.write_text('invalid config')
+            with self.assertRaises(subprocess.CalledProcessError):
+                self.command(*args)
+            self.assertEqual(path.read_text(), 'invalid config')
+
+    def test_private_update_with_unchanged_release_and_missing_receipt(self):
+        context, alias, _ = self.private_fixture()
+        current = self.private_record('second')
+        result = sync.sync_source(self.config, self.brain, {'status': 'current', 'revision': self.target})
+        self.assertEqual(context.read_text(), current)
+        self.assertTrue(alias.is_symlink())
+        self.assertEqual(alias.read_text(), current)
+        sync.sync_source(self.config, self.brain, result)
+        self.assertEqual((context.parent / 'installs').read_text(), 'installed\n')
+        sync.sync_source(self.config, self.brain, {})
+        self.assertEqual((context.parent / 'installs').read_text(), 'installed\ninstalled\n')
+        self.assertEqual(self.git(self.brain, 'status', '--porcelain'), '')
+        self.assertEqual(self.git(self.clone, 'status', '--porcelain', '--ignored'), '')
+
+    def test_private_local_edits_and_unrelated_committed_text_are_preserved(self):
+        context, _, initial = self.private_fixture()
+        self.private_record('second')
+        unrelated = self.brain / 'config/unrelated.md'
+        unrelated.write_text(initial.replace('first', 'not the enrolled source'))
+        self.git(self.brain, 'add', 'config/unrelated.md')
+        self.git(self.brain, 'commit', '-m', 'unrelated instructions')
+        for changed in (initial + 'local change\n', initial.replace('\n', '\r\n'), unrelated.read_text()):
+            with self.subTest(changed=changed[:25]):
+                context.write_bytes(changed.encode())
+                with self.assertRaisesRegex(sync.Blocked, 'private context has local changes'):
+                    sync.sync_source(self.config, self.brain, {'status': 'current', 'revision': self.target})
+                self.assertEqual(context.read_bytes(), changed.encode())
+                self.assertFalse((context.parent / 'installs').exists())
+                self.assertEqual(self.git(self.clone, 'rev-parse', 'HEAD'), self.target)
+
+    def test_private_context_rejects_uncommitted_content_and_unsafe_paths(self):
+        _, _, _ = self.private_fixture()
+        path = self.brain / self.config['private_context']
+        original = path.read_text()
+        path.write_text(original + 'uncommitted\n')
+        with self.assertRaisesRegex(sync.Blocked, 'differs from the synchronized commit'):
+            sync.sync_source(self.config, self.brain, {})
+        path.write_text(original)
+        for bad in ('../outside.md', str(path), 'config/../outside.md'):
+            with self.subTest(path=bad):
+                self.config['private_context'] = bad
+                with self.assertRaisesRegex(sync.Blocked, 'under brain config'):
+                    sync.sync_source(self.config, self.brain, {})
+        self.config['private_context'] = 'config/alias.md'
+        (self.brain / 'config/alias.md').symlink_to(path)
+        with self.assertRaisesRegex(sync.Blocked, 'must not use symlinks'):
+            sync.sync_source(self.config, self.brain, {})
+
+    def test_source_release_does_not_replace_private_context_with_public_doctrine(self):
+        context, alias, initial = self.private_fixture()
+        (self.seed / 'doctrine/DOCTRINE.md').write_text(
+            '<!-- BEGIN BORROWEDFIRE DOCTRINE -->\nnew public rules\n<!-- END BORROWEDFIRE DOCTRINE -->\n')
+        self.git(self.seed, 'commit', '-am', 'public doctrine update')
+        self.git(self.seed, 'push', 'origin', 'main')
+        target = self.git(self.seed, 'rev-parse', 'HEAD')
+        self.record(target)
+        result = sync.sync_source(self.config, self.brain, {})
+        self.assertEqual(result['revision'], target)
+        self.assertEqual(context.read_text(), initial)
+        self.assertEqual(alias.read_text(), initial)
+
+    def test_private_targets_preserve_other_harnesses_and_reject_mixed_aliases(self):
+        context, alias, initial = self.private_fixture()
+        separate = context.parent / 'separate/AGENTS.md'
+        separate.parent.mkdir()
+        public = 'Separate owner instructions\n' + (self.clone / 'doctrine/DOCTRINE.md').read_text()
+        separate.write_text(public)
+        self.config['harnesses'].append({'context': str(separate), 'skills': str(context.parent / 'skills')})
+        self.config['private_context_targets'] = [str(context), str(alias)]
+        result = sync.sync_source(self.config, self.brain, {'status': 'current', 'revision': self.target})
+        self.assertEqual(result['status'], 'current')
+        self.assertEqual(context.read_text(), initial)
+        self.assertEqual(separate.read_text(), public)
+        self.config['private_context_targets'] = [str(context)]
+        with self.assertRaisesRegex(sync.Blocked, 'cannot mix public and private'):
+            sync.sync_source(self.config, self.brain, result)
+        self.config['private_context_targets'] = [str(context.parent / 'unknown.md')]
+        with self.assertRaisesRegex(sync.Blocked, 'must be enrolled'):
+            sync.sync_source(self.config, self.brain, result)
 
     def test_current_receipt_cannot_hide_installed_integrity_drift(self):
         for mutation in ('duplicate_doctrine', 'missing_marker', 'missing_manifest_entry',
