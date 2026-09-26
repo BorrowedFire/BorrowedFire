@@ -43,6 +43,9 @@ class SyncTests(unittest.TestCase):
         self.git(self.clone, 'config', 'user.name', 'Fixture')
         self.brain = self.root / 'brain'
         (self.brain / 'notes').mkdir(parents=True)
+        self.git(self.brain, 'init', '-b', 'main')
+        self.git(self.brain, 'config', 'user.email', 'fixture@example.invalid')
+        self.git(self.brain, 'config', 'user.name', 'Fixture')
         self.config = {'source': str(self.clone), 'harnesses': []}
         discovery = patch.object(sync, 'discovered_harnesses', side_effect=lambda config: config['harnesses'])
         discovery.start()
@@ -64,6 +67,8 @@ class SyncTests(unittest.TestCase):
         (self.brain / 'notes/borrowedfire-release-channel.md').write_text(
             '---\nrelease_commit: '+sha+'\nrelease_status: '+status+
             '\nreview_url: https://github.com/BorrowedFire/BorrowedFire/pull/99\n---\n')
+        self.git(self.brain, 'add', 'notes/borrowedfire-release-channel.md')
+        self.git(self.brain, 'commit', '--allow-empty', '-m', 'release record')
 
     def test_current_receipt_cannot_hide_installed_integrity_drift(self):
         for mutation in ('duplicate_doctrine', 'missing_marker', 'missing_manifest_entry',
@@ -254,6 +259,35 @@ class SyncTests(unittest.TestCase):
             sync.sync_source(self.config, self.brain, {})
         self.assertEqual((self.clone / 'file').read_text(), 'local improvement')
 
+    def test_non_main_source_positions_are_preserved(self):
+        self.record(self.advance())
+        for args in (('-b', 'maintenance'), ('--detach', self.first)):
+            with self.subTest(args=args):
+                self.git(self.clone, 'checkout', *args)
+                with self.assertRaisesRegex(sync.Blocked, 'Source is not on main'):
+                    sync.sync_source(self.config, self.brain, {})
+                self.assertEqual(self.git(self.clone, 'rev-parse', 'HEAD'), self.first)
+        self.assertEqual(self.git(self.clone, 'rev-parse', 'maintenance'), self.first)
+
+    def test_release_authority_must_be_the_synchronized_committed_record(self):
+        self.record(self.first)
+        revision = self.git(self.brain, 'rev-parse', 'HEAD')
+        self.assertEqual(sync.release_record(self.brain, revision), self.first)
+        record = self.brain / 'notes/borrowedfire-release-channel.md'
+        committed = record.read_text()
+        record.write_text(committed + '\nlocal edit\n')
+        with self.assertRaisesRegex(sync.Blocked, 'differs from the synchronized commit'):
+            sync.release_record(self.brain, revision)
+        record.write_text(committed)
+        self.git(self.brain, 'rm', '--cached', 'notes/borrowedfire-release-channel.md')
+        self.git(self.brain, 'commit', '-m', 'remove published approval')
+        (self.brain / '.git/info/exclude').write_text('notes/borrowedfire-release-channel.md\n')
+        self.assertEqual(self.git(self.brain, 'status', '--porcelain'), '')
+        with self.assertRaises(sync.Blocked):
+            sync.release_record(self.brain)
+        with self.assertRaisesRegex(sync.Blocked, 'Brain changed'):
+            sync.release_record(self.brain, revision)
+
     def test_pending_record_cannot_authorize_install(self):
         self.record(self.advance(), 'pending')
         with self.assertRaisesRegex(sync.Blocked, 'No approved'):
@@ -282,7 +316,7 @@ class SyncTests(unittest.TestCase):
         # Paths come only from the test's temporary directory.
         (self.seed / 'install.sh').write_text(
             'set -e\nmkdir -p "'+str(skills)+'"\ncp doctrine/DOCTRINE.md "'+str(context)+
-            '"\ncp -R skills/demo "'+str(skills)+'"\n')
+            '"\ncp -R skills/demo "'+str(skills)+'"\nprintf "installed\\n" >> "'+str(context.parent/'installs')+'"\n')
         self.git(self.seed, 'add', '.')
         self.git(self.seed, 'commit', '-m', 'reviewed installer')
         self.git(self.seed, 'push', 'origin', 'main')
@@ -292,6 +326,16 @@ class SyncTests(unittest.TestCase):
         result = sync.sync_source(self.config, self.brain, {})
         self.assertEqual(result['revision'], target)
         sync.sync_source(self.config, self.brain, result)
+        config_path = self.root / 'config.json'
+        config_path.write_text(json.dumps(dict(self.config, brain=str(self.brain))))
+        for index, receipt in enumerate(('{', '[]', '{"borrowedfire": []}'), start=2):
+            with self.subTest(receipt=receipt):
+                (self.root / 'status.json').write_text(receipt)
+                with patch.object(sys, 'argv', ['sync', '--config', str(config_path)]), patch.object(
+                        sync, 'sync_brain', return_value={'status': 'current', 'revision': self.git(self.brain, 'rev-parse', 'HEAD')}):
+                    self.assertEqual(sync.main(), 0)
+                self.assertEqual(len((context.parent/'installs').read_text().splitlines()), index)
+                self.assertEqual(json.loads((self.root/'status.json').read_text())['borrowedfire']['status'], 'current')
         (skills / 'demo/SKILL.md').write_text('owner edit')
         with self.assertRaisesRegex(sync.Blocked, 'differ'):
             sync.sync_source(self.config, self.brain, result)

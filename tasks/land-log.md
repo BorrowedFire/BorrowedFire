@@ -473,3 +473,13 @@ SIGKILL remains outside Python cleanup; ordinary launchd termination uses SIGTER
 
 The resource validator treats file URIs as local resources and applies copied-tree containment.
 These changes extend the existing resource contracts rather than changing their authority.
+
+### Published authorization and recovery from stale local state
+
+Only the source main branch is eligible for unattended advancement; maintenance branches and
+detached checkouts retain their positions. Approval comes from the exact synchronized Prometheus
+commit. Its working copy must match that blob, and an ignored untracked release note has no
+authority. The status file is only a cache: invalid JSON or an incompatible receipt shape forces
+the complete verification and installation path, then an atomic status refresh. Existing install
+tests now exercise damaged receipts through the real updater entry point, and Git fixtures cover
+branch preservation and unpublished release records.

@@ -114,8 +114,21 @@ def sync_brain(repo):
     git(repo, 'merge', '--ff-only', target)
     return {'status': 'current', 'revision': target}
 
-def release_record(brain):
-    text = (brain / 'notes/borrowedfire-release-channel.md').read_text()
+def release_record(brain, revision=None):
+    current = git(brain, 'rev-parse', 'HEAD')
+    if revision is not None and current != revision:
+        raise Blocked('Brain changed during update; retry with synchronized state')
+    revision = revision or current
+    path = 'notes/borrowedfire-release-channel.md'
+    text = git(brain, 'show', revision + ':' + path)
+    local = brain / path
+    if local.is_symlink() or not local.is_file():
+        raise Blocked('Release record is not a regular committed file')
+    data = local.read_bytes()
+    algorithm = git(brain, 'rev-parse', '--show-object-format')
+    oid = hashlib.new(algorithm, b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+    if oid != git(brain, 'rev-parse', revision + ':' + path):
+        raise Blocked('Release record differs from the synchronized commit')
     front = text.split('---', 2)
     if len(front) != 3 or front[0].strip():
         raise Blocked('Invalid reviewed release record')
@@ -206,14 +219,20 @@ def discovered_harnesses(config):
     return found
 
 
-def sync_source(config, brain, prior):
+def sync_source(config, brain, prior, brain_revision=None):
     repo = Path(config['source'])
     if discovered_harnesses(config) != config['harnesses']:
         raise Blocked('Installed harness set changed; reconcile updater configuration first')
     clean(repo)
+    try:
+        branch = git(repo, 'symbolic-ref', '--short', 'HEAD')
+    except Blocked:
+        branch = None
+    if branch != 'main':
+        raise Blocked('Source is not on main; left untouched')
     head = git(repo, 'rev-parse', 'HEAD')
     verify_source(repo, head)
-    approved = release_record(brain)
+    approved = release_record(brain, brain_revision)
     git(repo, 'fetch', 'origin', 'main')
     latest = git(repo, 'rev-parse', 'FETCH_HEAD')
     if not ancestor(repo, approved, latest):
@@ -247,6 +266,18 @@ def write_json(path, data):
         file.write('\n')
     os.replace(name, path)
 
+def read_status(path):
+    # This is an optional performance receipt, never installation authority.
+    try:
+        prior = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(prior, dict):
+        return {}
+    if not isinstance(prior.get('borrowedfire'), dict):
+        prior['borrowedfire'] = {}
+    return prior
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', required=True)
@@ -260,11 +291,12 @@ def main():
         except BlockingIOError:
             return 0
         status_path = state / 'status.json'
-        prior = json.loads(status_path.read_text()) if status_path.exists() else {}
+        prior = read_status(status_path)
         status = {'checked_at': dt.datetime.now(dt.timezone.utc).isoformat()}
         brain = Path(config['brain'])
         for name, operation in [('prometheus', lambda: sync_brain(brain)),
-                                ('borrowedfire', lambda: sync_source(config, brain, prior.get('borrowedfire', {})))]:
+                                ('borrowedfire', lambda: sync_source(config, brain, prior.get('borrowedfire', {}),
+                                                                    status['prometheus']['revision']))]:
             try:
                 # Do not authorize an installation from a stale, busy, or conflicted brain.
                 if name == 'borrowedfire' and status['prometheus']['status'] != 'current':
