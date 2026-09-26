@@ -2,6 +2,7 @@
 """Protect memory edits and prevent unreviewed or divergent software installation."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import shutil
@@ -109,6 +110,28 @@ class SyncTests(unittest.TestCase):
         self.git(self.brain, 'add', 'config/agent-instructions.md')
         self.git(self.brain, 'commit', '-m', 'private instructions ' + label)
         return body
+
+    def test_scheduler_reinstallation_preserves_private_enrollment(self):
+        home = self.root / 'home'
+        (home / '.codex').mkdir(parents=True)
+        (self.clone / 'tools').mkdir()
+        (self.clone / 'tools/sync-fleet.py').touch()
+        installer = Path(__file__).resolve().parents[1] / 'tools/install-fleet-sync.py'
+        args = [sys.executable, '-B', str(installer), '--source', str(self.clone),
+                '--brain', str(self.brain), '--prepare-only']
+        with patch.dict(os.environ, {'HOME': str(home), 'CODEX_HOME': str(home / '.codex')}):
+            self.command(*args)
+            path = home / '.local/share/borrowedfire-sync/config.json'
+            config = json.loads(path.read_text())
+            config['private_context'] = 'config/agent-instructions.md'
+            config['private_context_targets'] = [str(home / '.codex/AGENTS.md')]
+            path.write_text(json.dumps(config))
+            self.command(*args, '--interval', '600')
+            self.assertEqual(json.loads(path.read_text()), config)
+            path.write_text('invalid config')
+            with self.assertRaises(subprocess.CalledProcessError):
+                self.command(*args)
+            self.assertEqual(path.read_text(), 'invalid config')
 
     def test_private_update_with_unchanged_release_and_missing_receipt(self):
         context, alias, _ = self.private_fixture()

@@ -69,6 +69,14 @@ if [ -n "$CONTEXT_FILE" ]; then
     exit 2
   fi
   CONTEXT_FILE="$(cd "$(dirname "$CONTEXT_FILE")" && pwd -P)/$(basename "$CONTEXT_FILE")"
+  # Render outside the public checkout. Enrollment and updates must install identical bytes.
+  CONTEXT_TMP="$(mktemp)" || exit 1
+  trap 'rm -f "$CONTEXT_TMP"' EXIT
+  if ! python3 -B "$SRC/tools/sync-fleet.py" --render-context "$CONTEXT_FILE" > "$CONTEXT_TMP"; then
+    echo "error: private context could not be rendered; installation aborted" >&2
+    exit 2
+  fi
+  CONTEXT_FILE="$CONTEXT_TMP"
 fi
 
 say() { echo "$@"; }

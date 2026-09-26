@@ -48,6 +48,16 @@ def main():
         config['copy'] = True
         config['openclaw_workspace'] = str(workspace)
     config_path = state / 'config.json'
+    if config_path.exists():
+        try:
+            previous = json.loads(config_path.read_text())
+            if not isinstance(previous, dict):
+                raise ValueError('config must be an object')
+        except (OSError, ValueError) as exc:
+            parser.error('existing updater config is unreadable: ' + str(exc))
+        for key in ('private_context', 'private_context_targets'):
+            if key in previous:
+                config[key] = previous[key]
     config_path.write_text(json.dumps(config, indent=2) + '\n')
     config_path.chmod(0o600)
     agents = home / 'Library/LaunchAgents'

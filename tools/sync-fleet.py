@@ -165,6 +165,23 @@ def skill_entries(root):
     return result
 
 
+def render_context(content):
+    """Use the same installed representation for direct enrollment and later updates."""
+    content = content.strip()
+    lines = content.splitlines()
+    if lines and lines[0] == '---':
+        try:
+            end = lines.index('---', 1)
+        except ValueError:
+            raise Blocked('Invalid private context frontmatter')
+        content = '\n'.join(lines[end + 1:]).strip()
+    begin = '<!-- BEGIN BORROWEDFIRE DOCTRINE -->'
+    end = '<!-- END BORROWEDFIRE DOCTRINE -->'
+    if content.count(begin) != 1 or content.count(end) != 1 or content.index(begin) >= content.index(end):
+        raise Blocked('Private context needs one ordered managed doctrine block')
+    return content + '\n'
+
+
 def private_contexts(brain, path, revision, harnesses):
     """Read private instructions from synchronized Git objects, never from a status receipt."""
     if not isinstance(path, str):
@@ -185,17 +202,7 @@ def private_contexts(brain, path, revision, harnesses):
         entry = git(brain, 'ls-tree', commit, '--', path)
         if not entry.startswith(('100644 blob ', '100755 blob ')):
             raise Blocked('Private context is not a regular committed file')
-        content = git(brain, 'show', commit + ':' + path)
-        if content.startswith('---\n'):
-            parts = content.split('---', 2)
-            if len(parts) != 3:
-                raise Blocked('Invalid private context frontmatter')
-            content = parts[2].strip()
-        begin = '<!-- BEGIN BORROWEDFIRE DOCTRINE -->'
-        end = '<!-- END BORROWEDFIRE DOCTRINE -->'
-        if content.count(begin) != 1 or content.count(end) != 1 or content.index(begin) >= content.index(end):
-            raise Blocked('Private context needs one ordered managed doctrine block')
-        return content + '\n'
+        return render_context(git(brain, 'show', commit + ':' + path))
 
     current = read(revision)
     installed = {Path(h['context']).read_bytes().decode() for h in harnesses}
@@ -363,8 +370,16 @@ def read_status(path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--config')
+    mode.add_argument('--render-context', type=Path, help='render a private context without syncing or installing')
     args = parser.parse_args()
+    if args.render_context:
+        try:
+            print(render_context(args.render_context.read_text()), end='')
+        except (Blocked, OSError, ValueError) as exc:
+            parser.error(str(exc))
+        return 0
     config_path = Path(args.config).resolve()
     config = json.loads(config_path.read_text())
     state = config_path.parent

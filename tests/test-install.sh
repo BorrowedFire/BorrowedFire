@@ -737,6 +737,8 @@ Private local settings stay outside the shared block.
 Private shared instructions.
 <!-- END BORROWEDFIRE DOCTRINE -->
 CONTEXT
+PRIVATE_INPUT="$SB/private-page.md"
+{ printf '%s\n' '---' 'type: note' 'description: "A --- separator in metadata"' '---' ''; cat "$PRIVATE_CONTEXT"; } > "$PRIVATE_INPUT"
 for alias_target in "$PRIVATE_HOME/.claude/CLAUDE.md" "$PRIVATE_HOME/.codex/AGENTS.md"; do
   if HOME="$PRIVATE_HOME" "$SRC/install.sh" --context-file "$PRIVATE_CONTEXT" \
       --context-target "$alias_target" > "$SB/private-conflict.log" 2>&1; then
@@ -750,7 +752,7 @@ for alias_target in "$PRIVATE_HOME/.claude/CLAUDE.md" "$PRIVATE_HOME/.codex/AGEN
 done
 for pass in 1 2; do
   check "private context install $pass succeeds" env HOME="$PRIVATE_HOME" \
-    XDG_CONFIG_HOME="$PRIVATE_HOME/.config" "$SRC/install.sh" --context-file "$PRIVATE_CONTEXT" \
+    XDG_CONFIG_HOME="$PRIVATE_HOME/.config" "$SRC/install.sh" --context-file "$PRIVATE_INPUT" \
     --context-target "$PRIVATE_HOME/.claude/CLAUDE.md" --context-target "$PRIVATE_HOME/.codex/AGENTS.md"
   check "private context install $pass retains relative alias" \
     test -L "$PRIVATE_HOME/.claude/CLAUDE.md"
@@ -765,7 +767,7 @@ for pass in 1 2; do
 done
 # No explicit targets selects all harnesses, including on macOS Bash 3.2 with nounset.
 check "private context without explicit targets succeeds" env HOME="$PRIVATE_HOME" \
-  XDG_CONFIG_HOME="$PRIVATE_HOME/.config" bash "$SRC/install.sh" --context-file "$PRIVATE_CONTEXT"
+  XDG_CONFIG_HOME="$PRIVATE_HOME/.config" bash "$SRC/install.sh" --context-file "$PRIVATE_INPUT"
 check "implicit targets receive private context" cmp -s "$PRIVATE_CONTEXT" "$PRIVATE_HOME/.qwen/QWEN.md"
 printf 'not an instruction file\n' > "$SB/invalid-context.md"
 if HOME="$PRIVATE_HOME" "$SRC/install.sh" --context-file "$SB/invalid-context.md" >/dev/null 2>&1; then

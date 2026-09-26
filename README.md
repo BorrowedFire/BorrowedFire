@@ -201,6 +201,8 @@ The updater deliberately refuses to replace an unrelated file. Install a local c
 brain checkout, and point any context aliases at that copy. Do not point installed contexts into
 the brain, where installer writes would dirty the checkout. The installer supports this explicit
 replacement with `--context-file <file>` and repeatable `--context-target <detected-context-path>`.
+Private enrollment requires Python 3 and uses the same renderer as later updates, so the input
+can include brain frontmatter. Reinstalling the optional scheduler preserves both private settings.
 
 The check recognizes current or earlier committed versions of the same private file. It blocks
 unknown local edits, including edits outside the managed block. A private-file change triggers
