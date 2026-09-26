@@ -337,7 +337,9 @@ def sync_source(config, brain, prior, brain_revision=None):
         with tempfile.TemporaryDirectory(prefix='borrowedfire-context-') as directory:
             if contexts is not None:
                 context_file = Path(directory) / 'AGENTS.md'
-                context_file.write_text(next(iter(contexts.values()))[0])
+                # The installer renders once. Passing the rendered body would interpret a
+                # leading Markdown horizontal rule as a second frontmatter block.
+                context_file.write_text(git(brain, 'show', revision + ':' + config['private_context']) + '\n')
                 context_file.chmod(0o600)
                 args += ['--context-file', str(context_file)]
                 for harness in private:

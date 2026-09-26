@@ -84,11 +84,13 @@ class SyncTests(unittest.TestCase):
         self.config['private_context'] = 'config/agent-instructions.md'
         (self.seed / 'tools').mkdir()
         (self.seed / 'tools/skill-lint.sh').write_text('exit 0\n')
+        shutil.copy2(Path(__file__).resolve().parents[1] / 'tools/sync-fleet.py',
+                     self.seed / 'tools/sync-fleet.py')
         # The real installer's atomic symlink behavior is exercised by test-install.sh.
         (self.seed / 'install.sh').write_text(
             'set -eu\nprivate=""\nwhile [ "$#" -gt 0 ]; do\n'
             'case "$1" in --context-file) private="$2"; shift;; esac\nshift\ndone\n'
-            'test -n "$private"\ncp "$private" "' + str(context) + '"\n'
+            'test -n "$private"\npython3 -B tools/sync-fleet.py --render-context "$private" > "' + str(context) + '"\n'
             'printf "installed\\n" >> "' + str(context.parent / 'installs') + '"\n')
         self.git(self.seed, 'add', 'tools', 'install.sh')
         self.git(self.seed, 'commit', '-m', 'context-aware fixture installer')
@@ -103,7 +105,7 @@ class SyncTests(unittest.TestCase):
     def private_record(self, label):
         path = self.brain / 'config/agent-instructions.md'
         path.parent.mkdir(exist_ok=True)
-        body = ('# Private host instructions\nOwner context ' + label + '\n'
+        body = ('---\n# Private host instructions\nOwner context ' + label + '\n---\n'
                 '<!-- BEGIN BORROWEDFIRE DOCTRINE -->\nPrivate rules ' + label + '\n'
                 '<!-- END BORROWEDFIRE DOCTRINE -->\nLocal access notes ' + label + '\n')
         path.write_text('---\ntype: note\n---\n' + body)
