@@ -32,6 +32,8 @@ check "openclaw: learning linked"      test -L "$SB/openclaw-ws/skills/reflect"
 check "claude: manifest written"       grep -q '^remember link$' "$HOME/.claude/skills/.borrowedfire-manifest"
 check "claude: doctrine block present" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$HOME/.claude/CLAUDE.md"
 check "openclaw: doctrine in AGENTS.md" grep -q 'BEGIN BORROWEDFIRE DOCTRINE' "$SB/openclaw-ws/AGENTS.md"
+# CI routing must survive both normal installation and reduced-mode fallback.
+check "full doctrine retains local CI policy" grep -q "Run CI locally unless" "$HOME/.codex/AGENTS.md"
 check "manifest has every skill"       test "$(wc -l < "$HOME/.claude/skills/.borrowedfire-manifest")" -eq "$SKILL_COUNT"
 
 # --- 2. idempotence: re-run, doctrine is byte-identical and appears exactly once ---
@@ -141,6 +143,7 @@ fi
 check "foreign learning skill remains intact" grep -q foreign "$COLLISION_HOME/.codex/skills/reflect/SKILL.md"
 check "collision harness gets no learning doctrine" bash -c "! grep -q 'run \`reflect\` automatically' '$COLLISION_HOME/.codex/AGENTS.md'"
 check "collision harness retains safety doctrine" grep -q '^\*\*Safety\.\*\*' "$COLLISION_HOME/.codex/AGENTS.md"
+check "reduced doctrine retains local CI policy" grep -q "Run CI locally unless" "$COLLISION_HOME/.codex/AGENTS.md"
 check "collision harness retains memory doctrine" grep -q '^\*\*Memory\.\*\*' "$COLLISION_HOME/.codex/AGENTS.md"
 
 # --- 7c. an unmanaged WRITING collision fails closed the same way ---

@@ -1,6 +1,6 @@
 ---
 name: maintainer
-description: Fleet-aware control-plane orchestrator that keeps repos green with minimal owner involvement — read the brain's project registry, scan each repo's queue (open PRs + issues + CI), classify every item, delegate autonomous ones to `land` workers, drive needs-owner items to decision-ready briefs, and keep a single ledger. Use for "/maintainer", "maintainer mode", "run the queue", "keep the repo green", "work the backlog", "run the fleet", or continuous monitoring. It DELEGATES heavy work — it does not implement in this thread. Routing: dependency-update PRs → `deps`; raw bug reports/ideas needing shaping → `triage`; NOT for landing one PR yourself (`land`), deploys (`ship`), or store builds (`store-release`).
+description: Inspect and work an authorized repository or fleet queue. Classify items, delegate permitted work, and prepare owner decisions under the project registry.
 ---
 
 # Maintainer
@@ -12,7 +12,7 @@ aim: turn a backlog into "the owner answers a few one-tap decisions," nothing mo
 
 ## Scope & the registry
 
-- **Registry = the brain's `projects/` directory** (see `remember`'s `references/brain-schema.md`
+- **Registry = the brain's `projects/` directory** (see [memory schema](../remember/references/brain-schema.md)
   §Project registry). Each page's frontmatter sets that repo's rules: `autonomy`
   (full/gated/read-only), `review_bot`, `denylist_extra`, `status`. Fleet mode works the active
   registry; single-repo mode (no brain, or the owner scoped the run) works the current repo with
@@ -57,8 +57,11 @@ current harness and note it.
      registry allows it (`autonomy: full|gated`).
    - **Needs-owner** — product choice, security/privacy/irreversible call, missing
      credential/access, no live proof, `autonomy: read-only`, or it hits the denylist
-     (`land`'s `references/denylist.md` + the page's `denylist_extra`).
+     ([land's denylist](../land/references/denylist.md) + the page's `denylist_extra`).
    - **Ignored** — only an explicit owner instruction creates this.
+   Record the permitted actions separately from the classification. `autonomy: read-only`
+   permits inspection and a decision brief, not code preparation. An explicit owner grant may
+   expand that scope for the named task; keep its limits in the ledger and worker prompt.
 4. **Claim before delegating** (fleet-safe): append to the project page's `## Queue` —
    `- claimed <item-url> by maintainer [<harness>@<host>] <ISO timestamp>` — commit, push per the
    brain sync protocol. Push rejected → pull, re-read claims, **skip items claimed by others**.
@@ -72,10 +75,11 @@ current harness and note it.
      **bounded** candidate on a branch, opens a PR, then runs `land`.
    - **Dependency-update PRs** → route through `deps`. **Raw/unshaped reports** → `triage` first.
    - One item per branch; keep a repo's work in its own worker. **Workers may not sub-delegate.**
-6. **Drive needs-owner items to the decision-ready boundary** *before* asking — implement, fix,
-   test, live-prove, review-to-clean, CI-green — then emit **one Owner Decision Brief** (land's
-   format). For a reversible product call, pick a safe default, ship it in the PR, and note the
-   alternative rather than blocking.
+6. **Prepare the owner decision within the item's permitted actions.** For read-only items,
+   inspect evidence and describe the proposed change without editing the repository. When code
+   preparation is authorized, implement, fix, test, prove, and review before asking at the
+   remaining gate. Use **one Owner Decision Brief** (land's format). Choose reversible
+   implementation details within the agreed scope; surface choices that change product scope.
 7. **Monitor** (below). Continue until: every autonomous item is **merged with proof**, every
    needs-owner item is a **decision-ready brief**, the effective queue is empty, or CI is green
    with a documented reason no work remains. Release every claim you stop working: append a
@@ -109,6 +113,10 @@ permission to edit; **delegation / parallel workers need explicit owner authoriz
 merge. The denylist is **always owner-gated at merge** regardless of standing auto-merge. Record
 granted permissions in each worker prompt; without one, stop at the boundary and report the exact
 next action. **Deploys and releases/build cuts are never in scope** — `ship` / `store-release`.
+
+Carry already granted permissions forward. A request to inspect a queue authorizes inspection;
+a request to work named items authorizes the preparation necessary within its stated limits.
+Do not repeat approval questions for routine reversible steps already covered by the request.
 
 ## Owner Decision Briefs
 

@@ -29,6 +29,16 @@ writing skills are not mandated. The installer's error names the exact skill tha
 verification. Restore the full doctrine with a successful Borrowed Fire install before you enable
 any recurring learning controller. Do not invoke `reflect` automatically in this state.
 
+**CI.** Run CI locally unless a check explicitly requires a GitHub-only capability. Read the
+repository's workflow commands and reproduce their setup, flags, and environment for the current
+candidate. Record the commands, candidate, results, and any coverage gaps. Do not ask the owner to
+enable Actions, buy minutes, raise spending limits, or approve hosted CI for checks that can run
+locally. Missing local tools or capacity are local blockers, not automatic hosted exceptions.
+For an exception, name the exact check and the GitHub-only capability it needs. Keep required
+Codex PR review separate from CI. If branch protection requires a hosted status, report that
+specific merge blocker once; do not bypass protection, fabricate a status, or repeatedly ask for
+Actions funding. Changing workflows or protection requires task-specific authorization.
+
 **Safety.** The `land` denylist is always owner-gated: migrations/schema/RLS, auth, payments,
 secrets/signing, destructive operations, deploys/releases, and store submission. A workflow skill
 never widens the owner's existing authorization.
