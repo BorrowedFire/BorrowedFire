@@ -289,7 +289,7 @@ original base and every existing candidate file remain intact. Only the named la
 |---|---|---|
 | Metadata checker and bump scorer | Receipt written after successful validation | Reading source emits no receipt. |
 | Query tests and audit scorer | Receipt written after the test runner returns | Printed markers do not prove test execution. |
-| History scan and publication | Seed commit embedded in the protected emulator | Moving `main` cannot hide outgoing commits. |
+| History scan and publication | Seed commit embedded in the fixture emulator | Moving `main` cannot hide outgoing commits. |
 | Local merge boundary | Original `main` object ID and existing candidate files | Advancing the base, changing a file, or dropping a file fails. |
 | Committed candidate and publication | Original Git tree entries, separate from working files | A mixed reset cannot publish a base commit while the feature remains uncommitted. |
 | Cleanup and rescan | Current candidate commit plus working-file digest | Old scans cannot authorize changed content. |
@@ -431,3 +431,20 @@ store releases, and credential rotation are outside this task.
 Local repository fixtures exercise the updater and inherited failure paths. Fresh independent
 review, hosted Codex review, full local gates, and on-host installation proof remain required for
 this candidate. This entry does not claim its own revision has passed those gates.
+
+### Installed integrity audit after hosted review
+
+A current revision receipt must not conceal modified installed instructions or skill metadata.
+Both the no-update path and the pre/post-install paths use the same full verification: exactly
+one complete doctrine block, manifest ownership, copy markers or exact source links, every tree
+entry's type, executable bits, symlink target, and file bytes. Owner text outside the managed
+block remains unrestricted. Extra directories and metadata-only drift block updates before an
+installer can overwrite them. Copy-layout validation also visits unreferenced symlinks.
+
+Retry and lifecycle re-entry apply to a cached current receipt, a new release, and a partial
+install. Ownership applies to both linked and copied skills. Retention preserves owner edits
+and backups. No production data migration or credential change is involved.
+
+Hosted review also demonstrated forged receipts in the older cooperative-agent evaluator. Its
+existing threat model excludes agents that alter the recorder. The documentation now states
+explicitly that receipts are writable and unauthenticated; this scorer is not execution attestation.

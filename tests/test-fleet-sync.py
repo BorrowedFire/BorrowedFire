@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -26,7 +27,7 @@ class SyncTests(unittest.TestCase):
         self.git(self.seed, 'config', 'user.name', 'Fixture')
         (self.seed / 'file').write_text('first')
         (self.seed / 'doctrine').mkdir()
-        (self.seed / 'doctrine/DOCTRINE.md').write_text('old doctrine\n')
+        (self.seed / 'doctrine/DOCTRINE.md').write_text('<!-- BEGIN BORROWEDFIRE DOCTRINE -->\nold doctrine\n<!-- END BORROWEDFIRE DOCTRINE -->\n')
         (self.seed / 'skills/demo').mkdir(parents=True)
         (self.seed / 'skills/demo/SKILL.md').write_text('old skill\n')
         self.git(self.seed, 'add', '.')
@@ -61,6 +62,43 @@ class SyncTests(unittest.TestCase):
             '---\nrelease_commit: '+sha+'\nrelease_status: '+status+
             '\nreview_url: https://github.com/BorrowedFire/BorrowedFire/pull/99\n---\n')
 
+    def test_current_receipt_cannot_hide_installed_integrity_drift(self):
+        for mutation in ('duplicate_doctrine', 'missing_marker', 'missing_manifest_entry',
+                         'executable_mode', 'symlink_same_bytes', 'extra_directory'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory(dir=self.root) as directory:
+                installed = Path(directory)
+                context = installed / 'AGENTS.md'
+                doctrine = (self.clone / 'doctrine/DOCTRINE.md').read_text()
+                context.write_text('Owner text before.\n' + doctrine + 'Owner text after.\n')
+                skills = installed / 'skills'
+                shutil.copytree(self.clone / 'skills', skills)
+                marker = skills / 'demo/.borrowedfire-copy'
+                marker.touch()
+                manifest = skills / '.borrowedfire-manifest'
+                manifest.write_text('demo copy\n')
+                self.config['harnesses'] = [{'context': str(context), 'skills': str(skills)}]
+                self.record(self.first)
+                prior = {'revision': self.first, 'status': 'current'}
+                self.assertEqual(sync.sync_source(self.config, self.brain, prior)['status'], 'current')
+                file = skills / 'demo/SKILL.md'
+                if mutation == 'duplicate_doctrine':
+                    context.write_text(context.read_text() + doctrine.replace('old doctrine', 'stale doctrine'))
+                elif mutation == 'missing_marker':
+                    marker.unlink()
+                elif mutation == 'missing_manifest_entry':
+                    manifest.write_text('')
+                elif mutation == 'executable_mode':
+                    file.chmod(0o755)
+                elif mutation == 'symlink_same_bytes':
+                    external = installed / 'external.md'
+                    external.write_bytes(file.read_bytes())
+                    file.unlink()
+                    file.symlink_to(external)
+                else:
+                    (skills / 'demo/owner-extra').mkdir()
+                with self.assertRaises(sync.Blocked):
+                    sync.sync_source(self.config, self.brain, prior)
+
     def test_new_harness_blocks_before_source_changes(self):
         self.record(self.advance())
         with patch.object(sync, 'discovered_harnesses', return_value=[{'skills':'new', 'context':'new'}]):
@@ -72,13 +110,15 @@ class SyncTests(unittest.TestCase):
         context = self.root / 'installed/AGENTS.md'
         skills = self.root / 'installed/skills'
         context.parent.mkdir()
-        context.write_text('old doctrine\n')
+        context.write_text('<!-- BEGIN BORROWEDFIRE DOCTRINE -->\nold doctrine\n<!-- END BORROWEDFIRE DOCTRINE -->\n')
         (skills / 'demo').mkdir(parents=True)
         (skills / 'demo/SKILL.md').write_text('old skill\n')
+        (skills / 'demo/.borrowedfire-copy').touch()
+        (skills / '.borrowedfire-manifest').write_text('demo copy\n')
         self.config['harnesses'] = [{'context': str(context), 'skills': str(skills)}]
         (self.seed / 'tools').mkdir()
         (self.seed / 'tools/skill-lint.sh').write_text('exit 0\n')
-        (self.seed / 'doctrine/DOCTRINE.md').write_text('new doctrine\n')
+        (self.seed / 'doctrine/DOCTRINE.md').write_text('<!-- BEGIN BORROWEDFIRE DOCTRINE -->\nnew doctrine\n<!-- END BORROWEDFIRE DOCTRINE -->\n')
         (self.seed / 'install.sh').write_text('exit 7\n')
         self.git(self.seed, 'add', '.')
         self.git(self.seed, 'commit', '-m', 'new release')
@@ -88,7 +128,7 @@ class SyncTests(unittest.TestCase):
             sync.sync_source(self.config, self.brain, {})
         with self.assertRaisesRegex(sync.Blocked, 'doctrine differs'):
             sync.sync_source(self.config, self.brain, {})
-        self.assertEqual(context.read_text(), 'old doctrine\n')
+        self.assertEqual(context.read_text(), '<!-- BEGIN BORROWEDFIRE DOCTRINE -->\nold doctrine\n<!-- END BORROWEDFIRE DOCTRINE -->\n')
 
     def test_memory_fast_forwards_and_second_run_is_current(self):
         target = self.advance()
@@ -152,14 +192,16 @@ class SyncTests(unittest.TestCase):
         # The fixture installer represents the same installer command used on each host.
         (self.seed / 'tools').mkdir()
         (self.seed / 'tools/skill-lint.sh').write_text('exit 0\n')
-        (self.seed / 'doctrine/DOCTRINE.md').write_text('reviewed doctrine\n')
+        (self.seed / 'doctrine/DOCTRINE.md').write_text('<!-- BEGIN BORROWEDFIRE DOCTRINE -->\nreviewed doctrine\n<!-- END BORROWEDFIRE DOCTRINE -->\n')
         (self.seed / 'skills/demo/SKILL.md').write_text('reviewed skill\n')
         context = self.root / 'installed/AGENTS.md'
         skills = self.root / 'installed/skills'
         context.parent.mkdir()
-        context.write_text('old doctrine\n')
+        context.write_text('<!-- BEGIN BORROWEDFIRE DOCTRINE -->\nold doctrine\n<!-- END BORROWEDFIRE DOCTRINE -->\n')
         (skills / 'demo').mkdir(parents=True)
         (skills / 'demo/SKILL.md').write_text('old skill\n')
+        (skills / 'demo/.borrowedfire-copy').touch()
+        (skills / '.borrowedfire-manifest').write_text('demo copy\n')
         # Paths come only from the test's temporary directory.
         (self.seed / 'install.sh').write_text(
             'set -e\nmkdir -p "'+str(skills)+'"\ncp doctrine/DOCTRINE.md "'+str(context)+
@@ -174,7 +216,7 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(result['revision'], target)
         sync.sync_source(self.config, self.brain, result)
         (skills / 'demo/SKILL.md').write_text('owner edit')
-        with self.assertRaisesRegex(sync.Blocked, 'differs'):
+        with self.assertRaisesRegex(sync.Blocked, 'differ'):
             sync.sync_source(self.config, self.brain, result)
         self.assertEqual((skills / 'demo/SKILL.md').read_text(), 'owner edit')
 

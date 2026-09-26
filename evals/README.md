@@ -185,7 +185,10 @@ also preserves the original configuration and matches the preceding scan's confi
 The final report uses a scan that matches the final configuration, head, and working files.
 The build case requires the first store inspection to observe the original metadata before
 the first successful validation. Later inspections and validations are allowed.
-Only fixture programs write receipt logs. The agent stores any extra proof separately.
+The fixture contract permits only fixture programs to write receipt logs. The agent stores any
+extra proof separately. The logs are workspace-writable and are not authenticated. An agent that
+forges a correctly shaped receipt can defeat this scorer. Treat such a run as invalid evidence;
+these guards do not establish tamper-resistant execution provenance.
 
 Reports use one JSON object without extra prose. The scorer reads the final agent message;
 earlier progress messages do not substitute for the report. It checks report facts mechanically,

@@ -65,6 +65,17 @@ class SkillResourcesTest < Minitest::Test
     assert report['errors'].any? { |error| error.include?('missing.md') }
   end
 
+  def test_rejects_unreferenced_symlinks_outside_copied_layout
+    skill
+    FileUtils.mkdir_p(File.join(@source, 'agents'))
+    outside = File.join(@root, 'outside.yaml')
+    File.write(outside, 'private metadata')
+    File.symlink(outside, File.join(@source, 'agents', 'openai.yaml'))
+    report, success = validate(@source, copy: true)
+    refute success
+    assert report['errors'].any? { |error| error.include?('symlink escapes') }
+  end
+
   def test_rejects_invalid_yaml_that_line_matching_accepts
     skill(description: 'Run the queue. Routing: review.')
     report, success = validate

@@ -6,6 +6,7 @@ require 'pathname'
 require 'uri'
 require 'tmpdir'
 require 'fileutils'
+require 'find'
 require_relative 'markdown-resources'
 
 json_output = ARGV.delete('--json')
@@ -57,6 +58,17 @@ if copy_layout
     File.join(destination, 'SKILL.md')
   end.compact
   copy_boundary = File.realpath(copy_boundary)
+  Find.find(copy_boundary) do |entry|
+    next unless File.symlink?(entry)
+    begin
+      target = File.realpath(entry)
+      unless target == copy_boundary || target.start_with?(copy_boundary + File::SEPARATOR)
+        errors << "#{entry}: symlink escapes the copied skill layout"
+      end
+    rescue SystemCallError => e
+      errors << "#{entry}: copied symlink cannot resolve (#{e.class})"
+    end
+  end
 end
 
 checked_links = 0

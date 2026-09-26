@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import signal
+import stat
 import subprocess
 import tempfile
 
@@ -81,27 +82,61 @@ def release_record(brain):
         raise Blocked('Approved release lacks a review reference')
     return rev
 
+def skill_entries(root):
+    result = {}
+    for item in root.rglob('*'):
+        relative = item.relative_to(root)
+        if relative == Path('.borrowedfire-copy') or '__pycache__' in relative.parts or item.suffix == '.pyc':
+            continue
+        mode = item.lstat().st_mode
+        if stat.S_ISLNK(mode):
+            value = ('link', os.readlink(item))
+        elif stat.S_ISREG(mode):
+            value = ('file', mode & 0o111, item.read_bytes())
+        elif stat.S_ISDIR(mode):
+            value = ('directory',)
+        else:
+            value = ('unsupported', stat.S_IFMT(mode))
+        result[str(relative)] = value
+    return result
+
+
 def verify_install(repo, harnesses):
     expected = (repo / 'doctrine/DOCTRINE.md').read_text().strip()
+    begin = '<!-- BEGIN BORROWEDFIRE DOCTRINE -->'
+    end = '<!-- END BORROWEDFIRE DOCTRINE -->'
     for harness in harnesses:
         context = Path(harness['context'])
         actual = context.read_text()
-        if expected not in actual:
+        if actual.count(begin) != 1 or actual.count(end) != 1:
+            raise Blocked('Installed doctrine must have exactly one managed block: ' + str(context))
+        block = actual[actual.index(begin):actual.index(end) + len(end)].strip()
+        if block != expected:
             raise Blocked('Installed doctrine differs from reviewed source: ' + str(context))
         skills = Path(harness['skills'])
+        modes = {}
+        for line in (skills / '.borrowedfire-manifest').read_text().splitlines():
+            parts = line.split()
+            if len(parts) != 2 or parts[0] in modes:
+                raise Blocked('Invalid installed ownership manifest')
+            modes[parts[0]] = parts[1]
         for source in (repo / 'skills').iterdir():
             if not source.is_dir():
                 continue
             installed = skills / source.name
-            source_files = {str(p.relative_to(source)) for p in source.rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc'}
-            installed_files = {str(p.relative_to(installed)) for p in installed.rglob('*') if p.is_file() and p.name != '.borrowedfire-copy' and '__pycache__' not in p.parts and p.suffix != '.pyc'}
-            if installed_files != source_files:
-                raise Blocked('Installed skill has missing or extra files: ' + source.name)
-            for item in source.rglob('*'):
-                if item.is_file() and '__pycache__' not in item.parts and item.suffix != '.pyc':
-                    target = skills / source.name / item.relative_to(source)
-                    if not target.is_file() or item.read_bytes() != target.read_bytes():
-                        raise Blocked('Installed skill differs from reviewed source: ' + source.name)
+            mode = modes.get(source.name)
+            if mode == 'link':
+                if not installed.is_symlink() or installed.resolve() != source.resolve():
+                    raise Blocked('Installed link ownership differs: ' + source.name)
+            elif mode == 'copy':
+                marker = installed / '.borrowedfire-copy'
+                if installed.is_symlink() or not marker.is_file() or marker.is_symlink():
+                    raise Blocked('Installed copy ownership differs: ' + source.name)
+            else:
+                raise Blocked('Missing installed ownership: ' + source.name)
+            if skill_entries(source) != skill_entries(installed):
+                raise Blocked('Installed skill entries differ from reviewed source: ' + source.name)
+
 
 def discovered_harnesses(config):
     home = Path.home()
