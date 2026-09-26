@@ -64,7 +64,8 @@ class SyncTests(unittest.TestCase):
 
     def test_current_receipt_cannot_hide_installed_integrity_drift(self):
         for mutation in ('duplicate_doctrine', 'missing_marker', 'missing_manifest_entry',
-                         'executable_mode', 'symlink_same_bytes', 'extra_directory'):
+                         'executable_mode', 'symlink_same_bytes', 'extra_directory',
+                         'surplus_owned_copy', 'surplus_owned_link'):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory(dir=self.root) as directory:
                 installed = Path(directory)
                 context = installed / 'AGENTS.md'
@@ -76,6 +77,9 @@ class SyncTests(unittest.TestCase):
                 marker.touch()
                 manifest = skills / '.borrowedfire-manifest'
                 manifest.write_text('demo copy\n')
+                # Unowned skills remain outside the updater's managed set.
+                (skills / 'unrelated').mkdir()
+                (skills / 'unrelated/SKILL.md').write_text('owner skill\n')
                 self.config['harnesses'] = [{'context': str(context), 'skills': str(skills)}]
                 self.record(self.first)
                 prior = {'revision': self.first, 'status': 'current'}
@@ -94,6 +98,13 @@ class SyncTests(unittest.TestCase):
                     external.write_bytes(file.read_bytes())
                     file.unlink()
                     file.symlink_to(external)
+                elif mutation.startswith('surplus_owned_'):
+                    mode = mutation.removeprefix('surplus_owned_')
+                    manifest.write_text('demo copy\nremoved ' + mode + '\n')
+                    if mode == 'copy':
+                        shutil.copytree(skills / 'demo', skills / 'removed')
+                    else:
+                        (skills / 'removed').symlink_to(self.clone / 'skills/demo')
                 else:
                     (skills / 'demo/owner-extra').mkdir()
                 with self.assertRaises(sync.Blocked):
@@ -156,6 +167,26 @@ class SyncTests(unittest.TestCase):
         (self.clone / '.git/MERGE_HEAD').write_text(self.first)
         with self.assertRaisesRegex(sync.Blocked, 'in progress'):
             sync.sync_brain(self.clone)
+
+    def test_active_bisect_blocks_source_without_changing_operation(self):
+        # A clean detached bisect commit used to advance to the approved revision.
+        self.advance()
+        (self.seed / 'file').write_text('third')
+        self.git(self.seed, 'commit', '-am', 'third')
+        self.git(self.seed, 'push', 'origin', 'main')
+        target = self.git(self.seed, 'rev-parse', 'HEAD')
+        self.git(self.clone, 'fetch', 'origin', 'main')
+        self.git(self.clone, 'merge', '--ff-only', target)
+        self.git(self.clone, 'bisect', 'start', target, self.first)
+        before = self.git(self.clone, 'rev-parse', 'HEAD')
+        log = (self.clone / '.git/BISECT_LOG').read_bytes()
+        self.record(target)
+        self.assertNotEqual(before, target)
+        self.assertEqual(self.git(self.clone, 'status', '--porcelain'), '')
+        with self.assertRaisesRegex(sync.Blocked, 'in progress'):
+            sync.sync_source(self.config, self.brain, {})
+        self.assertEqual(self.git(self.clone, 'rev-parse', 'HEAD'), before)
+        self.assertEqual((self.clone / '.git/BISECT_LOG').read_bytes(), log)
 
     def test_new_unapproved_main_does_not_install(self):
         latest = self.advance()

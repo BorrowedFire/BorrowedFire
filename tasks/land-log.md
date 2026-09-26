@@ -448,3 +448,12 @@ and backups. No production data migration or credential change is involved.
 Hosted review also demonstrated forged receipts in the older cooperative-agent evaluator. Its
 existing threat model excludes agents that alter the recorder. The documentation now states
 explicitly that receipts are writable and unauthenticated; this scorer is not execution attestation.
+
+### Owner-authorized continuation after the second hosted review
+
+The owner said to continue until green, then merge and enable. The verified ownership set must
+equal the current source skill set; unrelated unowned skills remain outside the updater. Existing
+integrity cases now cover surplus copied and linked entries. A real bisect fixture protects the
+clean detached checkout and its operation log. Both bisect markers block the shared Git guard
+before either repository can advance. These checks extend the ownership and lifecycle matrix
+above; they do not change the approved-release protocol or overwrite local work.

@@ -35,7 +35,8 @@ def git(repo, *args):
 def clean(repo):
     if git(repo, 'status', '--porcelain'):
         raise Blocked('Checkout has local changes; left untouched')
-    for marker in ('info/grafts', 'index.lock', 'MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'rebase-merge', 'rebase-apply'):
+    for marker in ('info/grafts', 'index.lock', 'MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD',
+                   'rebase-merge', 'rebase-apply', 'BISECT_LOG', 'BISECT_START'):
         path = Path(git(repo, 'rev-parse', '--git-path', marker))
         if not path.is_absolute():
             path = repo / path
@@ -120,9 +121,10 @@ def verify_install(repo, harnesses):
             if len(parts) != 2 or parts[0] in modes:
                 raise Blocked('Invalid installed ownership manifest')
             modes[parts[0]] = parts[1]
-        for source in (repo / 'skills').iterdir():
-            if not source.is_dir():
-                continue
+        sources = [source for source in (repo / 'skills').iterdir() if source.is_dir()]
+        if set(modes) != {source.name for source in sources}:
+            raise Blocked('Installed ownership differs from current source skills')
+        for source in sources:
             installed = skills / source.name
             mode = modes.get(source.name)
             if mode == 'link':
