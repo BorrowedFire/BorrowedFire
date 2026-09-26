@@ -165,17 +165,70 @@ def skill_entries(root):
     return result
 
 
-def verify_install(repo, harnesses):
+def private_contexts(brain, path, revision, harnesses):
+    """Read private instructions from synchronized Git objects, never from a status receipt."""
+    if not isinstance(path, str):
+        raise Blocked('Private context path must be a string')
+    relative = Path(path)
+    if relative.is_absolute() or '..' in relative.parts or relative.parts[:1] != ('config',) or relative.suffix != '.md':
+        raise Blocked('Private context must be a Markdown file under brain config')
+    local = brain / relative
+    if any((brain / Path(*relative.parts[:i])).is_symlink() for i in range(1, len(relative.parts) + 1)):
+        raise Blocked('Private context must not use symlinks')
+    data = local.read_bytes()
+    algorithm = git(brain, 'rev-parse', '--show-object-format')
+    oid = hashlib.new(algorithm, b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+    if oid != git(brain, 'rev-parse', revision + ':' + path):
+        raise Blocked('Private context differs from the synchronized commit')
+
+    def read(commit):
+        entry = git(brain, 'ls-tree', commit, '--', path)
+        if not entry.startswith(('100644 blob ', '100755 blob ')):
+            raise Blocked('Private context is not a regular committed file')
+        content = git(brain, 'show', commit + ':' + path)
+        if content.startswith('---\n'):
+            parts = content.split('---', 2)
+            if len(parts) != 3:
+                raise Blocked('Invalid private context frontmatter')
+            content = parts[2].strip()
+        begin = '<!-- BEGIN BORROWEDFIRE DOCTRINE -->'
+        end = '<!-- END BORROWEDFIRE DOCTRINE -->'
+        if content.count(begin) != 1 or content.count(end) != 1 or content.index(begin) >= content.index(end):
+            raise Blocked('Private context needs one ordered managed doctrine block')
+        return content + '\n'
+
+    current = read(revision)
+    installed = {Path(h['context']).read_bytes().decode() for h in harnesses}
+    known = [current]
+    # Usually the current version is enough. Consult published history only to recognize an
+    # earlier installation. Missing/corrupt status receipts cannot authorize unknown edits.
+    if not installed.issubset(set(known)):
+        for commit in git(brain, 'rev-list', revision, '--', path).splitlines():
+            try:
+                previous = read(commit)
+            except Blocked:
+                continue  # A deleted file or old pre-enrollment format is not installable.
+            if previous not in known:
+                known.append(previous)
+            if installed.issubset(set(known)):
+                break
+    return known
+
+
+def verify_install(repo, harnesses, contexts=None):
     expected = (repo / 'doctrine/DOCTRINE.md').read_text().strip()
     begin = '<!-- BEGIN BORROWEDFIRE DOCTRINE -->'
     end = '<!-- END BORROWEDFIRE DOCTRINE -->'
     for harness in harnesses:
         context = Path(harness['context'])
-        actual = context.read_text()
+        actual = context.read_bytes().decode()
+        private = contexts.get(str(context)) if contexts is not None else None
+        if private is not None and actual not in private:
+            raise Blocked('Installed private context has local changes; reconcile before updating')
         if actual.count(begin) != 1 or actual.count(end) != 1:
             raise Blocked('Installed doctrine must have exactly one managed block: ' + str(context))
         block = actual[actual.index(begin):actual.index(end) + len(end)].strip()
-        if block != expected:
+        if private is None and block != expected:
             raise Blocked('Installed doctrine differs from reviewed source: ' + str(context))
         skills = Path(harness['skills'])
         modes = {}
@@ -233,17 +286,37 @@ def sync_source(config, brain, prior, brain_revision=None):
     head = git(repo, 'rev-parse', 'HEAD')
     verify_source(repo, head)
     approved = release_record(brain, brain_revision)
+    contexts = None
+    private = []
+    if config.get('private_context'):
+        revision = brain_revision or git(brain, 'rev-parse', 'HEAD')
+        targets = config.get('private_context_targets', [h['context'] for h in config['harnesses']])
+        if not isinstance(targets, list) or not targets or any(
+                target not in [h['context'] for h in config['harnesses']] for target in targets):
+            raise Blocked('Private context targets must be enrolled harnesses')
+        private = [h for h in config['harnesses'] if h['context'] in targets]
+        destinations = {}
+        for harness in config['harnesses']:
+            target = Path(harness['context']).resolve()
+            selected = harness in private
+            if target in destinations and destinations[target] != selected:
+                raise Blocked('A shared context cannot mix public and private instruction sources')
+            destinations[target] = selected
+        known = private_contexts(brain, config['private_context'], revision, private)
+        contexts = {h['context']: known for h in private}
+    context_changed = contexts is not None and any(
+        Path(h['context']).read_bytes().decode() != contexts[h['context']][0] for h in private)
     git(repo, 'fetch', 'origin', 'main')
     latest = git(repo, 'rev-parse', 'FETCH_HEAD')
     if not ancestor(repo, approved, latest):
         raise Blocked('Approved revision is not in published main')
     if not ancestor(repo, head, approved):
         raise Blocked('Installed source has local or newer commits; reconciliation required')
-    if head == approved and prior.get('revision') == approved and prior.get('status') == 'current':
-        verify_install(repo, config['harnesses'])
+    if head == approved and prior.get('revision') == approved and prior.get('status') == 'current' and not context_changed:
+        verify_install(repo, config['harnesses'], contexts)
     else:
         # Copied skills can contain owner edits even when the source Git tree is clean.
-        verify_install(repo, config['harnesses'])
+        verify_install(repo, config['harnesses'], contexts)
         clean(repo)
         git(repo, 'merge', '--ff-only', approved)
         verify_source(repo, approved)
@@ -253,9 +326,19 @@ def sync_source(config, brain, prior, brain_revision=None):
             args.append('--copy')
         if config.get('openclaw_workspace'):
             args += ['--openclaw-workspace', config['openclaw_workspace']]
-        run(args, cwd=repo, timeout=300)
+        # Keep the private contents outside the public checkout, including during failures.
+        with tempfile.TemporaryDirectory(prefix='borrowedfire-context-') as directory:
+            if contexts is not None:
+                context_file = Path(directory) / 'AGENTS.md'
+                context_file.write_text(next(iter(contexts.values()))[0])
+                context_file.chmod(0o600)
+                args += ['--context-file', str(context_file)]
+                for harness in private:
+                    args += ['--context-target', harness['context']]
+            run(args, cwd=repo, timeout=300)
         verify_source(repo, approved)
-        verify_install(repo, config['harnesses'])
+        verify_install(repo, config['harnesses'], {path: versions[:1] for path, versions in contexts.items()}
+                       if contexts is not None else None)
     return {'status': 'current', 'revision': approved, 'upstream_revision': latest,
             'awaiting_review': latest != approved}
 

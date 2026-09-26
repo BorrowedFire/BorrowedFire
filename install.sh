@@ -3,7 +3,7 @@
 # harness on this machine. Manifest-owned and idempotent - safe to re-run anytime.
 #
 #   ./install.sh [--copy] [--dry-run] [--uninstall] [--adopt]
-#                [--brain <path>] [--openclaw-workspace <path>]
+#                [--brain <path>] [--openclaw-workspace <path>] [--context-file <path>]
 #
 #   --copy                copy skill dirs instead of symlinking (auto-fallback anyway)
 #   --dry-run             print planned actions only
@@ -12,6 +12,8 @@
 #                         names or known legacy names (backs them up first)
 #   --brain <path>        write the brain pointer (~/.config/borrowedfire/brain)
 #   --openclaw-workspace  path to an OpenClaw workspace to install into
+#   --context-file       replace enrolled context files with an owner-approved file
+#   --context-target     apply --context-file only to this detected context (repeatable)
 set -u
 
 SRC="$(cd "$(dirname "$0")" && pwd -P)"
@@ -30,7 +32,8 @@ LEARNING_SKILLS="reflect remember recall digest"
 WRITING_SKILLS="unslop technical-writing"
 DOCTRINE_SKILLS="$LEARNING_SKILLS $WRITING_SKILLS"
 
-COPY=0 DRY=0 UNINSTALL=0 ADOPT=0 BRAIN="" OPENCLAW_WS="" INSTALL_ERRORS=0
+COPY=0 DRY=0 UNINSTALL=0 ADOPT=0 BRAIN="" OPENCLAW_WS="" CONTEXT_FILE="" INSTALL_ERRORS=0
+CONTEXT_TARGETS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --copy) COPY=1 ;;
@@ -39,10 +42,34 @@ while [ $# -gt 0 ]; do
     --adopt) ADOPT=1 ;;
     --brain) shift; BRAIN="${1:-}" ;;
     --openclaw-workspace) shift; OPENCLAW_WS="${1:-}" ;;
+    --context-file|--context-target)
+      flag="$1"; shift
+      if [ -z "${1:-}" ] || [[ "$1" == --* ]]; then
+        echo "error: $flag requires a value" >&2; exit 2
+      fi
+      if [ "$flag" = --context-file ]; then CONTEXT_FILE="$1"
+      else CONTEXT_TARGETS+=("$1"); fi ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
   shift
 done
+if [ "${#CONTEXT_TARGETS[@]}" -gt 0 ] && [ -z "$CONTEXT_FILE" ]; then
+  echo "error: --context-target requires --context-file" >&2
+  exit 2
+fi
+
+# A private context replaces the whole file, including its local sections. The caller must
+# reconcile existing content first. Fleet sync verifies every installed byte before using it.
+if [ -n "$CONTEXT_FILE" ]; then
+  if [ "$UNINSTALL" -eq 1 ] || [ ! -f "$CONTEXT_FILE" ] || [ -L "$CONTEXT_FILE" ] ||
+      [ "$(grep -cFx "$MARK_BEGIN" "$CONTEXT_FILE")" != 1 ] ||
+      [ "$(grep -cFx "$MARK_END" "$CONTEXT_FILE")" != 1 ] ||
+      ! awk -v b="$MARK_BEGIN" -v e="$MARK_END" '$0 == b {begin=NR} $0 == e {end=NR} END {exit !(begin < end)}' "$CONTEXT_FILE"; then
+    echo "error: --context-file requires a regular file with one managed doctrine block" >&2
+    exit 2
+  fi
+  CONTEXT_FILE="$(cd "$(dirname "$CONTEXT_FILE")" && pwd -P)/$(basename "$CONTEXT_FILE")"
+fi
 
 say() { echo "$@"; }
 
@@ -119,6 +146,62 @@ if [ "${#HARNESSES[@]}" -eq 0 ]; then
     controller_note
   fi
   exit 1
+fi
+if [ "${#CONTEXT_TARGETS[@]}" -gt 0 ]; then
+for context_target in "${CONTEXT_TARGETS[@]}"; do
+  found=0
+  for row in "${HARNESSES[@]}"; do
+    [ "${row##*|}" != "$context_target" ] || found=1
+  done
+  if [ "$found" -eq 0 ]; then
+    echo "error: private context target is not a detected harness" >&2
+    exit 2
+  fi
+done
+fi
+
+resolve_context_target() { # resolve_context_target <path>
+  local target="$1" link hops=0 target_dir
+  while [ -L "$target" ]; do
+    hops=$((hops + 1))
+    [ "$hops" -le 40 ] || return 1
+    link="$(readlink "$target")" || return 1
+    case "$link" in
+      /*) target="$link" ;;
+      *) target="$(dirname "$target")/$link" ;;
+    esac
+  done
+  target_dir="$(cd "$(dirname "$target")" && pwd -P)" || return 1
+  printf '%s/%s\n' "$target_dir" "$(basename "$target")"
+}
+
+uses_private_context() {
+  local candidate
+  [ -n "$CONTEXT_FILE" ] || return 1
+  [ "${#CONTEXT_TARGETS[@]}" -gt 0 ] || return 0
+  for candidate in "${CONTEXT_TARGETS[@]}"; do
+    [ "$candidate" != "$1" ] || return 0
+  done
+  return 1
+}
+
+# A shared destination cannot receive both public and private instructions. Check before
+# writing a brain pointer, skills, or contexts, including direct enrollment invocations.
+if [ -n "$CONTEXT_FILE" ]; then
+  for row in "${HARNESSES[@]}"; do
+    context_target="${row##*|}"
+    uses_private_context "$context_target" || continue
+    resolved="$(resolve_context_target "$context_target")" || exit 1
+    for other_row in "${HARNESSES[@]}"; do
+      other_context="${other_row##*|}"
+      uses_private_context "$other_context" && continue
+      other_resolved="$(resolve_context_target "$other_context")" || exit 1
+      if [ "$resolved" = "$other_resolved" ]; then
+        echo "error: linked contexts cannot mix public and private instructions" >&2
+        exit 2
+      fi
+    done
+  done
 fi
 
 # Bind an explicitly requested brain before automatic-learning doctrine can be
@@ -332,21 +415,6 @@ remove_entry() { # remove_entry <skilldir> <manifest> <name> <why>
   [ "$DRY" -eq 1 ] || manifest_del "$2" "$3"
 }
 
-resolve_context_target() { # resolve_context_target <path>
-  local target="$1" link hops=0 target_dir
-  while [ -L "$target" ]; do
-    hops=$((hops + 1))
-    [ "$hops" -le 40 ] || return 1
-    link="$(readlink "$target")" || return 1
-    case "$link" in
-      /*) target="$link" ;;
-      *) target="$(dirname "$target")/$link" ;;
-    esac
-  done
-  target_dir="$(cd "$(dirname "$target")" && pwd -P)" || return 1
-  printf '%s/%s\n' "$target_dir" "$(basename "$target")"
-}
-
 file_mode() { # file_mode <path>
   local target="$1" mode
   if mode="$(stat -c '%a' "$target" 2>/dev/null)"; then
@@ -395,7 +463,23 @@ write_doctrine() { # write_doctrine <context-file> <doctrine-source> <descriptio
 }
 
 update_doctrine() { # update_doctrine <context-file>
-  write_doctrine "$1" "$SRC/doctrine/DOCTRINE.md" "updated"
+  if ! uses_private_context "$1"; then
+    write_doctrine "$1" "$SRC/doctrine/DOCTRINE.md" "updated"
+    return
+  fi
+  if [ "$DRY" -eq 1 ]; then say "  context  $1 (private source)"; return; fi
+  local target tmp mode
+  mkdir -p "$(dirname "$1")" || return 1
+  touch "$1" || return 1
+  target="$(resolve_context_target "$1")" || return 1
+  tmp="$(mktemp "$(dirname "$target")/.borrowedfire-context.XXXXXX")" || return 1
+  mode="$(file_mode "$target")" || { rm -f "$tmp"; return 1; }
+  if ! cat "$CONTEXT_FILE" > "$tmp" || ! chmod "$mode" "$tmp" || ! mv -f "$tmp" "$target"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  cmp -s "$CONTEXT_FILE" "$1" || return 1
+  say "  context  $1 (private source)"
 }
 
 update_safe_doctrine() { # update_safe_doctrine <context-file>

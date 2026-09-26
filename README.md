@@ -146,8 +146,13 @@ that supports the SKILL.md convention.
 
 ## Automatic fleet updates
 
-Use a separate per-user updater on each Mac. It runs at login and every 15 minutes while the
-user session is available. Sleeping or offline machines catch up when they can run again.
+Run the per-user check at the point where updated instructions are needed, such as the start of
+a coding session. The check uses ordinary local code and makes no model calls:
+
+```sh
+python3 tools/sync-fleet.py --config /absolute/path/to/config.json
+```
+
 Prometheus updates use fast-forward only. Dirty, busy, divergent, or unpushed memory checkouts
 stay untouched. The updater does not commit or push memory on an agent's behalf.
 
@@ -157,7 +162,8 @@ Borrowed Fire updates require a release record in the private brain at
 PR). The landing workflow promotes that record only after review and proof. The updater also
 checks that the approved commit belongs to published main. Newer unapproved commits wait.
 
-Install the updater from the reviewed source checkout:
+If the owner explicitly requests periodic updates, the optional scheduler installer runs the
+check at login and every 15 minutes. Do not use it to configure a session-only workflow:
 
 ```sh
 python3 tools/install-fleet-sync.py --source /absolute/path/to/BorrowedFire --brain /absolute/path/to/prometheus
@@ -176,3 +182,28 @@ files. The nightly learning controller remains separate from software distributi
 
 To stop the updater, unload `com.borrowedfire.fleet-sync` with `launchctl bootout` for the user's
 GUI domain, then remove its LaunchAgent plist. Preserve the repositories and status record.
+
+### Private agent instructions
+
+An enrolled host can use a complete context file from its private brain instead of the public
+doctrine. Set `private_context` in its existing updater config to a brain-relative Markdown path
+under `config/`, such as `config/agent-instructions.md`. Optional `private_context_targets` lists
+the enrolled context paths to replace; omit it only when every enrolled harness shares that file.
+Unselected harnesses retain their local content and receive the public doctrine normally.
+
+Keep the existing `BEGIN BORROWEDFIRE DOCTRINE` and `END BORROWEDFIRE DOCTRINE` comment markers
+around the shared rules. Host-specific sections can remain outside that block. Brain page
+frontmatter is omitted from the installed copy. Review the instructions before committing and
+pushing them: the synchronized private Git history is their publication authority.
+
+Before initial enrollment, back up and reconcile the installed files with the private source.
+The updater deliberately refuses to replace an unrelated file. Install a local copy outside the
+brain checkout, and point any context aliases at that copy. Do not point installed contexts into
+the brain, where installer writes would dirty the checkout. The installer supports this explicit
+replacement with `--context-file <file>` and repeatable `--context-target <detected-context-path>`.
+
+The check recognizes current or earlier committed versions of the same private file. It blocks
+unknown local edits, including edits outside the managed block. A private-file change triggers
+installation even when the reviewed software revision is unchanged. Status files cannot authorize
+instructions, and private contents are never copied into the public source checkout. Existing
+relative context symlinks survive atomic installation.

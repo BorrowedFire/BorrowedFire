@@ -722,6 +722,59 @@ leak_file_case "public-template" "prometheus-template/README.md" "Ran from /User
 leak_case "word-example-does-not-exempt" "- 2026-01-01: for example, production runs from /home/alice/prometheus."
 leak_file_case "fixture-path-does-not-exempt" "tests/fixtures/fake-openclaw.sh" "# ran from /Users/someone/prometheus"
 
+# Private contexts replace the complete canonical file, preserve relative links, and survive
+# repeated installs. This guards the real atomic-write path, not the sync fixture installer.
+PRIVATE_HOME="$SB/private-home"
+mkdir -p "$PRIVATE_HOME/.claude" "$PRIVATE_HOME/.codex" "$PRIVATE_HOME/.qwen"
+printf 'prior owner text\n' > "$PRIVATE_HOME/.codex/AGENTS.md"
+printf 'separate harness instructions\n' > "$PRIVATE_HOME/.qwen/QWEN.md"
+ln -s ../.codex/AGENTS.md "$PRIVATE_HOME/.claude/CLAUDE.md"
+PRIVATE_CONTEXT="$SB/private-context.md"
+cat > "$PRIVATE_CONTEXT" <<'CONTEXT'
+# Host-specific instructions
+Private local settings stay outside the shared block.
+<!-- BEGIN BORROWEDFIRE DOCTRINE -->
+Private shared instructions.
+<!-- END BORROWEDFIRE DOCTRINE -->
+CONTEXT
+for alias_target in "$PRIVATE_HOME/.claude/CLAUDE.md" "$PRIVATE_HOME/.codex/AGENTS.md"; do
+  if HOME="$PRIVATE_HOME" "$SRC/install.sh" --context-file "$PRIVATE_CONTEXT" \
+      --context-target "$alias_target" > "$SB/private-conflict.log" 2>&1; then
+    fail "mixed alias enrollment must fail"
+  else
+    check "mixed alias enrollment preserves owner text" \
+      grep -qx 'prior owner text' "$PRIVATE_HOME/.codex/AGENTS.md"
+    check "mixed alias enrollment does not install skills" test ! -d "$PRIVATE_HOME/.codex/skills"
+    check "mixed alias enrollment explains conflict" grep -q 'linked contexts cannot mix' "$SB/private-conflict.log"
+  fi
+done
+for pass in 1 2; do
+  check "private context install $pass succeeds" env HOME="$PRIVATE_HOME" \
+    XDG_CONFIG_HOME="$PRIVATE_HOME/.config" "$SRC/install.sh" --context-file "$PRIVATE_CONTEXT" \
+    --context-target "$PRIVATE_HOME/.claude/CLAUDE.md" --context-target "$PRIVATE_HOME/.codex/AGENTS.md"
+  check "private context install $pass retains relative alias" \
+    test -L "$PRIVATE_HOME/.claude/CLAUDE.md"
+  check "private context install $pass matches canonical bytes" \
+    cmp -s "$PRIVATE_CONTEXT" "$PRIVATE_HOME/.codex/AGENTS.md"
+  check "private context install $pass reaches Claude alias" \
+    cmp -s "$PRIVATE_CONTEXT" "$PRIVATE_HOME/.claude/CLAUDE.md"
+  check "private context install $pass preserves unselected local instructions" \
+    grep -qx 'separate harness instructions' "$PRIVATE_HOME/.qwen/QWEN.md"
+  check "private context install $pass keeps unselected public doctrine" \
+    grep -q 'Run CI locally unless' "$PRIVATE_HOME/.qwen/QWEN.md"
+done
+# No explicit targets selects all harnesses, including on macOS Bash 3.2 with nounset.
+check "private context without explicit targets succeeds" env HOME="$PRIVATE_HOME" \
+  XDG_CONFIG_HOME="$PRIVATE_HOME/.config" bash "$SRC/install.sh" --context-file "$PRIVATE_CONTEXT"
+check "implicit targets receive private context" cmp -s "$PRIVATE_CONTEXT" "$PRIVATE_HOME/.qwen/QWEN.md"
+printf 'not an instruction file\n' > "$SB/invalid-context.md"
+if HOME="$PRIVATE_HOME" "$SRC/install.sh" --context-file "$SB/invalid-context.md" >/dev/null 2>&1; then
+  fail "invalid private context fails before modifying installed files"
+else
+  check "invalid private context preserves installed bytes" \
+    cmp -s "$PRIVATE_CONTEXT" "$PRIVATE_HOME/.codex/AGENTS.md"
+fi
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 rm -rf "$SB"
