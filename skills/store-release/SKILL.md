@@ -57,9 +57,13 @@ in the system — it is **owner-gated by default**.
 8. When GitHub Release publication is authorized, create/update it with version, build/code, platform, track, commit,
    artifact/workflow links, and store status. (Release notes content: `changelog`, with `signal`
    for promotional tone.)
-9. When upload or submission is authorized, use the repo-native path. Satisfy the **owner gate**
-   before store submission or rollout promotion. Inspect a workflow's effects before triggering it.
-10. Verify the processing, submission, or live state for the stages that ran.
+9. When upload or submission is authorized:
+   - iOS: upload, attach the build, and submit with `asc`, through the host's unattended wrapper
+     when one exists, even when the repo also has a fastlane lane or release workflow.
+   - Android: use the repo-native path.
+   Satisfy the **owner gate** before store submission or rollout promotion. Inspect a workflow's
+   effects before triggering it.
+10. Verify the processing, submission, or live state for the stages that ran (iOS: with `asc`).
 11. Report the stages completed and their evidence. Update `docs/releases/` when the requested
     release or repository convention needs that record. Capture durable release gotchas via
     `remember` to `lessons/`.
