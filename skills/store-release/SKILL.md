@@ -12,9 +12,11 @@ in the system — it is **owner-gated by default**.
 ## Rules
 
 - Verify live store state first; repo docs are not enough.
-- **How to verify store state:** use the repo-native tooling in this order — a documented fastlane
-  lane, the App Store Connect / Play Developer API with configured credentials, or the repo's
-  release workflow logs. If none is available, **ask the owner for the current store state**
+- **How to verify store state:** for App Store Connect, use the `asc` CLI (Homebrew `asc`,
+  rorkai/App-Store-Connect-CLI) for every read and change, through the host's unattended wrapper
+  when one exists; find commands with `asc search "<task>"`. For Google Play, use the repo-native
+  tooling in this order — a documented fastlane lane, the Play Developer API with configured
+  credentials, or the repo's release workflow logs. If none is available, **ask the owner for the current store state**
   (version/build, processing/submission status) before proceeding — never infer it from the repo.
 - **Owner gate:** actually *submitting* for store review (or promoting a track/rollout) requires
   explicit owner confirmation in this run, unless the invocation pre-authorized it ("submit
