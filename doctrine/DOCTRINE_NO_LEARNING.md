@@ -1,5 +1,5 @@
 <!-- BEGIN BORROWEDFIRE DOCTRINE -->
-## Borrowed Fire doctrine (v7 reduced mode — managed by install.sh, do not hand-edit)
+## Borrowed Fire doctrine (v8 reduced mode — managed by install.sh, do not hand-edit)
 
 **Memory.** Prometheus is the private git-backed brain. Resolve it through `$PROMETHEUS_DIR`, then
 `~/.config/borrowedfire/brain`, then `~/prometheus`. Before substantive repo work, use `recall` for
@@ -38,6 +38,40 @@ For an exception, name the exact check and the GitHub-only capability it needs. 
 Codex PR review separate from CI. If branch protection requires a hosted status, report that
 specific merge blocker once; do not bypass protection, fabricate a status, or repeatedly ask for
 Actions funding. Changing workflows or protection requires task-specific authorization.
+
+**Review and repair.** Record the requested outcome and acceptance checks before implementation.
+Before review, record the frozen candidate, affected paths, evidence, and blocking criteria. Give
+all required reviewers the same candidate and scope. Required gates must cover the final candidate.
+Reuse valid evidence for unchanged code and run affected checks and required integration gates.
+
+Validate findings with a safe reproduction or precise code and contract evidence. A finding blocks
+only if it prevents the requested outcome, fails an acceptance check, demonstrates a regression
+introduced by the change, or establishes a concrete security, safety, or data-integrity failure
+in affected behavior. Record other valid findings as follow-ups. Findings do not widen scope.
+
+Allow three submitted review batches or 60 elapsed minutes from the first submission, whichever
+ends first. One batch sends one frozen candidate to all required reviewers and combines their
+findings. Every retry or resubmission counts, even without code changes. Record submissions,
+candidates, start time, and deadline in durable task evidence. Carry the budget across reviewers,
+branches, machines, and sessions. Investigation and "until green" do not reset it. Elapsed time
+includes repairs, investigation, verification, and waits. On a second validated finding in the
+same behavior, investigate the shared cause within the affected contract and its relevant
+producers and consumers. Keep corrections within the authorized scope and remaining budget.
+
+Collect the final allowed batch within the remaining time. When it completes or the deadline
+arrives, stop new edits, investigations, checks, retries, review requests, and polling. Safely
+cancel work that can be cancelled. Record other unfinished work as pending, neither pass nor fail.
+If all required gates pass, complete the already-authorized action. Otherwise, distinguish a
+confirmed defect, missing required evidence, and an owner decision. Do not waive gates, merge
+with blockers, or call a candidate ready while a required gate is pending.
+
+State what fails or remains unverified. Recommend approval or deferral using the evidence,
+whether the change caused the issue, and the consequence of deferring it. For more work, specify
+the smallest repair, investigation, or scope reduction, its success check, and its additional
+time and review budget. Only an explicit owner extension authorizes that named work. Record each
+approved extension's activation timestamp and its own deadline. Count its time from activation,
+without adding minutes retroactively to an expired deadline. Preserve the original accounting.
+An extension does not authorize unrelated work. Use `land` for the PR review procedure.
 
 **Safety.** The `land` denylist is always owner-gated: migrations/schema/RLS, auth, payments,
 secrets/signing, destructive operations, deploys/releases, and store submission. A workflow skill
