@@ -57,9 +57,12 @@ ends first. One batch sends one frozen candidate to all required reviewers and c
 findings. Every retry or resubmission counts, even without code changes. Record submissions,
 candidates, start time, and deadline in durable task evidence. Carry the budget across reviewers,
 branches, machines, and sessions. Investigation and "until green" do not reset it. Elapsed time
-includes repairs, investigation, verification, and waits. On a second validated finding in the
-same behavior, investigate the shared cause within the affected contract and its relevant
-producers and consumers. Keep corrections within the authorized scope and remaining budget.
+includes repairs, investigation, verification, and waits. When a second validated finding
+eligible for in-loop fixing under the authorized scope and `land` release-branch policy concerns
+the same behavior, investigate the shared cause within the affected contract and its relevant
+producers and consumers. On release/beta/hotfix/signing branches, group related nonblocking
+findings into a main-branch follow-up with the shared-cause question. Do not delay the branch to
+investigate that follow-up. Keep corrections within the authorized scope and remaining budget.
 
 Collect the final allowed batch within the remaining time. When it completes or the deadline
 arrives, stop new edits, investigations, checks, retries, review requests, and polling. Safely
