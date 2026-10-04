@@ -65,9 +65,11 @@ the denylist.
 
 ## Review budget and evidence
 
-Allow at most **three submitted review batches within 60 elapsed minutes**, whichever limit
-ends the work first. A batch sends one frozen candidate to all required reviewers under the
-same scope and blocking criteria, with one request per required reviewer. Reserve its number
+Use `--max-rounds` as the submitted-batch limit and `--max-review-minutes` as the elapsed-minute
+limit, defaulting to **3 batches and 60 minutes**. Stop when either active limit is reached.
+Apply any supplied lower limit; a higher limit requires the explicit owner grant described above.
+A batch sends one frozen candidate to all required reviewers under the same scope and blocking
+criteria, with one request per required reviewer. Reserve its number
 before the first submission and record all requests in it. Start the clock at that first
 submission. A failed or unavailable submission still consumes the batch once attempted;
 preparation before dispatch does not.
@@ -76,17 +78,19 @@ Count retries, replacement reviewers, refutation-only re-reviews, and reviews wi
 Parallel required reviewers share one batch. Any new request after that batch's planned
 submissions consumes another batch. Changing reviewers, branches, machines, tools, sessions,
 or investigating a shared cause does not reset the count or clock. "Until green" is not an
-extension. Import prior batches and their first-submission time when resuming the same change.
+extension. Import the recorded limits, prior batches, and first-submission time when resuming
+the same change.
 If the history cannot be established, report the missing ledger; do not assume a fresh budget.
 
 Keep a durable review ledger in the PR or existing land log: authorized outcome, acceptance
-checks, scope baseline, candidate commit or content fingerprint, first-submission time and
-deadline, submitted batches and reviewer requests, findings with disposition, and gate evidence.
+checks, scope baseline, candidate commit or content fingerprint, configured limits, first-submission
+time and deadline, submitted batches and reviewer requests, findings with disposition, and gate
+evidence. Set the initial deadline to the first-submission time plus the configured minute limit.
 Do not modify the frozen candidate while its batch is running. Record results against its exact
 revision. Reuse valid verification for unchanged behavior, but run checks affected by edits and
 required integration gates. Both review gates must cover the final candidate.
 
-The last permitted batch may finish within the original time budget. After its results arrive,
+The last permitted batch may finish before the active deadline. After its results arrive,
 start no further repairs, investigations, checks, or review requests. At the elapsed deadline,
 stop new edits, checks, investigation, review requests, waits, and polling, including for a pending
 final batch. Safely cancel work that can be cancelled. Record the latest available evidence and
