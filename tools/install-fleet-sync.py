@@ -55,7 +55,7 @@ def main():
                 raise ValueError('config must be an object')
         except (OSError, ValueError) as exc:
             parser.error('existing updater config is unreadable: ' + str(exc))
-        for key in ('private_context', 'private_context_targets'):
+        for key in ('private_context', 'private_context_targets', 'git_identity_policy'):
             if key in previous:
                 config[key] = previous[key]
     config_path.write_text(json.dumps(config, indent=2) + '\n')

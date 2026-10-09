@@ -81,6 +81,33 @@ check "copy mode: real dir"            test -d "$HOME/.qwen/skills/ship" -a ! -L
 check "copy mode: manifest says copy"  grep -q '^ship copy$' "$HOME/.qwen/skills/.borrowedfire-manifest"
 check "copy: references included"      test -f "$HOME/.qwen/skills/remember/references/brain-schema.md"
 
+# A restrictive host umask must not make the updater reject reviewed executable files.
+RESTRICTED_COPY_HOME="$SB/restricted-copy-home"
+mkdir -p "$RESTRICTED_COPY_HOME/.codex"
+if (umask 077; HOME="$RESTRICTED_COPY_HOME" "$SRC/install.sh" --copy >/dev/null 2>&1); then
+  ok "copy installs under umask 077"
+else
+  fail "copy installs under umask 077"
+fi
+check "copy restores source execute bits without widening read/write" ruby -rfind -e '
+  source, target = ARGV
+  count = 0
+  Find.find(source) do |path|
+    next if File.symlink?(path) || !File.file?(path)
+    copy = target + path.delete_prefix(source)
+    exit 1 unless File.file?(copy)
+    mode = File.stat(copy).mode
+    exit 1 unless (mode & 0111) == (File.stat(path).mode & 0111) && (mode & 0066).zero?
+    count += 1
+  end
+  exit(count.positive? ? 0 : 1)
+' "$SRC/skills" "$RESTRICTED_COPY_HOME/.codex/skills"
+if (umask 077; HOME="$RESTRICTED_COPY_HOME" "$SRC/install.sh" --copy >/dev/null 2>&1); then
+  ok "restricted copy remains valid on the next normal install"
+else
+  fail "restricted copy remains valid on the next normal install"
+fi
+
 # --- 7. brain pointer ---
 mkdir -p "$HOME/prometheus/config" "$HOME/prometheus/projects"
 git init -q "$HOME/prometheus"

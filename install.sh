@@ -303,7 +303,16 @@ doctrine_skill_class() { # doctrine_skill_class <name>: which capability the ski
 }
 
 copy_skill() { # copy_skill <src> <tgt>: copy + drop the ownership marker inside
-  rm -rf "$2" && cp -R "$1" "$2" && touch "$2/.borrowedfire-copy"
+  rm -rf "$2" && cp -R "$1" "$2" && ruby -rfind -e '
+    source, target = ARGV
+    Find.find(source) do |path|
+      next if File.symlink?(path) || !File.file?(path)
+      copy = target + path.delete_prefix(source)
+      # Keep umask-restricted read/write permissions while restoring source execute bits.
+      mode = (File.stat(copy).mode & 0666) | (File.stat(path).mode & 0111)
+      File.chmod(mode, copy)
+    end
+  ' "$1" "$2" && touch "$2/.borrowedfire-copy"
 }
 
 install_skill() { # install_skill <skilldir> <manifest> <name>

@@ -498,6 +498,37 @@ class SyncTests(unittest.TestCase):
             with self.assertRaisesRegex(sync.Blocked, 'exit 7'):
                 sync.sync_source(self.config, self.brain, {})
 
+    def test_session_check_enrolls_identity_then_rejects_edited_hooks(self):
+        self.private_fixture()
+        shutil.copy2(Path(__file__).resolve().parents[1] / 'tools/git-identity.py',
+                     self.seed / 'tools/git-identity.py')
+        self.git(self.seed, 'add', 'tools/git-identity.py')
+        self.git(self.seed, 'commit', '-m', 'identity guard')
+        self.git(self.seed, 'push', 'origin', 'main')
+        self.record(self.git(self.seed, 'rev-parse', 'HEAD'))
+        policy = {'version': 1, 'github_login': 'ExampleOwner', 'github_id': 1234,
+                  'email': '1234+ExampleOwner@users.noreply.github.com', 'allowed_author_emails': []}
+        (self.brain / 'config/git-identity.json').write_text(json.dumps(policy) + '\n')
+        self.git(self.brain, 'add', 'config/git-identity.json')
+        self.git(self.brain, 'commit', '-m', 'published identity policy')
+        self.config.update(brain=str(self.brain), git_identity_policy='config/git-identity.json')
+        config_path = self.root / 'config.json'
+        config_path.write_text(json.dumps(self.config))
+        home = self.root / 'isolated-home'
+        home.mkdir()
+        with patch.dict(os.environ, {'HOME': str(home), 'XDG_CONFIG_HOME': str(home / '.config')}), patch.object(
+                sys, 'argv', ['sync', '--config', str(config_path)]), patch.object(
+                sync, 'sync_brain', return_value={'status': 'current', 'revision': self.git(self.brain, 'rev-parse', 'HEAD')}):
+            for _ in range(2):
+                self.assertEqual(sync.main(), 0)
+                self.assertEqual(json.loads((self.root / 'status.json').read_text())['git_identity']['status'], 'current')
+            self.assertTrue((home / '.gitconfig').is_file())
+            hook = self.root / 'identity/hooks/pre-commit'
+            hook.write_text('# owner edit\n')
+            self.assertEqual(sync.main(), 1)
+            self.assertEqual(json.loads((self.root / 'status.json').read_text())['git_identity']['status'], 'blocked')
+            self.assertEqual(hook.read_text(), '# owner edit\n')
+
 class CommandTests(unittest.TestCase):
     def test_interruptions_stop_descendant_writes(self):
         # A detached child group used to survive updater SIGTERM or KeyboardInterrupt.

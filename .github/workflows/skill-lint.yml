@@ -30,3 +30,5 @@ jobs:
         run: python3 -B tests/test-workflow-guards.py
       - name: Fleet sync safety contracts (local repositories)
         run: python3 -B tests/test-fleet-sync.py
+      - name: Git identity and hook contracts (isolated local repositories)
+        run: python3 -B tests/test-git-identity.py

@@ -146,6 +146,11 @@ that supports the SKILL.md convention.
 
 ## Automatic fleet updates
 
+An opt-in [Git identity guard](docs/git-identity.md) supplies a scoped noreply default and shared
+commit/push checks for every local harness. Its account policy stays in the private brain and is
+installed only through the reviewed update path. Existing project hooks and unrelated identities
+are preserved.
+
 Run the per-user check at the point where updated instructions are needed, such as the start of
 a coding session. The check uses ordinary local code and makes no model calls:
 
