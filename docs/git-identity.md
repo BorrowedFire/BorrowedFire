@@ -84,18 +84,23 @@ hook in its common Git directory. Arguments, working directory, output, exit sta
 are preserved. Pre-push input is replayed after identity inspection. Linked worktrees use the
 common hook directory.
 
-Enrollment refuses an existing global `core.hooksPath` manager. A repository or worktree override
-is preserved and reported by the doctor. Integrate that manager explicitly before claiming
-coverage. Do not replace project hooks or change `core.hooksPath` to `/dev/null` to pass a check.
+Enrollment refuses competing hook managers visible in its current Git configuration, including
+system and global settings. A conditional manager may become visible only in a target repository.
+The doctor detects that conflict there, and commit/push hooks fail closed until explicit integration.
+Other hooks still forward to the existing manager, preserving post-checkout and similar behavior.
+Repository and worktree overrides are preserved and reported. Do not replace project hooks or
+change `core.hooksPath` to `/dev/null` to pass a check.
 
 ## Inspect commits created outside ordinary Git commit commands
 
 `prepare-commit-msg` also checks identity because Git still runs it with `--no-verify`.
 Git plumbing, some replay operations, explicit hook overrides, and remote APIs can bypass
-commit hooks. The pre-push check is the second local gate. It checks the commits being added,
-excluding the old destination ref and history already known through that destination's
-remote-tracking refs. This preserves other authors on already-published branches merged into
-the candidate. A missing old destination object requires a fetch.
+commit hooks. The pre-push check is the second local gate. It reads advertised refs from the actual
+push destination with `git ls-remote`, then checks the commits being added. It excludes only the
+old destination ref and destination history whose objects exist locally. Local remote-tracking
+refs alone are not proof: fetch and push URLs can differ or change. This preserves other authors
+on already-published branches merged into the candidate. A missing old destination object requires
+a fetch. A failed destination read or a Git inspection exceeding 30 seconds blocks the push.
 It does not rewrite or certify old history already on the server.
 
 For a workflow that does not run local push hooks, inspect an exact candidate or range explicitly:

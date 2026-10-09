@@ -35,8 +35,11 @@ COMMIT_HOOKS = {'pre-commit', 'prepare-commit-msg', 'pre-merge-commit', 'pre-app
 
 
 def git(*args, cwd=None, check=True):
-    result = subprocess.run(['git', '--no-replace-objects', *args], cwd=cwd, text=True,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        result = subprocess.run(['git', '--no-replace-objects', *args], cwd=cwd, text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+    except subprocess.TimeoutExpired:
+        raise Blocked('Git inspection timed out: ' + args[0])
     if check and result.returncode:
         # Do not echo command output: it may contain private identity metadata.
         raise Blocked('Git could not inspect ' + args[0] + '; check repository state')
@@ -122,8 +125,24 @@ def check_commits(policy, revisions):
     return len(commits)
 
 
-def check_push(policy, remote, data):
+def destination_history(destination):
+    """Only a destination's advertised refs establish that metadata is already there."""
+    exclusions = []
+    for line in git('ls-remote', '--refs', '--', destination).stdout.splitlines():
+        fields = line.split()
+        if len(fields) != 2 or not re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', fields[0]):
+            raise Blocked('Cannot inspect push destination refs')
+        # Unknown destination objects cannot exclude local commits. Conservatively
+        # inspect more history until the caller fetches those objects.
+        commit = git('rev-parse', '--verify', fields[0] + '^{commit}', check=False)
+        if commit.returncode == 0:
+            exclusions.append('^' + commit.stdout.strip())
+    return exclusions
+
+
+def check_push(policy, destination, data):
     count = 0
+    published = None
     for line in data.decode().splitlines():
         fields = line.split()
         if len(fields) != 4:
@@ -138,23 +157,33 @@ def check_push(policy, remote, data):
         resolved = git('rev-parse', '--verify', local_oid + '^{commit}', check=False)
         if resolved.returncode:
             continue
+        if published is None:
+            published = destination_history(destination)
         revisions = [resolved.stdout.strip()]
         if set(remote_oid) != {'0'}:
             old = git('rev-parse', '--verify', remote_oid + '^{commit}', check=False)
             if old.returncode:
                 raise Blocked('Fetch the push destination before checking its outgoing commits')
             revisions.append('^' + old.stdout.strip())
-        if remote in git('remote').stdout.splitlines():
-            # Do not re-audit history already present at the destination, including
-            # commits merged from another published branch into an existing branch.
-            # Use only this remote's known refs, never refs from an unrelated remote.
-            revisions += ['--not', '--remotes=' + remote]
+        revisions += published
         count += check_commits(policy, revisions)
     return count
 
 
 def quote_config(value):
     return '"' + str(value).replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n') + '"'
+
+
+def configured_hooks():
+    result = git('config', '--null', '--path', '--get-all', 'core.hooksPath', check=False)
+    if result.returncode not in (0, 1):
+        raise Blocked('Cannot inspect configured Git hook managers')
+    return result.stdout.split('\0')[:-1] if result.returncode == 0 else []
+
+
+def competing_hooks(state):
+    managed = (state / 'hooks').resolve()
+    return [Path(value).resolve() for value in configured_hooks() if Path(value).resolve() != managed]
 
 
 def files_for(policy, state, source, python):
@@ -200,12 +229,10 @@ def install(policy, previous, state, source, python):
         raise Blocked('Git identity installation is a symlink; left untouched')
     state, source = state.resolve(), source.resolve()
     expected = files_for(policy, state, source, python)
-    # Never replace a user's existing global hook manager. Repository overrides are
-    # detected by doctor; enrollment does not mutate product repository config.
-    hooks = git('config', '--global', '--includes', '--get-all', 'core.hooksPath', check=False)
-    if hooks.returncode not in (0, 1) or any(Path(path).expanduser() != state / 'hooks'
-                                          for path in hooks.stdout.splitlines()):
-        raise Blocked('Existing global core.hooksPath needs explicit integration; left untouched')
+    # Inspect every active scope in the updater cwd. Conditional managers that are
+    # visible only in a target repository are detected by doctor and dispatch.
+    if competing_hooks(state):
+        raise Blocked('Existing core.hooksPath needs explicit integration; left untouched')
     if state.exists() or state.is_symlink():
         verified = False
         for old_policy in [policy, *previous]:
@@ -255,6 +282,9 @@ def doctor(policy, state):
     if binding.get('source') != str(Path(__file__).resolve()) or not isinstance(binding.get('python'), str):
         raise Blocked('Git identity installation points to a different source; run the configured update check')
     verify_files(state, files_for(policy, state, Path(binding['source']), binding['python']))
+    if competing_hooks(state):
+        raise Blocked('Repository is not protected: another configured hook manager needs explicit '
+                      'integration. Its configuration is preserved; do not disable it.')
     effective = git('config', '--path', '--get', 'core.hooksPath', check=False).stdout.strip()
     if not effective or Path(effective).resolve() != (state / 'hooks').resolve():
         raise Blocked('Repository is not protected: core.hooksPath is overridden or its remote URL '
@@ -267,18 +297,25 @@ def doctor(policy, state):
 
 def dispatch(policy, state, hook, args):
     data = None
+    competing = competing_hooks(state)
     if in_scope(policy):
+        if competing and hook in COMMIT_HOOKS | {'pre-push'}:
+            raise Blocked('Another configured Git hook manager needs explicit integration before '
+                          'committing or pushing. Its configuration is preserved; do not disable it.')
         if hook in COMMIT_HOOKS:
             check_current(policy)
         elif hook == 'pre-push':
             if len(args) != 2:
                 raise Blocked('Invalid pre-push arguments')
             data = sys.stdin.buffer.read()
-            check_push(policy, args[0], data)
+            check_push(policy, args[1], data)
     # --git-path hooks follows core.hooksPath and would recurse. Worktrees share
     # their original hooks in the common Git directory.
     common = Path(git('rev-parse', '--git-common-dir').stdout.strip()).resolve()
-    original = common / 'hooks' / hook
+    # A conditional manager may only become visible in this repository. Commit and
+    # push gates fail closed above. Preserve its other hooks (including post hooks)
+    # until explicit integration, rather than silently skipping their behavior.
+    original = (competing[-1] if competing else common / 'hooks') / hook
     if original.resolve() == (state / 'hooks' / hook).resolve():
         raise Blocked('Recursive Git hook configuration')
     if original.is_file() and os.access(original, os.X_OK):

@@ -171,13 +171,14 @@ class IdentityTests(unittest.TestCase):
 
     def test_repository_hooks_override_is_not_silently_replaced(self):
         self.git('config', 'core.hooksPath', '.project-hooks')
-        self.install()
+        with self.assertRaisesRegex(identity.Blocked, 'core.hooksPath'):
+            self.install()
         self.assertIn('not protected', self.cli('doctor', ok=False).stderr)
         self.assertEqual(self.git('config', 'core.hooksPath').stdout.strip(), '.project-hooks')
 
     def test_global_hook_manager_is_preserved(self):
         self.git('config', '--global', 'core.hooksPath', '/example/existing-hooks')
-        with self.assertRaisesRegex(identity.Blocked, 'global core.hooksPath'):
+        with self.assertRaisesRegex(identity.Blocked, 'core.hooksPath'):
             self.install()
         self.assertEqual(self.git('config', '--global', 'core.hooksPath').stdout.strip(), '/example/existing-hooks')
 
@@ -185,8 +186,46 @@ class IdentityTests(unittest.TestCase):
         included = self.home / 'other-config'
         included.write_text('[core]\n hooksPath = /example/existing-hooks\n')
         self.git('config', '--global', '--add', 'include.path', str(included))
-        with self.assertRaisesRegex(identity.Blocked, 'global core.hooksPath'):
+        with self.assertRaisesRegex(identity.Blocked, 'core.hooksPath'):
             self.install()
+
+    def test_system_hook_manager_is_preserved_and_conflict_blocks(self):
+        hooks = self.root / 'system-hooks'
+        hooks.mkdir()
+        hook = hooks / 'pre-commit'
+        hook.write_text('#!/bin/sh\nexit 42\n')
+        hook.chmod(0o700)
+        system = self.root / 'system-gitconfig'
+        system.write_text('[core]\n hooksPath = ' + str(hooks) + '\n')
+        with patch.dict(os.environ, {'GIT_CONFIG_SYSTEM': str(system), 'GIT_CONFIG_NOSYSTEM': '0'}):
+            with self.assertRaisesRegex(identity.Blocked, 'core.hooksPath'):
+                self.install()
+            self.assertIn('not protected', self.cli('doctor', ok=False).stderr)
+            self.assertIn('explicit integration', self.commit(ok=False).stderr)
+        self.assertEqual(hook.read_text(), '#!/bin/sh\nexit 42\n')
+
+    def test_conditional_hook_manager_is_checked_in_target_repository(self):
+        self.commit()
+        before = self.git('rev-parse', 'HEAD').stdout
+        hooks = self.root / 'conditional-hooks'
+        hooks.mkdir()
+        for name, text in [('pre-commit', 'exit 42'),
+                           ('post-checkout', 'touch ' + str(self.root / 'post-checkout-ran'))]:
+            path = hooks / name
+            path.write_text('#!/bin/sh\n' + text + '\n')
+            path.chmod(0o700)
+        config = self.home / 'project-config'
+        config.write_text('[core]\n hooksPath = ' + str(hooks) + '\n')
+        global_config = self.home / '.gitconfig'
+        global_config.write_text('[includeIf "gitdir:' + str(self.repo) + '/"]\n path = ' + str(config) + '\n' + global_config.read_text())
+        os.chdir(self.home)  # The conditional manager is invisible in the updater cwd.
+        self.install()
+        os.chdir(self.repo)
+        self.assertIn('not protected', self.cli('doctor', ok=False).stderr)
+        self.assertIn('explicit integration', self.commit(ok=False).stderr)
+        self.assertEqual(self.git('rev-parse', 'HEAD').stdout, before)
+        self.git('checkout', '-b', 'other')
+        self.assertTrue((self.root / 'post-checkout-ran').is_file())
 
     def test_account_change_requires_scope_migration(self):
         previous = self.policy
@@ -260,6 +299,7 @@ class IdentityTests(unittest.TestCase):
         old_umask = os.umask(0o077)
         self.addCleanup(os.umask, old_umask)
         second = self.home / 'second-identity'
+        os.chdir(self.home)  # Install outside the first policy's repository scope.
         identity.install(self.policy, [], second, SOURCE, sys.executable)
         identity.verify_files(second, identity.files_for(self.policy, second, SOURCE, sys.executable))
 
@@ -310,6 +350,21 @@ class IdentityTests(unittest.TestCase):
         self.git('checkout', 'feature')
         self.git('merge', '-m', 'merge published source', 'main')
         self.git('push', 'origin', 'feature')
+
+    def test_different_destination_does_not_trust_stale_tracking_history(self):
+        self.push_fixture()
+        self.git('-c', 'core.hooksPath=/dev/null', 'commit', '--allow-empty', '-m', 'existing unsafe history',
+                 '--author=Contributor <private@example.invalid>')
+        self.git('-c', 'core.hooksPath=/dev/null', 'push', 'origin', 'main')
+        destination = self.root / 'different-destination.git'
+        self.command('git', 'init', '--bare', str(destination))
+        self.git('remote', 'set-url', '--push', 'origin', str(destination))
+        for changed_fetch in (False, True):
+            with self.subTest(changed_fetch=changed_fetch):
+                if changed_fetch:
+                    self.git('remote', 'set-url', 'origin', 'https://github.com/ExampleOwner/replacement.git')
+                self.assertIn('Outgoing commit', self.git('push', 'origin', 'main', ok=False).stderr)
+                self.command('git', '--git-dir=' + str(destination), 'rev-parse', '--verify', 'refs/heads/main', ok=False)
 
     def test_merge_commit_checks_environment(self):
         self.commit()
