@@ -4,6 +4,7 @@ import argparse
 import datetime as dt
 import fcntl
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,7 @@ import re
 import signal
 import stat
 import subprocess
+import sys
 import tempfile
 
 class Blocked(Exception):
@@ -370,6 +372,48 @@ def read_status(path):
         prior['borrowedfire'] = {}
     return prior
 
+
+def sync_identity(config, brain, revision, state):
+    """Opt-in identity policy follows the same published-source boundary as instructions."""
+    path = config['git_identity_policy']
+    if not isinstance(path, str):
+        raise Blocked('Git identity policy path must be a string')
+    relative = Path(path)
+    if relative.is_absolute() or '..' in relative.parts or relative.parts[:1] != ('config',) or relative.suffix != '.json':
+        raise Blocked('Git identity policy must be JSON under brain config')
+    if git(brain, 'rev-parse', 'HEAD') != revision:
+        raise Blocked('Brain changed during identity installation')
+    local = brain / relative
+    if any((brain / Path(*relative.parts[:i])).is_symlink() for i in range(1, len(relative.parts) + 1)):
+        raise Blocked('Git identity policy must not use symlinks')
+    committed = git(brain, 'show', revision + ':' + path)
+    data = local.read_bytes()
+    algorithm = git(brain, 'rev-parse', '--show-object-format')
+    oid = hashlib.new(algorithm, b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+    if oid != git(brain, 'rev-parse', revision + ':' + path):
+        raise Blocked('Git identity policy differs from the synchronized commit')
+    policies = []
+    for commit in git(brain, 'rev-list', revision, '--', path).splitlines():
+        entry = git(brain, 'ls-tree', commit, '--', path)
+        if entry.startswith(('100644 blob ', '100755 blob ')):
+            policies.append(json.loads(git(brain, 'show', commit + ':' + path)))
+    source = Path(config['source']) / 'tools/git-identity.py'
+    if not source.is_file():
+        raise Blocked('Reviewed source does not support Git identity enrollment yet')
+    # Source integrity was checked by sync_source. Do not leave pycache in that checkout.
+    previous_bytecode = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec = importlib.util.spec_from_file_location('git_identity', source)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        try:
+            return module.install(json.loads(committed), policies, state / 'identity', source, sys.executable)
+        except module.Blocked as exc:
+            raise Blocked(str(exc))
+    finally:
+        sys.dont_write_bytecode = previous_bytecode
+
 def main():
     parser = argparse.ArgumentParser()
     mode = parser.add_mutually_exclusive_group(required=True)
@@ -404,9 +448,16 @@ def main():
                 status[name] = operation()
             except (Blocked, OSError, ValueError) as exc:
                 status[name] = {'status': 'blocked', 'reason': str(exc)}
+        if config.get('git_identity_policy'):
+            try:
+                if any(status[key]['status'] != 'current' for key in ('prometheus', 'borrowedfire')):
+                    raise Blocked('Waiting for current reviewed source and Prometheus')
+                status['git_identity'] = sync_identity(config, brain, status['prometheus']['revision'], state)
+            except (Blocked, OSError, ValueError) as exc:
+                status['git_identity'] = {'status': 'blocked', 'reason': str(exc)}
         write_json(status_path, status)
         print(json.dumps(status))
-        return int(any(status[key]['status'] != 'current' for key in ('prometheus', 'borrowedfire')))
+        return int(any(value['status'] != 'current' for key, value in status.items() if key != 'checked_at'))
 
 if __name__ == '__main__':
     raise SystemExit(main())
