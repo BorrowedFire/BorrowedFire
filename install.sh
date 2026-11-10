@@ -606,8 +606,12 @@ install_agents() { # install_agents <agents-dir>
         say "  update   agent $name"
       elif [ "$ADOPT" -eq 1 ]; then
         bak="$ad/.borrowedfire-backup"
-        act "adopt    agent $name (backed up to .borrowedfire-backup/)" mkdir -p "$bak"
-        [ "$DRY" -eq 1 ] || mv "$tgt" "$bak/$name.$(date +%Y%m%d%H%M%S)"
+        say "  adopt    agent $name (backed up to .borrowedfire-backup/)"
+        # Never replace the owner's file unless its backup is in place.
+        if [ "$DRY" -eq 0 ] && { ! mkdir -p "$bak" || ! mv "$tgt" "$bak/$name.$(date +%Y%m%d%H%M%S)"; }; then
+          echo "warning: backup of agent $name failed; left it in place" >&2
+          continue
+        fi
       else
         say "  SKIP     agent $name - exists and not owned by Borrowed Fire (rerun with --adopt to replace)"
         continue

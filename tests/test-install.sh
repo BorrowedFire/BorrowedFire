@@ -832,6 +832,17 @@ agent_install --adopt >/dev/null
 check "agents: adopt restores source"        cmp -s "$SRC/agents/reviewer.md" "$AGENT_DIR/reviewer.md"
 check "agents: adopt backs up the edit"      bash -c "grep -qx 'owner edit' '$AGENT_DIR'/.borrowedfire-backup/reviewer.md.*"
 
+printf 'owner edit\n' >> "$AGENT_DIR/reviewer.md"
+cp "$AGENT_DIR/reviewer.md" "$SB/reviewer-edited"
+mv "$AGENT_DIR/.borrowedfire-backup" "$SB/agent-backups"
+printf 'not a directory\n' > "$AGENT_DIR/.borrowedfire-backup"
+agent_install --adopt >/dev/null
+check "agents: failed backup keeps owner edit" cmp -s "$SB/reviewer-edited" "$AGENT_DIR/reviewer.md"
+check "agents: failed backup stays unowned"  bash -c "! grep -q \"^reviewer.md \$(shasum -a 256 '$AGENT_DIR/reviewer.md' | awk '{print \$1}')\" '$AGENT_DIR/.borrowedfire-manifest'"
+rm "$AGENT_DIR/.borrowedfire-backup"; mv "$SB/agent-backups" "$AGENT_DIR/.borrowedfire-backup"
+agent_install --adopt >/dev/null
+check "agents: adopt works once backup can" cmp -s "$SRC/agents/reviewer.md" "$AGENT_DIR/reviewer.md"
+
 rm "$AGENT_DIR/log-reader.md"
 grep -v '^log-reader.md ' "$AGENT_DIR/.borrowedfire-manifest" > "$SB/m" && mv "$SB/m" "$AGENT_DIR/.borrowedfire-manifest"
 cp "$SRC/agents/log-reader.md" "$AGENT_DIR/log-reader.md"
