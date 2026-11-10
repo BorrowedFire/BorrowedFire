@@ -3,7 +3,7 @@
   "upstream": {
     "repository": "coreyhaines31/marketingskills",
     "url": "https://github.com/coreyhaines31/marketingskills",
-    "policy": "report-only; never auto-update local skills or Spark policy"
+    "policy": "report-only; never auto-update local skills or the repo's local policy"
   },
   "dependencies": [
     {
@@ -73,5 +73,5 @@
       "required": false
     }
   ],
-  "spark_registry": "config/marketing-skills-index.json"
+  "marketing_registry": "config/marketing-skills-index.json"
 }
