@@ -749,6 +749,49 @@ leak_file_case "public-template" "prometheus-template/README.md" "Ran from /User
 leak_case "word-example-does-not-exempt" "- 2026-01-01: for example, production runs from /home/alice/prometheus."
 leak_file_case "fixture-path-does-not-exempt" "tests/fixtures/fake-openclaw.sh" "# ran from /Users/someone/prometheus"
 
+# Owner-specific names come from a private list, so the public repo never carries them. Each case
+# uses a made-up term, split in this source so the lint scan of a clone never finds the term in
+# this file. The comment-and-blank list is the negative control: a blank line read as a pattern
+# would match every line and fail every lint.
+fake_term="Zorb""lax"
+short_term="Zorb""l"
+terms_case() { # terms_case <label> <expect pass|fail> <list contents> <line to append | ->
+  local label="$1" expect="$2" list="$3" line="$4" clone="$SB/terms-$1" got
+  cp -R "$SRC" "$clone"
+  printf '%b' "$list" > "$SB/terms-$label.txt"
+  [ "$line" = "-" ] || printf '\n%s\n' "$line" >> "$clone/skills/reel-maker/SKILL.md"
+  if env -u PROMETHEUS_DIR BORROWEDFIRE_PRIVATE_TERMS="$SB/terms-$label.txt" \
+    "$clone/tools/skill-lint.sh" >/dev/null 2>&1; then got=pass; else got=fail; fi
+  if [ "$got" = "$expect" ]; then ok "private terms: $label"; else fail "private terms: $label"; fi
+}
+terms_case "unlisted-repo-passes" pass "$fake_term\n" -
+terms_case "product-name-fails" fail "$fake_term\n" "For $fake_term, use its player voice."
+terms_case "match-ignores-case" fail "# products\n$fake_term\n" "$(printf '%s' "$fake_term" | tr '[:lower:]' '[:upper:]') reels need a hook."
+terms_case "comments-and-blanks-match-nothing" pass "# machines\n\n   \n$fake_term # retired\n" -
+terms_case "whole-word-only" pass "$short_term\n" "$fake_term is not the listed term."
+clone="$SB/terms-missing-list"
+cp -R "$SRC" "$clone"
+if env -u PROMETHEUS_DIR BORROWEDFIRE_PRIVATE_TERMS="$SB/no-such-list.txt" \
+  "$clone/tools/skill-lint.sh" >/dev/null 2>&1; then
+  fail "private terms: a named list that does not exist fails closed"
+else
+  ok "private terms: a named list that does not exist fails closed"
+fi
+# The brain's list is found without the variable, through the same resolution as brain-lint.sh.
+for brain_case in absent present; do
+  clone="$SB/terms-brain-$brain_case"
+  cp -R "$SRC" "$clone"
+  mkdir -p "$SB/terms-brain/config"
+  printf '%s\n' "$fake_term" > "$SB/terms-brain/config/public-denylist.txt"
+  [ "$brain_case" = absent ] || printf '\n%s\n' "$fake_term" >> "$clone/README.md"
+  if env -u BORROWEDFIRE_PRIVATE_TERMS PROMETHEUS_DIR="$SB/terms-brain" \
+    "$clone/tools/skill-lint.sh" >/dev/null 2>&1; then got=pass; else got=fail; fi
+  case "$brain_case:$got" in
+    absent:pass|present:fail) ok "private terms: the brain's list is read ($brain_case)" ;;
+    *) fail "private terms: the brain's list is read ($brain_case)" ;;
+  esac
+done
+
 # Private contexts replace the complete canonical file, preserve relative links, and survive
 # repeated installs. This guards the real atomic-write path, not the sync fixture installer.
 PRIVATE_HOME="$SB/private-home"

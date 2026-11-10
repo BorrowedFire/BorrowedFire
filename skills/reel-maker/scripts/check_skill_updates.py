@@ -89,7 +89,7 @@ def _default_skill_root() -> Path:
         if candidate.is_dir():
             return candidate
     # Nothing installed locally is not an error: a dependency absorbed into the
-    # Spark registry still satisfies the check.
+    # repo's marketing registry still satisfies the check.
     return Path.home() / ".claude" / "skills"
 
 
@@ -272,7 +272,7 @@ def print_markdown(report: dict[str, Any]) -> None:
         if dep["local_installed"]:
             installed = "installed"
         elif dep.get("registry_absorbed"):
-            installed = "not installed; absorbed in the Spark registry"
+            installed = "not installed; absorbed in the repo's marketing registry"
         else:
             installed = "missing"
         print(f"## {dep['local_skill']} ({marker})")
@@ -294,7 +294,7 @@ def print_markdown(report: dict[str, Any]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repo", default=os.getcwd(), help="Repository root to inspect for the Spark marketing registry.")
+    parser.add_argument("--repo", default=os.getcwd(), help="Repository root to inspect for the marketing registry.")
     parser.add_argument("--skill-root", default=str(DEFAULT_SKILL_ROOT), help="Directory containing installed agent skills.")
     parser.add_argument("--manifest", type=Path, default=MANIFEST, help="Dependency manifest path.")
     parser.add_argument("--no-network", action="store_true", help="Skip GitHub upstream freshness checks.")
@@ -309,7 +309,7 @@ def main() -> int:
         print_markdown(report)
 
     # A required dependency is satisfied by a local install or by an absorbed
-    # entry in the Spark registry. Harnesses that deliberately do not install
+    # entry in the repo's marketing registry. Harnesses that deliberately do not install
     # the upstream marketing skills are not broken.
     missing_required = [
         dep["local_skill"]
@@ -321,7 +321,7 @@ def main() -> int:
     if missing_required:
         print(
             "Missing required skills (neither installed locally nor absorbed in "
-            f"the Spark registry): {', '.join(missing_required)}",
+            f"the repo's marketing registry): {', '.join(missing_required)}",
             file=sys.stderr,
         )
         return 1

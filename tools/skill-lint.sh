@@ -486,6 +486,39 @@ if [ -n "$PRIVATE_HITS" ]; then
   err "private content: a home path or brain page count appears in a scanned file; keep host and brain specifics in the private brain"
 fi
 
+# 12b. owner-specific names: products, machines, and accounts. A public denylist of those names
+# would itself publish them, so the list lives in the private brain and this check runs only
+# where that list is present. BORROWEDFIRE_PRIVATE_TERMS names the list explicitly and must
+# exist when set. Otherwise the brain resolves like brain-lint.sh and a missing list is skipped.
+# The list holds one term per line, matched as a whole word without regard to case. Blank lines
+# and # comments are ignored; an empty pattern would match every line in the repo.
+if [ -n "${BORROWEDFIRE_PRIVATE_TERMS:-}" ]; then
+  TERMS_FILE="$BORROWEDFIRE_PRIVATE_TERMS"
+  [ -f "$TERMS_FILE" ] || err "private terms: BORROWEDFIRE_PRIVATE_TERMS names '$TERMS_FILE', which does not exist"
+else
+  if [ -n "${PROMETHEUS_DIR:-}" ]; then
+    TERMS_BRAIN="$PROMETHEUS_DIR"
+  elif [ -f "$HOME/.config/borrowedfire/brain" ]; then
+    TERMS_BRAIN="$(head -1 "$HOME/.config/borrowedfire/brain")"
+  else
+    TERMS_BRAIN="$HOME/prometheus"
+  fi
+  TERMS_FILE="$TERMS_BRAIN/config/public-denylist.txt"
+fi
+if [ -f "$TERMS_FILE" ]; then
+  TERMS="$(mktemp)"
+  sed -e 's/[[:space:]]*#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$TERMS_FILE" |
+    grep -v '^$' > "$TERMS" || true
+  if [ -s "$TERMS" ]; then
+    TERM_HITS="$(grep -rnIiwF -f "$TERMS" --exclude-dir=.git "$ROOT" 2>/dev/null || true)"
+    if [ -n "$TERM_HITS" ]; then
+      printf '%s\n' "$TERM_HITS" | head -5 | while IFS= read -r hit; do echo "       $hit" >&2; done
+      err "private content: an owner-specific product, machine, or account name appears in this repo"
+    fi
+  fi
+  rm -f "$TERMS"
+fi
+
 if [ "$ERRORS" -gt 0 ]; then
   echo "skill-lint: $ERRORS error(s)" >&2
   exit 1
