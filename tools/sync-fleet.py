@@ -263,6 +263,30 @@ def verify_install(repo, harnesses, contexts=None):
                 raise Blocked('Missing installed ownership: ' + source.name)
             if skill_entries(source) != skill_entries(installed):
                 raise Blocked('Installed skill entries differ from reviewed source: ' + source.name)
+        if Path(harness['skills']).parent.name == '.claude':
+            verify_agents(repo, Path(harness['skills']).parent / 'agents')
+
+
+def verify_agents(repo, agents):
+    """Claude agent files are plain copies; the installer's manifest records each copy's hash."""
+    source = repo / 'agents'
+    names = sorted(item.name for item in source.glob('*.md')) if source.is_dir() else []
+    manifest = agents / '.borrowedfire-manifest'
+    recorded = {}
+    if manifest.is_file():
+        for line in manifest.read_text().splitlines():
+            parts = line.split()
+            if len(parts) != 2 or parts[0] in recorded:
+                raise Blocked('Invalid installed agent manifest')
+            recorded[parts[0]] = parts[1]
+    if set(recorded) != set(names):
+        raise Blocked('Installed agent ownership differs from current source agents')
+    for name in names:
+        installed = agents / name
+        data = (source / name).read_bytes()
+        if (installed.is_symlink() or not installed.is_file() or installed.read_bytes() != data
+                or recorded[name] != hashlib.sha256(data).hexdigest()):
+            raise Blocked('Installed agent differs from reviewed source: ' + name)
 
 
 def discovered_harnesses(config):

@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Borrowed Fire installer: distribute skills/ + the doctrine block to every agent
-# harness on this machine. Manifest-owned and idempotent - safe to re-run anytime.
+# harness on this machine, and agents/ to Claude Code. Manifest-owned and idempotent - safe to re-run anytime.
 #
 #   ./install.sh [--copy] [--dry-run] [--uninstall] [--adopt]
 #                [--brain <path>] [--openclaw-workspace <path>] [--context-file <path>]
 #
 #   --copy                copy skill dirs instead of symlinking (auto-fallback anyway)
 #   --dry-run             print planned actions only
-#   --uninstall           remove manifest-owned skills + doctrine blocks, nothing else
-#   --adopt               take ownership of legacy/unowned dirs that match our skill
-#                         names or known legacy names (backs them up first)
+#   --uninstall           remove manifest-owned skills, agents + doctrine blocks, nothing else
+#   --adopt               take ownership of legacy/unowned dirs or agent files that match
+#                         our names or known legacy names (backs them up first)
 #   --brain <path>        write the brain pointer (~/.config/borrowedfire/brain)
 #   --openclaw-workspace  path to an OpenClaw workspace to install into
 #   --context-file       replace enrolled context files with an owner-approved file
@@ -130,6 +130,22 @@ if [ "$UNINSTALL" -eq 0 ]; then
     echo "install aborted: skill-lint failed" >&2
     exit 1
   fi
+fi
+
+# Claude agent definitions must name themselves after their file, or Claude Code loads a
+# different agent name than the manifest records.
+if [ "$UNINSTALL" -eq 0 ]; then
+  for agent_src in "$SRC"/agents/*.md; do
+    [ -e "$agent_src" ] || continue
+    agent_file="$(basename "$agent_src")"
+    if [ -L "$agent_src" ] || [ ! -f "$agent_src" ] ||
+       ! printf '%s\n' "$agent_file" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9_-]*\.md$' ||
+       [ "$(head -n 1 "$agent_src")" != "---" ] ||
+       ! awk 'NR > 1 && /^---$/ {exit} NR > 1 {print}' "$agent_src" | grep -qxF "name: ${agent_file%.md}"; then
+      echo "install aborted: agents/$agent_file needs frontmatter with name: ${agent_file%.md}" >&2
+      exit 1
+    fi
+  done
 fi
 
 # --- harness detection: root dir existing == harness present ---
@@ -527,6 +543,99 @@ remove_doctrine() { # remove_doctrine <context-file>
   say "  doctrine $cf (block removed)"
 }
 
+# --- Claude agent definitions: agents/*.md -> ~/.claude/agents/ ---
+# Claude Code reads one file per agent, so a file can't carry the .borrowedfire-copy marker that
+# copied skills use. The manifest records the SHA-256 of each file this installer wrote. A file
+# whose bytes no longer match was edited by the owner: it is never replaced or removed without
+# --adopt, which backs it up first.
+sha256_of() { # sha256_of <file>
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    sha256sum "$1" | awk '{print $1}'
+  fi
+}
+
+agent_is_ours() { # agent_is_ours <agents-dir> <manifest> <name>
+  local tgt="$1/$3" recorded
+  recorded="$(manifest_mode "$2" "$3")"
+  [ -n "$recorded" ] && [ -f "$tgt" ] && [ ! -L "$tgt" ] && [ "$(sha256_of "$tgt")" = "$recorded" ]
+}
+
+remove_agent() { # remove_agent <agents-dir> <manifest> <name> <why>
+  local tgt="$1/$3"
+  if agent_is_ours "$1" "$2" "$3"; then
+    act "remove   agent $3 ($4)" rm -f "$tgt"
+  elif [ -e "$tgt" ] || [ -L "$tgt" ]; then
+    say "  LEAVE    agent $3 - changed since install; de-owning only"
+  fi
+  [ "$DRY" -eq 1 ] || manifest_del "$2" "$3"
+}
+
+copy_agent() { # copy_agent <src> <tgt>: write through a temp file so a reader never sees half a file
+  local tmp
+  tmp="$(mktemp "$(dirname "$2")/.borrowedfire-agent.XXXXXX")" || return 1
+  if ! cat "$1" > "$tmp" || ! chmod 644 "$tmp" || ! mv -f "$tmp" "$2"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  cmp -s "$1" "$2"
+}
+
+install_agents() { # install_agents <agents-dir>
+  local ad="$1" mf="$1/$MANIFEST_NAME" src name tgt snap _hash bak
+  if [ -f "$mf" ]; then
+    snap="$(mktemp)"; cp "$mf" "$snap"   # snapshot: remove_agent rewrites the manifest
+    while IFS=' ' read -r name _hash; do
+      [ -n "$name" ] || continue
+      [ -f "$SRC/agents/$name" ] || remove_agent "$ad" "$mf" "$name" "pruned - no longer in agents/"
+    done < "$snap"
+    rm -f "$snap"
+  fi
+  for src in "$SRC"/agents/*.md; do
+    [ -f "$src" ] || continue
+    name="$(basename "$src")"; tgt="$ad/$name"
+    if [ -f "$tgt" ] && [ ! -L "$tgt" ] && cmp -s "$src" "$tgt"; then
+      say "  ok       agent $name"
+      # an identical file is ours to keep current, even if it predates the manifest
+      [ "$DRY" -eq 1 ] || agent_is_ours "$ad" "$mf" "$name" || manifest_set "$mf" "$name" "$(sha256_of "$tgt")"
+      continue
+    fi
+    if [ -e "$tgt" ] || [ -L "$tgt" ]; then
+      if agent_is_ours "$ad" "$mf" "$name"; then
+        say "  update   agent $name"
+      elif [ "$ADOPT" -eq 1 ]; then
+        bak="$ad/.borrowedfire-backup"
+        act "adopt    agent $name (backed up to .borrowedfire-backup/)" mkdir -p "$bak"
+        [ "$DRY" -eq 1 ] || mv "$tgt" "$bak/$name.$(date +%Y%m%d%H%M%S)"
+      else
+        say "  SKIP     agent $name - exists and not owned by Borrowed Fire (rerun with --adopt to replace)"
+        continue
+      fi
+    else
+      say "  copy     agent $name"
+    fi
+    [ "$DRY" -eq 1 ] && continue
+    mkdir -p "$ad" || { echo "warning: agent directory $ad could not be created" >&2; return; }
+    if copy_agent "$src" "$tgt"; then
+      manifest_set "$mf" "$name" "$(sha256_of "$tgt")"
+    else
+      echo "warning: copy of agent $name failed; not recorded" >&2
+    fi
+  done
+}
+
+uninstall_agents() { # uninstall_agents <agents-dir>
+  local ad="$1" mf="$1/$MANIFEST_NAME" snap name _hash
+  [ -f "$mf" ] || return 0
+  snap="$(mktemp)"; cp "$mf" "$snap"
+  while IFS=' ' read -r name _hash; do
+    [ -n "$name" ] && remove_agent "$ad" "$mf" "$name" "uninstall"
+  done < "$snap"
+  rm -f "$snap"
+  [ "$DRY" -eq 1 ] || rm -f "$mf"
+}
+
 # --- main loop ---
 for row in "${HARNESSES[@]}"; do
   label="${row%%|*}"; rest="${row#*|}"
@@ -558,6 +667,7 @@ for row in "${HARNESSES[@]}"; do
       rm -f "$snap"
       [ "$DRY" -eq 1 ] || rm -f "$mf"
     fi
+    [ "$label" = claude ] && uninstall_agents "$(dirname "$sd")/agents"
     continue
   fi
 
@@ -588,6 +698,7 @@ for row in "${HARNESSES[@]}"; do
   for src_dir in "$SRC"/skills/*/; do
     install_skill "$sd" "$mf" "$(basename "$src_dir")"
   done
+  [ "$label" = claude ] && install_agents "$(dirname "$sd")/agents"
 
   doctrine_unmanaged=""
   if [ "$DRY" -eq 0 ]; then

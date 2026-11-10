@@ -90,6 +90,21 @@ brain projects/ registry ─────────────┘        │
 completed work ──▶ reflect (verify + dedupe) ──▶ remember ──▶ digest ──▶ recall
 ```
 
+### Claude agents
+
+`install.sh` also copies [`agents/`](agents/) into `~/.claude/agents/`, so every Claude Code session
+on an enrolled machine can hand work to a model that fits it. Other harnesses don't receive them.
+
+| Agent | Model | Work |
+|---|---|---|
+| [Explore](agents/Explore.md) | Haiku | Read-only file search; replaces the built-in Explore, which runs on the session's model. |
+| [log-reader](agents/log-reader.md) | Haiku | Reports each failure from test, build, and CI logs. |
+| [implementer](agents/implementer.md) | Sonnet | Makes a well-scoped change from a clear spec and runs the named checks. |
+| [reviewer](agents/reviewer.md) | Opus | Reviews a frozen diff and verifies each finding. Doesn't replace Codex review. |
+
+The manifest records the hash of each copy. An agent file you edit keeps your edit: the installer
+skips it until you rerun with `--adopt`, which backs it up first.
+
 The shared rules every agent follows — brain sync protocol, capture triggers, safety rails, tier
 routing — live in [`doctrine/DOCTRINE.md`](doctrine/DOCTRINE.md), installed into every harness's
 context file. The high-risk denylist (always owner-gated) is defined once in
@@ -121,6 +136,7 @@ live check. The nightly job remains silent on routine success or a no-op. See
 
 ```
 skills/            20 SKILL.md skills (+ agents/openai.yaml metadata, references/)
+agents/            Claude Code agent definitions install.sh copies to ~/.claude/agents
 doctrine/          the managed context block install.sh distributes
 prometheus-template/  starting tree for your private brain repo
 install.sh         manifest-owned cross-harness installer

@@ -444,6 +444,27 @@ class SyncTests(unittest.TestCase):
         with self.assertRaisesRegex(sync.Blocked, 'not in published main'):
             sync.sync_source(self.config, self.brain, {})
 
+    def test_claude_agents_must_match_reviewed_source_and_manifest(self):
+        repo = self.root / 'agent-source'
+        (repo / 'agents').mkdir(parents=True)
+        (repo / 'agents/Explore.md').write_text('---\nname: Explore\n---\nreviewed\n')
+        installed = self.root / 'home/.claude/agents'
+        installed.mkdir(parents=True)
+        sync.verify_agents(self.root / 'no-agents', installed)  # nothing shipped, nothing owned
+        with self.assertRaisesRegex(sync.Blocked, 'ownership'):
+            sync.verify_agents(repo, installed)
+        shutil.copy2(repo / 'agents/Explore.md', installed / 'Explore.md')
+        digest = __import__('hashlib').sha256((repo / 'agents/Explore.md').read_bytes()).hexdigest()
+        (installed / '.borrowedfire-manifest').write_text('Explore.md ' + digest + '\n')
+        sync.verify_agents(repo, installed)
+        (installed / 'Explore.md').write_text('owner edit\n')
+        with self.assertRaisesRegex(sync.Blocked, 'differs'):
+            sync.verify_agents(repo, installed)
+        self.assertEqual((installed / 'Explore.md').read_text(), 'owner edit\n')
+        (installed / '.borrowedfire-manifest').write_text('Explore.md a\nExplore.md b\n')
+        with self.assertRaisesRegex(sync.Blocked, 'manifest'):
+            sync.verify_agents(repo, installed)
+
     def test_approved_install_then_repeat_checks_actual_files(self):
         # The fixture installer represents the same installer command used on each host.
         (self.seed / 'tools').mkdir()
