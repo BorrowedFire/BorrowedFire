@@ -103,7 +103,8 @@ on an enrolled machine can hand work to a model that fits it. Other harnesses do
 | [reviewer](agents/reviewer.md) | Opus | Reviews a frozen diff and verifies each finding. Doesn't replace Codex review. |
 
 The manifest records the hash of each copy. An agent file you edit keeps your edit: the installer
-skips it until you rerun with `--adopt`, which backs it up first.
+skips it until you rerun with `--adopt`, which backs it up first. Until then, the fleet update check reports
+the edited agent and stops installing new releases, as it does for an edited skill copy.
 
 The shared rules every agent follows — brain sync protocol, capture triggers, safety rails, tier
 routing — live in [`doctrine/DOCTRINE.md`](doctrine/DOCTRINE.md), installed into every harness's
