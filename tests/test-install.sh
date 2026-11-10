@@ -804,6 +804,79 @@ else
     cmp -s "$PRIVATE_CONTEXT" "$PRIVATE_HOME/.codex/AGENTS.md"
 fi
 
+# --- Claude agent definitions: copied to ~/.claude/agents, owned by content hash ---
+AGENT_HOME="$SB/agent-home"
+AGENT_COUNT="$(find "$SRC/agents" -mindepth 1 -maxdepth 1 -name '*.md' | wc -l | tr -d ' ')"
+AGENT_DIR="$AGENT_HOME/.claude/agents"
+agent_install() { env HOME="$AGENT_HOME" XDG_CONFIG_HOME="$AGENT_HOME/.config" "$SRC/install.sh" "$@" 2>&1; }
+mkdir -p "$AGENT_HOME/.claude" "$AGENT_HOME/.codex" "$AGENT_DIR"
+printf 'mine\n' > "$AGENT_DIR/personal.md"
+agent_install >/dev/null
+check "agents: source has definitions"       test "$AGENT_COUNT" -gt 0
+check "agents: every definition copied"      test "$(grep -c . "$AGENT_DIR/.borrowedfire-manifest")" -eq "$AGENT_COUNT"
+check "agents: Explore matches source"       cmp -s "$SRC/agents/Explore.md" "$AGENT_DIR/Explore.md"
+check "agents: copies, not links"            test ! -L "$AGENT_DIR/Explore.md"
+check "agents: manifest records the hash" \
+  grep -qx "Explore.md $(shasum -a 256 "$SRC/agents/Explore.md" | awk '{print $1}')" "$AGENT_DIR/.borrowedfire-manifest"
+check "agents: owner file untouched"         grep -qx mine "$AGENT_DIR/personal.md"
+check "agents: Codex gets no Claude agents"  test ! -e "$AGENT_HOME/.codex/agents"
+cp "$AGENT_DIR/.borrowedfire-manifest" "$SB/agent-manifest-before"
+agent_install >/dev/null
+check "agents: re-run leaves manifest as is" cmp -s "$SB/agent-manifest-before" "$AGENT_DIR/.borrowedfire-manifest"
+
+printf 'owner edit\n' >> "$AGENT_DIR/reviewer.md"
+OUT="$(agent_install)"
+check "agents: owner edit skipped"           grep -q 'SKIP.*agent reviewer.md' <<<"$OUT"
+check "agents: owner edit preserved"         grep -qx 'owner edit' "$AGENT_DIR/reviewer.md"
+agent_install --adopt >/dev/null
+check "agents: adopt restores source"        cmp -s "$SRC/agents/reviewer.md" "$AGENT_DIR/reviewer.md"
+check "agents: adopt backs up the edit"      bash -c "grep -qx 'owner edit' '$AGENT_DIR'/.borrowedfire-backup/reviewer.md.*"
+
+printf 'owner edit\n' >> "$AGENT_DIR/reviewer.md"
+cp "$AGENT_DIR/reviewer.md" "$SB/reviewer-edited"
+mv "$AGENT_DIR/.borrowedfire-backup" "$SB/agent-backups"
+printf 'not a directory\n' > "$AGENT_DIR/.borrowedfire-backup"
+agent_install --adopt >/dev/null
+check "agents: failed backup keeps owner edit" cmp -s "$SB/reviewer-edited" "$AGENT_DIR/reviewer.md"
+check "agents: failed backup stays unowned"  bash -c "! grep -q \"^reviewer.md \$(shasum -a 256 '$AGENT_DIR/reviewer.md' | awk '{print \$1}')\" '$AGENT_DIR/.borrowedfire-manifest'"
+rm "$AGENT_DIR/.borrowedfire-backup"; mv "$SB/agent-backups" "$AGENT_DIR/.borrowedfire-backup"
+agent_install --adopt >/dev/null
+check "agents: adopt works once backup can" cmp -s "$SRC/agents/reviewer.md" "$AGENT_DIR/reviewer.md"
+
+rm "$AGENT_DIR/log-reader.md"
+grep -v '^log-reader.md ' "$AGENT_DIR/.borrowedfire-manifest" > "$SB/m" && mv "$SB/m" "$AGENT_DIR/.borrowedfire-manifest"
+cp "$SRC/agents/log-reader.md" "$AGENT_DIR/log-reader.md"
+agent_install >/dev/null
+check "agents: identical unowned file adopted" grep -q '^log-reader.md ' "$AGENT_DIR/.borrowedfire-manifest"
+
+printf 'retired\n' > "$AGENT_DIR/retired.md"
+printf 'retired-edited\n' > "$AGENT_DIR/edited.md"
+{ cat "$AGENT_DIR/.borrowedfire-manifest"
+  echo "retired.md $(shasum -a 256 "$AGENT_DIR/retired.md" | awk '{print $1}')"
+  echo "edited.md 0000"; } > "$SB/m" && mv "$SB/m" "$AGENT_DIR/.borrowedfire-manifest"
+agent_install >/dev/null
+check "agents: retired owned file pruned"    test ! -e "$AGENT_DIR/retired.md"
+check "agents: edited retired file kept"     grep -qx retired-edited "$AGENT_DIR/edited.md"
+check "agents: edited retired file de-owned" bash -c "! grep -q '^edited.md ' '$AGENT_DIR/.borrowedfire-manifest'"
+
+printf 'owner edit\n' >> "$AGENT_DIR/implementer.md"
+agent_install --uninstall >/dev/null
+check "agents: uninstall removes owned"      test ! -e "$AGENT_DIR/Explore.md"
+check "agents: uninstall keeps owner edit"   grep -qx 'owner edit' "$AGENT_DIR/implementer.md"
+check "agents: uninstall keeps owner file"   grep -qx mine "$AGENT_DIR/personal.md"
+check "agents: uninstall drops manifest"     test ! -e "$AGENT_DIR/.borrowedfire-manifest"
+
+BAD_SRC="$SB/bad-src"
+cp -R "$SRC" "$BAD_SRC"
+sed -i.bak 's/^name: Explore$/name: Explorer/' "$BAD_SRC/agents/Explore.md" && rm -f "$BAD_SRC/agents/Explore.md.bak"
+BAD_HOME="$SB/bad-agent-home"; mkdir -p "$BAD_HOME/.claude"
+if env HOME="$BAD_HOME" XDG_CONFIG_HOME="$BAD_HOME/.config" "$BAD_SRC/install.sh" >/dev/null 2>&1; then
+  fail "agents: mismatched name aborts install"
+else
+  ok "agents: mismatched name aborts install"
+fi
+check "agents: aborted install wrote nothing" test ! -e "$BAD_HOME/.claude/skills"
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 rm -rf "$SB"
