@@ -175,6 +175,15 @@ a coding session. The check uses ordinary local code and makes no model calls:
 python3 tools/sync-fleet.py --config /absolute/path/to/config.json
 ```
 
+After a current install, the check also runs [`tools/ci-lint.py`](tools/ci-lint.py) and records
+its result under `ci_lint`. The linter reads the committed default-branch workflows of each
+private repository under `~/Developer/BorrowedFire` (`Apps/*`, `Website/*`, `BorrowedFire`;
+override with `ci_lint_root` in the updater config). It flags pull-request workflows without the
+PR-only cancelling `concurrency` block and jobs whose `runs-on` is not `[self-hosted, studio]`.
+Public repositories are exempt. It is advisory: findings and errors never block or fail the
+update. Run it directly with `python3 tools/ci-lint.py` (add `--json` for the full report); it
+exits 0 when clean, 1 with findings, and 2 when only errors occurred.
+
 Prometheus updates use fast-forward only. Dirty, busy, divergent, or unpushed memory checkouts
 stay untouched. The updater does not commit or push memory on an agent's behalf.
 

@@ -32,3 +32,5 @@ jobs:
         run: python3 -B tests/test-fleet-sync.py
       - name: Git identity and hook contracts (isolated local repositories)
         run: python3 -B tests/test-git-identity.py
+      - name: CI lint rules and sync hook (local fixtures, fake gh)
+        run: python3 -B tests/test-ci-lint.py
