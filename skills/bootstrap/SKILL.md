@@ -33,7 +33,24 @@ Bootstrap wires a project up once so the system works from day one.
    whole system relies on. Multi-harness repos get one canonical file and thin per-harness
    includes, not divergent copies.
 3. **CI.** Ensure at least: install + build + test on PR. Extend the existing workflow if one
-   exists.
+   exists. Every workflow follows the CI-time rule from day one; "CI earns its Mac time" in the
+   installed agent instructions owns the full rule, including which runner to use.
+   - Each workflow that runs on `pull_request` sets this block, so a new push cancels only the
+     older run of the same workflow on the same PR, never a default-branch or tag run:
+
+     ```yaml
+     concurrency:
+       group: ${{ github.workflow }}-${{ github.ref }}
+       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+     ```
+
+   - Slow suites (UI tests and full builds) run on each PR's current head. A push to a branch with
+     no open PR runs quick checks only.
+   - If the repo has a slow suite, the default-branch run reuses a passing PR result. A workflow
+     step, not the agent, compares the git tree hash and toolchain version with a recorded,
+     completed, passing PR run. On a match it skips the slow suite and reports "reused" with that
+     run's ID. Any mismatch, missing record, or failed, cancelled or unfinished run runs the full
+     suite.
 4. **Conventions.** `.gitignore` (include `.brain-outbox/`), PR template if the owner uses them,
    `docs/releases/` for app repos headed to stores.
 5. **Register in the brain** (via `remember`): a `projects/<name>.md` page with full registry
