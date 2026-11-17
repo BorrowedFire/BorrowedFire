@@ -86,6 +86,19 @@ class CheckTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(lint.check_workflow(text), [])
 
+    def test_unsupported_forms_are_errors_not_passes(self):
+        for text in ('on: {pull_request: {}}\njobs:\n  t:\n    runs-on: [self-hosted, studio]\n',
+                     'on: push\njobs: {build: {runs-on: ubuntu-latest}}\n',
+                     'on: push\njobs:\n  build: {runs-on: ubuntu-latest}\n',
+                     'jobs:\n  t:\n    runs-on: [self-hosted, studio]\n'):
+            with self.subTest(text=text), self.assertRaises(lint.ParseError):
+                lint.check_workflow(text)
+
+    def test_byte_order_mark_and_ref_type_group(self):
+        self.assertEqual(len(lint.check_workflow('\ufeff' + COMPLIANT.replace(GOOD_CONCURRENCY, ''))), 1)
+        self.assertEqual(lint.check_workflow(COMPLIANT.replace('github.ref }}', 'github.ref_type }}')),
+                         ['concurrency group must include github.workflow and github.ref'])
+
     def test_non_pr_workflow_needs_only_the_studio_runner(self):
         text = COMPLIANT.replace('  pull_request:\n', '  workflow_dispatch:\n').replace(GOOD_CONCURRENCY, '')
         self.assertEqual(lint.check_workflow(text), [])
@@ -208,9 +221,11 @@ class SyncHookTests(unittest.TestCase):
     def test_reports_findings_without_touching_the_source_checkout(self):
         (self.source / 'tools/ci-lint.py').write_text(
             'import json\nprint(json.dumps({"findings": [{"repository": "o/r", "file": "w.yml", '
-            '"problem": "bad"}], "errors": [], "checked": [1]}))\nraise SystemExit(1)\n')
+            '"problem": "bad"}], "errors": [], "checked": [{"repository": "o/r", '
+            '"revision": "0123456789abcdef"}]}))\nraise SystemExit(1)\n')
         result = sync.lint_ci(self.config, self.root)
-        self.assertEqual(result, {'status': 'findings', 'checked': 1, 'findings': ['o/r w.yml: bad']})
+        self.assertEqual(result, {'status': 'findings', 'checked': ['o/r@0123456789ab'],
+                                  'findings': ['o/r w.yml: bad']})
         self.assertEqual(sorted(p.name for p in (self.source / 'tools').iterdir()), ['ci-lint.py'])
 
     def test_crash_old_source_or_missing_root_never_raises(self):

@@ -37,9 +37,9 @@ class ParseError(Exception):
 
 # --- Minimal YAML reader -------------------------------------------------------------------
 # Workflows use a small, regular part of YAML. This reads block mappings, block sequences,
-# flow sequences of scalars, quoted and plain scalars, and block scalars. Anything else that
-# matters to the checks (anchors, flow mappings) is kept as a raw string and fails the check
-# visibly instead of passing silently.
+# flow sequences of scalars, quoted and plain scalars, and block scalars. Flow mappings and
+# anchors are kept as raw strings; check_workflow rejects them where the rule reads them, so
+# an unsupported form becomes an error instead of a silent pass.
 
 def strip_comment(text):
     quote = None
@@ -80,7 +80,7 @@ def split_key(text):
 
 class Reader:
     def __init__(self, text):
-        self.raw = text.replace('\t', '    ').splitlines()
+        self.raw = text.lstrip('\ufeff').replace('\t', '    ').splitlines()
         self.lines = []  # (indent, content) with comments removed; None for blank lines
         for line in self.raw:
             content = strip_comment(line)
@@ -194,15 +194,19 @@ def load_yaml(text):
 
 # --- Rule checks ---------------------------------------------------------------------------
 
+def raw(value):
+    return isinstance(value, str) and value[:1] in ('{', '&', '*', '!')
+
+
 def triggers(workflow):
     on = workflow.get('on', workflow.get('true'))
-    if isinstance(on, str):
+    if isinstance(on, str) and on and not raw(on):
         return {on}
-    if isinstance(on, list):
-        return {item for item in on if isinstance(item, str)}
+    if isinstance(on, list) and all(isinstance(item, str) and not raw(item) for item in on):
+        return set(on)
     if isinstance(on, dict):
         return set(on)
-    return set()
+    raise ParseError('unsupported or missing on: triggers')
 
 
 def compact(text):
@@ -221,7 +225,8 @@ def check_workflow(text):
             problems.append('runs on pull requests without the PR-only concurrency block')
         else:
             group = concurrency.get('group')
-            if not (isinstance(group, str) and 'github.workflow' in group and 'github.ref' in group):
+            if not (isinstance(group, str) and re.search(r'\bgithub\.workflow\b', group)
+                    and re.search(r'\bgithub\.ref\b(?!_)', group)):
                 problems.append('concurrency group must include github.workflow and github.ref')
             cancel = compact(concurrency.get('cancel-in-progress'))
             if cancel != REQUIRED_CANCEL:
@@ -229,26 +234,32 @@ def check_workflow(text):
                 problems.append('cancel-in-progress is ' + shown + '; must be ' + REQUIRED_CANCEL
                                 + ' so only superseded PR runs cancel')
     jobs = workflow.get('jobs')
-    if isinstance(jobs, dict):
-        for name, job in jobs.items():
-            if not isinstance(job, dict):
-                continue
-            runs_on = job.get('runs-on')
-            if runs_on is None and 'uses' in job:
-                continue  # A reusable-workflow call; the called workflow is checked on its own.
-            labels = runs_on.get('labels') if isinstance(runs_on, dict) else runs_on
-            if isinstance(labels, str):
-                labels = [labels]
-            if not (isinstance(labels, list) and all(isinstance(label, str) for label in labels)
-                    and {label.strip() for label in labels} == REQUIRED_LABELS and len(labels) == 2):
-                problems.append('job ' + name + ' runs-on ' + json.dumps(runs_on)
-                                + '; must be [self-hosted, studio]')
+    if not isinstance(jobs, dict):
+        raise ParseError('jobs is not a block mapping')
+    for name, job in jobs.items():
+        if not isinstance(job, dict):
+            raise ParseError('job ' + name + ' is not a block mapping')
+        runs_on = job.get('runs-on')
+        if runs_on is None and 'uses' in job:
+            continue  # A reusable-workflow call; the called workflow is checked on its own.
+        labels = runs_on.get('labels') if isinstance(runs_on, dict) else runs_on
+        if isinstance(labels, str):
+            labels = [labels]
+        if not (isinstance(labels, list) and all(isinstance(label, str) for label in labels)
+                and {label.strip() for label in labels} == REQUIRED_LABELS and len(labels) == 2):
+            problems.append('job ' + name + ' runs-on ' + json.dumps(runs_on)
+                            + '; must be [self-hosted, studio]')
     return problems
 
 
 # --- Repository discovery ------------------------------------------------------------------
 
+DEADLINE = [None]  # Set by lint(); keeps each call inside the overall time budget.
+
+
 def command(args, cwd=None, timeout=15):
+    if DEADLINE[0] is not None:
+        timeout = max(1, min(timeout, DEADLINE[0] - time.monotonic()))
     proc = subprocess.run(args, cwd=cwd, capture_output=True, text=True, timeout=timeout,
                           env=dict(os.environ, GIT_TERMINAL_PROMPT='0', GH_PROMPT_DISABLED='1'))
     if proc.returncode:
@@ -344,6 +355,7 @@ def lint(root, cache_path, gh='gh', owner=DEFAULT_OWNER, budget=BUDGET_SECONDS):
     cache = read_cache(cache_path)
     now = dt.datetime.now(dt.timezone.utc)
     deadline = time.monotonic() + budget
+    DEADLINE[0] = deadline
     for _, (name, paths) in sorted(checkouts(root, owner).items()):
         if time.monotonic() > deadline:
             report['errors'].append({'repository': name, 'problem': 'time budget spent, skipped'})
