@@ -28,6 +28,7 @@ CACHE_DAYS = 7
 BUDGET_SECONDS = 90  # Stay inside the session update check's 120-second limit.
 REQUIRED_CANCEL = "${{ github.event_name == 'pull_request' }}"
 REQUIRED_LABELS = {'self-hosted', 'studio'}
+PER_RUN = r'\bgithub\.(?:run_id|run_number|run_attempt|sha)\b'
 PR_TRIGGERS = {'pull_request', 'pull_request_target'}
 
 
@@ -37,9 +38,9 @@ class ParseError(Exception):
 
 # --- Minimal YAML reader -------------------------------------------------------------------
 # Workflows use a small, regular part of YAML. This reads block mappings, block sequences,
-# flow sequences of scalars, quoted and plain scalars, and block scalars. Flow mappings and
-# anchors are kept as raw strings; check_workflow rejects them where the rule reads them, so
-# an unsupported form becomes an error instead of a silent pass.
+# flow collections (nested, spanning lines), quoted and plain scalars, block scalars, and
+# anchors with aliases. Tags are kept as raw strings, which check_workflow rejects where the
+# rule reads them, so an unsupported form becomes an error instead of a silent pass.
 
 def strip_comment(text):
     quote = None
@@ -54,45 +55,93 @@ def strip_comment(text):
     return text.rstrip()
 
 
+class Unterminated(ParseError):
+    pass
+
+
 def scalar(text):
     text = text.strip()
+    if text[:1] in ('[', '{'):
+        value, end = flow(text, 0)
+        if text[end:].strip():
+            raise ParseError('text after a flow collection: ' + text[:60])
+        return value
     if len(text) >= 2 and text[0] == text[-1] and text[0] in '"\'':
         inner = text[1:-1]
         return inner.replace("''", "'") if text[0] == "'" else inner
-    if text.startswith('['):
-        return flow_sequence(text)
     return text
 
 
-def flow_sequence(text):
-    """Parse a one-level flow sequence of scalars, or raise ParseError."""
-    items, current, quote = [], '', None
-    for index, char in enumerate(text[1:], 1):
-        if quote:
-            current += char
-            if char == quote:
-                quote = None
-        elif char in '"\'' and not current.strip():
-            current += char
-            quote = char
-        elif char in '[{':
-            raise ParseError('nested flow collections are not supported: ' + text[:60])
-        elif char == ',':
-            items.append(current)
-            current = ''
-        elif char == ']':
-            if text[index + 1:].strip():
-                raise ParseError('text after a flow sequence: ' + text[:60])
-            if current.strip() or items:
-                items.append(current)
-            if any(not item.strip() for item in items[:-1]):
+def flow(text, index):
+    """Parse the flow collection or scalar at text[index]; return (value, next index)."""
+    while index < len(text) and text[index] == ' ':
+        index += 1
+    if index >= len(text):
+        raise Unterminated('unterminated flow collection: ' + text[:60])
+    opener = text[index]
+    if opener not in '[{':
+        start = index
+        index = flow_token_end(text, index, ',]}')
+        return scalar(text[start:index]), index
+    closer = ']' if opener == '[' else '}'
+    result = [] if opener == '[' else {}
+    index += 1
+    while True:
+        while index < len(text) and text[index] == ' ':
+            index += 1
+        if index >= len(text):
+            raise Unterminated('unterminated flow collection: ' + text[:60])
+        if text[index] == closer:
+            return result, index + 1
+        if opener == '[':
+            value, index = flow(text, index)
+            if value == '':
                 raise ParseError('empty flow sequence entry: ' + text[:60])
-            if items and not items[-1].strip():
-                items.pop()  # a trailing comma is allowed
-            return [scalar(item) for item in items]
+            result.append(value)
         else:
-            current += char
-    raise ParseError('unterminated flow sequence: ' + text[:60])
+            start = index
+            index = flow_token_end(text, index, ':,}')
+            key = scalar(text[start:index])
+            if index < len(text) and text[index] == ':':
+                value, index = flow(text, index + 1)
+            else:
+                value = None
+            result[key] = value
+        while index < len(text) and text[index] == ' ':
+            index += 1
+        if index < len(text) and text[index] == ',':
+            index += 1
+        elif index < len(text) and text[index] != closer:
+            raise ParseError('expected , or ' + closer + ' in: ' + text[:60])
+
+
+def flow_token_end(text, index, stops):
+    """Find where a plain or quoted flow scalar ends, keeping ${{ }} expressions whole."""
+    if text[index] in '"\'':
+        quote = text[index]
+        index += 1
+        while index < len(text):
+            if text[index] == quote:
+                if quote == "'" and text[index + 1:index + 2] == "'":
+                    index += 2
+                    continue
+                return index + 1
+            index += 1
+        raise Unterminated('unterminated quoted scalar: ' + text[:60])
+    while index < len(text):
+        if text.startswith('${{', index):
+            close = text.find('}}', index + 3)
+            if close < 0:
+                raise Unterminated('unterminated expression: ' + text[:60])
+            index = close + 2
+            continue
+        char = text[index]
+        if char in '[{':
+            raise ParseError('unexpected ' + char + ' in flow scalar: ' + text[:60])
+        if char in stops and (char != ':' or text[index + 1:index + 2] in ('', ' ', ',', '}')):
+            return index
+        index += 1
+    return index
 
 
 def split_key(text):
@@ -112,6 +161,7 @@ class Reader:
     def __init__(self, text):
         self.raw = text.lstrip('\ufeff').replace('\t', '    ').splitlines()
         self.lines = []  # (indent, content) with comments removed; None for blank lines
+        self.anchors = {}
         for line in self.raw:
             content = strip_comment(line)
             if not content.strip() or content.strip() in ('---', '...'):
@@ -151,19 +201,42 @@ class Reader:
 
     def value_after_key(self, rest, index, indent):
         """Parse what follows `key:` whose line is index - 1."""
+        anchor = None
+        if rest.startswith('&'):
+            anchor, _, rest = rest.partition(' ')
+            rest = rest.strip()
+        value, index = self.plain_value(rest, index, indent)
+        if anchor:
+            self.anchors[anchor[1:]] = value
+        return value, index
+
+    def plain_value(self, rest, index, indent):
+        if rest.startswith('*'):
+            if rest[1:] not in self.anchors:
+                raise ParseError('unknown alias ' + rest)
+            return self.anchors[rest[1:]], index
         if rest and rest[0] in '|>':
             return self.block_scalar(index, indent)
-        if rest and rest[0] in '&*!':
-            return rest, index  # anchors, aliases, tags: keep raw so checks fail visibly
+        if rest and rest[0] == '!':
+            return rest, index  # tags: keep raw so checks fail visibly
         if rest:
-            # Scalars and flow sequences continue on more-indented lines; join them, then parse
-            # the whole value so a multi-line [a,\n b] is read as a list, not a string.
+            # Scalars and flow collections continue on more-indented lines; join them, then
+            # parse the whole value so a multi-line [a,\n b] is read as a list, not a string.
             following = self.next_index(index)
             while following < len(self.lines) and self.lines[following][0] > indent:
                 rest += ' ' + self.lines[following][1]
                 index = following + 1
                 following = self.next_index(index)
-            return scalar(rest), index
+            while True:
+                try:
+                    return scalar(rest), index
+                except Unterminated:
+                    # A flow collection may close on a line at the key's own indent.
+                    if rest[:1] not in ('[', '{') or following >= len(self.lines):
+                        raise
+                    rest += ' ' + self.lines[following][1]
+                    index = following + 1
+                    following = self.next_index(index)
         following = self.next_index(index)
         if following >= len(self.lines):
             return None, following
@@ -242,7 +315,7 @@ def compact(text):
     return re.sub(r'\s+', ' ', text.strip()) if isinstance(text, str) else text
 
 
-def check_workflow(text):
+def check_workflow(text, owner=None):
     """Return a list of problems for one workflow file. Raises ParseError."""
     workflow = load_yaml(text)
     if not isinstance(workflow, dict):
@@ -259,6 +332,10 @@ def check_workflow(text):
             if not (re.search(r'\bgithub\.workflow\b', expressions)
                     and re.search(r'\bgithub\.ref\b(?!_)', expressions)):
                 problems.append('concurrency group must include github.workflow and github.ref')
+            elif re.search(PER_RUN, expressions):
+                # A value unique to each run or push gives every run its own group, so nothing cancels.
+                problems.append('concurrency group must not include a per-run value such as '
+                                'github.run_id or github.sha')
             cancel = compact(concurrency.get('cancel-in-progress'))
             if cancel != REQUIRED_CANCEL:
                 shown = 'missing' if cancel is None else repr(cancel)
@@ -272,7 +349,15 @@ def check_workflow(text):
             raise ParseError('job ' + name + ' is not a block mapping')
         runs_on = job.get('runs-on')
         if runs_on is None and 'uses' in job:
-            continue  # A reusable-workflow call; the called workflow is checked on its own.
+            called = job['uses']
+            # A local or same-owner workflow is checked in its own repository. Another owner's
+            # workflow picks its own runner, which this tool cannot see.
+            if not (isinstance(called, str) and (called.startswith('./') or (
+                    owner and called.lower().startswith(owner.lower() + '/')))):
+                problems.append('job ' + name + ' calls ' + json.dumps(called)
+                                + '; a reusable workflow outside this owner cannot be checked'
+                                + ' for [self-hosted, studio]')
+            continue
         labels = runs_on.get('labels') if isinstance(runs_on, dict) else runs_on
         if isinstance(labels, str):
             labels = [labels]
@@ -310,16 +395,25 @@ def github_name(url, owner):
     return None
 
 
-def checkouts(root, owner):
-    """Map each owner/name to the local checkouts whose origin points at it."""
+def checkouts(root, owner, errors):
+    """Map each owner/name to the local checkouts whose origin points at it.
+
+    A checkout with no origin remote is not one of the owner's repositories. Any other git failure
+    is recorded in errors, so a broken git never reads as a clean run.
+    """
     found = {}
     for pattern in SEARCH:
         for path in sorted(root.glob(pattern)):
             if not (path / '.git').exists():
                 continue
             try:
+                remotes = git(path, 'remote').split()
+                if 'origin' not in remotes:
+                    continue
                 url = git(path, 'remote', 'get-url', 'origin')
-            except (RuntimeError, OSError, subprocess.TimeoutExpired):
+            except (RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
+                errors.append({'repository': None, 'checkout': str(path),
+                               'problem': 'cannot read origin of ' + str(path) + ': ' + str(exc)})
                 continue
             name = github_name(url, owner)
             if name:
@@ -378,7 +472,7 @@ def newest_ref(paths, branch):
 
 
 def lint(root, cache_path, gh='gh', owner=DEFAULT_OWNER, budget=BUDGET_SECONDS):
-    report = {'findings': [], 'errors': [], 'exempt': [], 'checked': []}
+    report = {'findings': [], 'errors': [], 'exempt': [], 'checked': [], 'stale': []}
     root = Path(root).expanduser()
     if not root.is_dir():
         report['errors'].append({'repository': None, 'problem': 'root not found: ' + str(root)})
@@ -387,7 +481,7 @@ def lint(root, cache_path, gh='gh', owner=DEFAULT_OWNER, budget=BUDGET_SECONDS):
     now = dt.datetime.now(dt.timezone.utc)
     deadline = time.monotonic() + budget
     DEADLINE[0] = deadline
-    for _, (name, paths) in sorted(checkouts(root, owner).items()):
+    for _, (name, paths) in sorted(checkouts(root, owner, report['errors']).items()):
         if time.monotonic() > deadline:
             report['errors'].append({'repository': name, 'problem': 'time budget spent, skipped'})
             continue
@@ -404,9 +498,21 @@ def lint(root, cache_path, gh='gh', owner=DEFAULT_OWNER, budget=BUDGET_SECONDS):
             report['errors'].append({'repository': name,
                                      'problem': 'no local copy of ' + info['default_branch'] + ', skipped'})
             continue
-        path, revision, _ = chosen
+        path, revision, stamp = chosen
+        committed = dt.datetime.fromtimestamp(stamp, dt.timezone.utc).date().isoformat()
         report['checked'].append({'repository': name, 'branch': info['default_branch'],
-                                  'revision': revision, 'checkout': str(path)})
+                                  'revision': revision, 'committed': committed, 'checkout': str(path)})
+        # The tool never fetches. Compare with GitHub so a stale local copy is visible.
+        try:
+            remote = command([gh, 'api', 'repos/' + name + '/commits/' + info['default_branch'],
+                              '--jq', '.sha']).strip()
+        except (RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
+            report['stale'].append({'repository': name, 'problem': 'freshness unknown: ' + str(exc)})
+        else:
+            if remote != revision:
+                report['stale'].append({'repository': name, 'problem': 'local ' + info['default_branch']
+                                        + ' ' + revision[:12] + ' differs from GitHub ' + remote[:12]
+                                        + '; fetch to refresh these results'})
         try:
             listed = git(path, 'ls-tree', '-z', '--name-only', revision, '.github/workflows/').split('\0')
         except (RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
@@ -414,7 +520,7 @@ def lint(root, cache_path, gh='gh', owner=DEFAULT_OWNER, budget=BUDGET_SECONDS):
             continue
         for file in sorted(item for item in listed if item.endswith(('.yml', '.yaml'))):
             try:
-                problems = check_workflow(git(path, 'cat-file', 'blob', revision + ':' + file))
+                problems = check_workflow(git(path, 'cat-file', 'blob', revision + ':' + file), owner)
             except ParseError as exc:
                 report['errors'].append({'repository': name, 'file': file, 'problem': 'unreadable: ' + str(exc)})
                 continue
@@ -449,6 +555,8 @@ def main(argv=None):
         for error in report['errors']:
             where = ' '.join(part for part in (error.get('repository'), error.get('file')) if part)
             print('error: ' + (where + ': ' if where else '') + error['problem'], file=sys.stderr)
+        for stale in report['stale']:
+            print('stale: ' + stale['repository'] + ': ' + stale['problem'], file=sys.stderr)
         if not report['findings'] and not report['errors']:
             print('clean: ' + str(len(report['checked'])) + ' private repositories checked')
     return exit_code(report)

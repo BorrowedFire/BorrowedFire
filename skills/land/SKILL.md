@@ -15,6 +15,9 @@ over guessing.
 Run CI locally unless an exact check requires a GitHub-only capability. Follow the doctrine's CI
 rule. Read the workflow and reproduce its commands, setup, flags, and environment on the current
 candidate. Record results and gaps. A local pass does not prove an omitted check passed.
+A skipped required check is missing evidence, not a pass. Run it locally or record it as
+missing. A "reused" result counts only when it names the referenced completed, passing run ID on
+the identical tree and toolchain.
 Do not request Actions funding or hosted execution for locally runnable checks. A missing local
 tool is a local setup problem, not a GitHub requirement. Keep Codex PR review as a separate gate.
 If GitHub protection requires a hosted status, report the exact merge blocker once. Do not bypass
@@ -270,8 +273,9 @@ the summary, and treat the gate as not passed. Never round up.
 **10 · Merge gate.** Squash-merge only when all hold: adversarial and Codex reviews satisfy step 6
 on the same current head (or `review_bot: none` is acknowledged for Codex); no applicable blocker
 remains; live proof is recorded and passed at the rung floor for its class; required CI/tests,
-repository approvals, and statuses pass; the diff is outside the denylist. Keep raw review
-verdicts and dispositions visible. If `--no-auto-merge`, stop here with a brief.
+repository approvals, and statuses pass, with no required check skipped; the diff is outside the
+denylist. Keep raw review verdicts and dispositions visible. If `--no-auto-merge`, stop here with
+a brief.
 
 **11 · Close out.** Include any repository land-log entry in the candidate before its final review
 and proof. Record the item, classification, decisions, and evidence known then. Do not claim the
