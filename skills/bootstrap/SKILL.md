@@ -44,13 +44,17 @@ Bootstrap wires a project up once so the system works from day one.
        cancel-in-progress: ${{ github.event_name == 'pull_request' }}
      ```
 
-   - Slow suites (UI tests and full builds) run on each PR's current head. A push to a branch with
-     no open PR runs quick checks only.
-   - If the repo has a slow suite, the default-branch run reuses a passing PR result. A workflow
-     step, not the agent, compares the git tree hash and toolchain version with a recorded,
-     completed, passing PR run. On a match it skips the slow suite and reports "reused" with that
-     run's ID. Any mismatch, missing record, or failed, cancelled or unfinished run runs the full
-     suite.
+   - Slow suites (UI tests and full builds) run on each PR's current head, and on the exact
+     revision before a store build. A push to a branch with no open PR runs quick checks only.
+     Moving a slow suite off PRs needs the owner's OK.
+   - If the repo has a slow suite, add the reuse step. A workflow step, not the agent, compares the
+     git tree hash and the toolchain versions the repo uses with a recorded, completed, passing PR
+     run. On a match, the default-branch run may skip the slow suite and reports "reused" with
+     that run's ID. Any mismatch, missing record, or failed, cancelled or unfinished run runs the
+     full suite.
+   - In a repo that already has workflows, the rule permits adding the concurrency block and the
+     reuse step exactly as written here. Any other change that runs a check less often or on fewer
+     files, such as a new path filter, needs the owner's OK: propose the exact diff instead.
 4. **Conventions.** `.gitignore` (include `.brain-outbox/`), PR template if the owner uses them,
    `docs/releases/` for app repos headed to stores.
 5. **Register in the brain** (via `remember`): a `projects/<name>.md` page with full registry
