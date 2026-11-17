@@ -127,6 +127,7 @@ class SyncTests(unittest.TestCase):
             config = json.loads(path.read_text())
             config['private_context'] = 'config/agent-instructions.md'
             config['private_context_targets'] = [str(home / '.codex/AGENTS.md')]
+            config['ci_lint_root'] = str(home / 'Developer')
             path.write_text(json.dumps(config))
             self.command(*args, '--interval', '600')
             self.assertEqual(json.loads(path.read_text()), config)

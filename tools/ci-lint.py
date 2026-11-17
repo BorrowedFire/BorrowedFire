@@ -59,10 +59,40 @@ def scalar(text):
     if len(text) >= 2 and text[0] == text[-1] and text[0] in '"\'':
         inner = text[1:-1]
         return inner.replace("''", "'") if text[0] == "'" else inner
-    if text.startswith('[') and text.endswith(']'):
-        inner = text[1:-1].strip()
-        return [scalar(part) for part in inner.split(',')] if inner else []
+    if text.startswith('['):
+        return flow_sequence(text)
     return text
+
+
+def flow_sequence(text):
+    """Parse a one-level flow sequence of scalars, or raise ParseError."""
+    items, current, quote = [], '', None
+    for index, char in enumerate(text[1:], 1):
+        if quote:
+            current += char
+            if char == quote:
+                quote = None
+        elif char in '"\'' and not current.strip():
+            current += char
+            quote = char
+        elif char in '[{':
+            raise ParseError('nested flow collections are not supported: ' + text[:60])
+        elif char == ',':
+            items.append(current)
+            current = ''
+        elif char == ']':
+            if text[index + 1:].strip():
+                raise ParseError('text after a flow sequence: ' + text[:60])
+            if current.strip() or items:
+                items.append(current)
+            if any(not item.strip() for item in items[:-1]):
+                raise ParseError('empty flow sequence entry: ' + text[:60])
+            if items and not items[-1].strip():
+                items.pop()  # a trailing comma is allowed
+            return [scalar(item) for item in items]
+        else:
+            current += char
+    raise ParseError('unterminated flow sequence: ' + text[:60])
 
 
 def split_key(text):
@@ -126,15 +156,14 @@ class Reader:
         if rest and rest[0] in '&*!':
             return rest, index  # anchors, aliases, tags: keep raw so checks fail visibly
         if rest:
-            value = scalar(rest)
-            # Plain multi-line scalars continue on more-indented lines.
+            # Scalars and flow sequences continue on more-indented lines; join them, then parse
+            # the whole value so a multi-line [a,\n b] is read as a list, not a string.
             following = self.next_index(index)
-            while (following < len(self.lines) and self.lines[following][0] > indent
-                   and isinstance(value, str)):
-                value += ' ' + self.lines[following][1]
+            while following < len(self.lines) and self.lines[following][0] > indent:
+                rest += ' ' + self.lines[following][1]
                 index = following + 1
                 following = self.next_index(index)
-            return value, index
+            return scalar(rest), index
         following = self.next_index(index)
         if following >= len(self.lines):
             return None, following
@@ -225,8 +254,10 @@ def check_workflow(text):
             problems.append('runs on pull requests without the PR-only concurrency block')
         else:
             group = concurrency.get('group')
-            if not (isinstance(group, str) and re.search(r'\bgithub\.workflow\b', group)
-                    and re.search(r'\bgithub\.ref\b(?!_)', group)):
+            # Only text inside ${{ }} is evaluated; a literal "github.ref" is a constant group.
+            expressions = ' '.join(re.findall(r'\$\{\{(.*?)\}\}', group)) if isinstance(group, str) else ''
+            if not (re.search(r'\bgithub\.workflow\b', expressions)
+                    and re.search(r'\bgithub\.ref\b(?!_)', expressions)):
                 problems.append('concurrency group must include github.workflow and github.ref')
             cancel = compact(concurrency.get('cancel-in-progress'))
             if cancel != REQUIRED_CANCEL:

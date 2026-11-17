@@ -94,6 +94,29 @@ class CheckTests(unittest.TestCase):
             with self.subTest(text=text), self.assertRaises(lint.ParseError):
                 lint.check_workflow(text)
 
+    def test_multiline_flow_sequences_are_parsed_or_rejected(self):
+        # A trigger list split across lines must still be read as a list of events.
+        missing = COMPLIANT.replace(GOOD_CONCURRENCY, '').replace(
+            'on:\n  pull_request:\n  push:\n    branches: [main]\n', 'on: [push,\n  pull_request]\n')
+        self.assertEqual(lint.check_workflow(missing),
+                         ['runs on pull requests without the PR-only concurrency block'])
+        split_runner = COMPLIANT.replace('[self-hosted, studio]', '[self-hosted,\n      studio]')
+        self.assertEqual(lint.check_workflow(split_runner), [])
+        for value in ('[push, pull_request', '[push, [pull_request]]', '[push, {a: b}]',
+                      '[push] extra', '[push,, pull_request]', '[push,\n  pull_request'):
+            with self.subTest(value=value), self.assertRaises(lint.ParseError):
+                lint.check_workflow('on: ' + value + '\njobs:\n  t:\n    runs-on: [self-hosted, studio]\n')
+
+    def test_group_names_must_be_evaluated_expressions(self):
+        for group in ('github.workflow-github.ref', '${{ github.workflow }}-github.ref'):
+            with self.subTest(group=group):
+                text = COMPLIANT.replace('${{ github.workflow }}-${{ github.ref }}', group)
+                self.assertEqual(lint.check_workflow(text),
+                                 ['concurrency group must include github.workflow and github.ref'])
+        text = COMPLIANT.replace('${{ github.workflow }}-${{ github.ref }}',
+                                 "ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}")
+        self.assertEqual(lint.check_workflow(text), [])
+
     def test_byte_order_mark_and_ref_type_group(self):
         self.assertEqual(len(lint.check_workflow('\ufeff' + COMPLIANT.replace(GOOD_CONCURRENCY, ''))), 1)
         self.assertEqual(lint.check_workflow(COMPLIANT.replace('github.ref }}', 'github.ref_type }}')),
@@ -230,8 +253,10 @@ class SyncHookTests(unittest.TestCase):
 
     def test_crash_old_source_or_missing_root_never_raises(self):
         self.assertEqual(sync.lint_ci(self.config, self.root)['status'], 'skipped')
-        (self.source / 'tools/ci-lint.py').write_text('raise RuntimeError("boom")\n')
-        self.assertEqual(sync.lint_ci(self.config, self.root)['status'], 'error')
+        for body in ('raise RuntimeError("boom")\n',
+                     'print(\'{"findings": [], "errors": [], "checked": [{"repository": "o/r"}]}\')\n'):
+            (self.source / 'tools/ci-lint.py').write_text(body)
+            self.assertEqual(sync.lint_ci(self.config, self.root)['status'], 'error')
         self.assertEqual(sync.lint_ci(dict(self.config, ci_lint_root=str(self.root / 'none')), self.root)['status'],
                          'skipped')
         self.assertEqual(sync.lint_ci({'source': 7}, self.root)['status'], 'error')
