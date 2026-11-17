@@ -438,6 +438,32 @@ def sync_identity(config, brain, revision, state):
     finally:
         sys.dont_write_bytecode = previous_bytecode
 
+def lint_ci(config, state):
+    """Report CI-rule findings once per check. Advisory only: it never blocks the update."""
+    try:
+        tool = Path(config['source']) / 'tools/ci-lint.py'
+        if not tool.is_file():
+            return {'status': 'skipped', 'reason': 'Reviewed source has no ci-lint yet'}
+        root = Path(config.get('ci_lint_root', Path.home() / 'Developer/BorrowedFire')).expanduser()
+        if not root.is_dir():
+            return {'status': 'skipped', 'reason': 'No repository root at ' + str(root)}
+        proc = subprocess.run([sys.executable, '-B', str(tool), '--json', '--root', str(root),
+                               '--cache', str(state / 'ci-lint-cache.json')],
+                              capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL)
+        report = json.loads(proc.stdout)
+        findings = [f['repository'] + ' ' + f['file'] + ': ' + f['problem'] for f in report['findings']]
+        errors = [' '.join(str(e[k]) for k in ('repository', 'file') if e.get(k)) + ': ' + e['problem']
+                  for e in report['errors']]
+        checked = [c['repository'] + '@' + c['revision'][:12] for c in report.get('checked', [])]
+    except Exception as exc:  # Advisory: any failure becomes a status entry, never a blocked sync.
+        return {'status': 'error', 'reason': type(exc).__name__ + ': ' + str(exc)[:200]}
+    result = {'status': 'findings' if findings else 'error' if errors else 'clean', 'checked': checked}
+    if findings:
+        result['findings'] = findings
+    if errors:
+        result['errors'] = errors
+    return result
+
 def main():
     parser = argparse.ArgumentParser()
     mode = parser.add_mutually_exclusive_group(required=True)
@@ -479,9 +505,12 @@ def main():
                 status['git_identity'] = sync_identity(config, brain, status['prometheus']['revision'], state)
             except (Blocked, OSError, ValueError) as exc:
                 status['git_identity'] = {'status': 'blocked', 'reason': str(exc)}
+        if status['borrowedfire']['status'] == 'current':
+            status['ci_lint'] = lint_ci(config, state)
         write_json(status_path, status)
         print(json.dumps(status))
-        return int(any(value['status'] != 'current' for key, value in status.items() if key != 'checked_at'))
+        return int(any(value['status'] != 'current' for key, value in status.items()
+                       if key not in ('checked_at', 'ci_lint')))
 
 if __name__ == '__main__':
     raise SystemExit(main())
