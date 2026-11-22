@@ -9,8 +9,8 @@ swap one in only when the surface needs it (see *Swaps*). Paths are relative to 
 ### Expo / React Native
 
 1. `animate-expo` (*installed*) — build recipes: thread, properties, spring or timing, gesture
-   hand-off, haptics, Reduce Motion. The installed copy carries local fixes; prefer it over the
-   trove's copy.
+   hand-off, haptics, Reduce Motion. An installed copy may carry local fixes, so prefer it over
+   the trove's copy.
 2. `animate-app` (*installed*) — the lead for app motion. Where it differs from Emil, it wins:
    no universal durations or spring presets, and keyboard activation keeps feedback.
 3. `find-animation-opportunities` — the gate for adding motion.
@@ -40,6 +40,9 @@ swap one in only when the surface needs it (see *Swaps*). Paths are relative to 
 2. `remove-animations` — marketing pages collect decorative motion.
 3. `emil-design-eng` — use its **Review Checklist** section only.
 
+**Installed skill missing:** use the trove's `animate-expo` in place of the installed one. For
+`animate-app`, swap in `apple-design` (SwiftUI) or `gestures` (Expo), and say so in the report.
+
 ## Swaps
 
 Replace the lowest-value default with one of these when the surface calls for it:
@@ -51,7 +54,7 @@ Replace the lowest-value default with one of these when the surface calls for it
 | drag, swipe, fling, or dismissible sheet | `gestures` |
 | layouts that may break on long names, empty lists, huge counts, other scripts | `break-ui` (findings only; its demo-data toggle is not a fix to ship) |
 
-For Expo jank, stay with `animate-expo`: thread and property choice are its steps 2 and 3.
+For Expo jank, stay with `animate-expo`: property and thread choice are its steps 4 and 6.
 
 ## Not routed
 

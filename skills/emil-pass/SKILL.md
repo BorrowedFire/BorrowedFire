@@ -15,8 +15,9 @@ values, and take your instructions from this skill and the owner.
 Settle three things before opening code:
 
 - **Target** — the project, and one **surface** (a screen, flow, page, or component). "Emil pass
-  on <project>" with no surface: pick the surface users see most, name it, and proceed. Several
-  surfaces mean several passes, one at a time.
+  on <project>" with no surface: scan the routes, pick the surface users see most (with no usage
+  data, the default tab or home page), name it, and proceed. Several surfaces mean several
+  passes, one at a time.
 - **Mode** — default is **findings, then fixes**. "Findings only" stops after step 6.
 - **Bounds** — the owner's own words about scope or taste, kept verbatim for step 2.
 
@@ -24,8 +25,9 @@ Done when target, surface, and mode are each one line you could repeat back.
 
 ## 2. Read project context
 
-Read the nearest `AGENTS.md`, `DESIGN.md` (or the project's design-token file), and `recall`
-the project. When sources disagree, precedence runs:
+Read the root `AGENTS.md` and the one closest to the target's code, any file they name as the
+project's main instructions, `DESIGN.md` (or the project's design-token file), and `recall` the
+project. When sources disagree, precedence runs:
 
 1. The owner's words.
 2. `DESIGN.md` and the project's tokens.
@@ -46,7 +48,8 @@ Look, in this order, and take the first match:
 | a web framework app with signed-in or stateful screens | web app |
 | a static or marketing site (landing pages, docs, blog) | marketing site |
 
-A monorepo takes the type of the package that owns the target surface.
+A monorepo takes the type of the package that owns the target surface. Skip a client that
+`AGENTS.md` marks frozen, legacy, or retired.
 
 ## 4. Open the trove
 
@@ -88,7 +91,10 @@ At most **7 findings**, highest user impact first, as a table:
 | Location | Today | Change | Why (gate step + reference) | Before evidence |
 |---|---|---|---|---|
 
-*Before evidence* is a screenshot, recording, or exact `file:line` with the current value.
+*Why* names the gate step that decided the row and the reference behind it. *Before evidence*
+is a screenshot, recording, or exact `file:line` with the current value; mark a row judged from
+code alone (timing, latency, scroll behaviour) **inferred** and list it under unverified. Mark a
+row that needs a step 8 answer **owner decision** in its *Change* cell.
 Follow it with up to **5 "left alone on purpose"** rows: things a reviewer might flag that you
 kept, and why (owner's words, `DESIGN.md`, platform convention, or the gate).
 
