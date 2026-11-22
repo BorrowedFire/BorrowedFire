@@ -158,6 +158,7 @@ natural break, because the switch rebuilds the context cache.
 | bounded QA loop | `qa-audit` |
 | test value, duplication, or a pruning campaign | `test-audit` |
 | marketing / customer-facing copy | `signal` |
+| "Emil pass" motion and craft review of one surface | `emil-pass` |
 | short-form marketing video or reel | `reel-maker` |
 | audit requested vs completed work at session end | `session-closeout` |
 <!-- END BORROWEDFIRE DOCTRINE -->

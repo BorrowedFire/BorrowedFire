@@ -70,6 +70,7 @@ deleted).
 | [bootstrap](skills/bootstrap/SKILL.md) | Wire a new repo/app/idea into the system and register it in the brain. |
 | [qa-audit](skills/qa-audit/SKILL.md) | Bounded QA loop: feature inventory, test matrix, defects, safe fixes, confidence report. |
 | [test-audit](skills/test-audit/SKILL.md) | Test authoring value checks, evidence before pruning, and scoped reduction campaigns that preserve meaningful contracts. |
+| [emil-pass](skills/emil-pass/SKILL.md) | "Emil pass" front door: route one surface through Emil Kowalski's motion and craft skills for its project type, then report findings and fix. |
 | [signal](skills/signal/SKILL.md) | Marketing front door: route customer-facing copy through the Corey Haines Marketing Skills. |
 | [reel-maker](skills/reel-maker/SKILL.md) | Plan, script, produce, render, and validate short-form marketing videos and reels end to end. |
 | [technical-writing](skills/technical-writing/SKILL.md) | The four-layer standard for engineering prose: Diataxis modes, Google developer style, ASD-STE100 instruction rules, Global English syntax. |
@@ -136,7 +137,7 @@ live check. The nightly job remains silent on routine success or a no-op. See
 ## Repo layout
 
 ```
-skills/            20 SKILL.md skills (+ agents/openai.yaml metadata, references/)
+skills/            21 SKILL.md skills (+ agents/openai.yaml metadata, references/)
 agents/            Claude Code agent definitions install.sh copies to ~/.claude/agents
 doctrine/          the managed context block install.sh distributes
 prometheus-template/  starting tree for your private brain repo
