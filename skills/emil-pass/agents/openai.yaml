@@ -1,0 +1,7 @@
+interface:
+  display_name: "Emil pass"
+  short_description: "Review and fix one surface against Emil Kowalski's motion and craft skills"
+  default_prompt: "Use $emil-pass for an Emil pass on this project, findings only."
+
+policy:
+  allow_implicit_invocation: true

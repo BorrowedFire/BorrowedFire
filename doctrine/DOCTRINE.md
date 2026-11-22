@@ -1,5 +1,5 @@
 <!-- BEGIN BORROWEDFIRE DOCTRINE -->
-## Borrowed Fire doctrine (v9 — managed by install.sh, do not hand-edit)
+## Borrowed Fire doctrine (v10 — managed by install.sh, do not hand-edit)
 
 **Work.** Use the requested outcome to decide what work is necessary. Resolve routine details
 yourself. Ask only when missing information would materially change the result or required
@@ -162,6 +162,7 @@ natural break, because the switch rebuilds the context cache.
 | bounded QA loop | `qa-audit` |
 | test value, duplication, or a pruning campaign | `test-audit` |
 | marketing / customer-facing copy | `signal` |
+| "Emil pass" motion and craft review of one surface | `emil-pass` |
 | short-form marketing video or reel | `reel-maker` |
 | engineering prose: docs, RFCs, PR descriptions, commit messages | `technical-writing` |
 | cut AI tells from any prose before it ships | `unslop` |
