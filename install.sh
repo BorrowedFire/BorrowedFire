@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Borrowed Fire installer: distribute skills/ + the doctrine block to every agent
-# harness on this machine, and agents/ to Claude Code. Manifest-owned and idempotent - safe to re-run anytime.
+# harness on this machine, agents/ to Claude Code, and the guard/ secret guard to Claude Code and
+# Codex hooks plus bf-secret. Manifest-owned and idempotent - safe to re-run anytime.
 #
 #   ./install.sh [--copy] [--dry-run] [--uninstall] [--adopt]
 #                [--brain <path>] [--openclaw-workspace <path>] [--context-file <path>]
@@ -640,6 +641,95 @@ uninstall_agents() { # uninstall_agents <agents-dir>
   [ "$DRY" -eq 1 ] || rm -f "$mf"
 }
 
+# --- secret guard: guard/ -> ~/.local/share/borrowedfire/guard, hooks in Claude Code and Codex ---
+# The directory is wholly ours, so its files are replaced on every run. The hook files belong to
+# the owner: the guard edits only its own entries there, keeps every other hook, and registers
+# each entry exactly once. bf-secret is a symlink to the launcher; an unrelated file with that
+# name is left alone.
+GUARD_DIR="$HOME/.local/share/borrowedfire/guard"
+GUARD_LAUNCHER="$GUARD_DIR/secret-guard"
+GUARD_FILES="secret-guard secret_guard.py"
+BF_SECRET="$HOME/.local/bin/bf-secret"
+CODEX_RULES="$CODEX_ROOT/rules/borrowedfire-secrets.rules"
+
+guard_error() { echo "error: secret guard: $*" >&2; INSTALL_ERRORS=$((INSTALL_ERRORS + 1)); }
+
+copy_guard_file() { # copy_guard_file <src> <tgt> <mode>
+  local tmp
+  tmp="$(mktemp "$(dirname "$2")/.borrowedfire-guard.XXXXXX")" || return 1
+  if ! cat "$1" > "$tmp" || ! chmod "$3" "$tmp" || ! mv -f "$tmp" "$2"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  cmp -s "$1" "$2"
+}
+
+install_guard() {
+  local name mode
+  say "== secret guard ($GUARD_DIR)"
+  if [ "$DRY" -eq 1 ]; then
+    say "  copy     $GUARD_FILES"
+  else
+    mkdir -p "$GUARD_DIR" || { guard_error "cannot create $GUARD_DIR"; return; }
+    for name in $GUARD_FILES; do
+      mode=644; [ "$name" = secret-guard ] && mode=755
+      copy_guard_file "$SRC/guard/$name" "$GUARD_DIR/$name" "$mode" || guard_error "copy of $name failed"
+    done
+  fi
+  if [ -L "$BF_SECRET" ] && [ "$(readlink "$BF_SECRET")" = "$GUARD_LAUNCHER" ]; then
+    say "  ok       bf-secret"
+  elif [ -e "$BF_SECRET" ] || [ -L "$BF_SECRET" ]; then
+    say "  SKIP     bf-secret - $BF_SECRET exists and is not ours"
+  else
+    act "link     bf-secret -> $GUARD_LAUNCHER" mkdir -p "$(dirname "$BF_SECRET")"
+    [ "$DRY" -eq 1 ] || ln -s "$GUARD_LAUNCHER" "$BF_SECRET" || guard_error "bf-secret link failed"
+  fi
+  if [ -d "$HOME/.claude" ]; then
+    act "register Claude Code hooks ($HOME/.claude/settings.json)" true
+    if [ "$DRY" -eq 0 ] && { ! "$GUARD_LAUNCHER" register claude "$HOME/.claude/settings.json" "$GUARD_LAUNCHER" ||
+        ! "$GUARD_LAUNCHER" registered claude "$HOME/.claude/settings.json" "$GUARD_LAUNCHER"; }; then
+      guard_error "Claude Code hook registration failed"
+    fi
+  fi
+  if [ -d "$CODEX_ROOT" ]; then
+    act "register Codex hook ($CODEX_ROOT/hooks.json)" true
+    if [ "$DRY" -eq 0 ] && { ! "$GUARD_LAUNCHER" register codex "$CODEX_ROOT/hooks.json" "$GUARD_LAUNCHER" ||
+        ! "$GUARD_LAUNCHER" registered codex "$CODEX_ROOT/hooks.json" "$GUARD_LAUNCHER"; }; then
+      guard_error "Codex hook registration failed"
+    fi
+    act "rules    $CODEX_RULES" true
+    if [ "$DRY" -eq 0 ] && { ! mkdir -p "$(dirname "$CODEX_RULES")" ||
+        ! copy_guard_file "$SRC/guard/borrowedfire-secrets.rules" "$CODEX_RULES" 644; }; then
+      guard_error "Codex rules copy failed"
+    fi
+  fi
+}
+
+uninstall_guard() {
+  local name
+  say "== secret guard ($GUARD_DIR)"
+  if [ -x "$GUARD_LAUNCHER" ]; then
+    if [ -f "$HOME/.claude/settings.json" ]; then
+      act "unregister Claude Code hooks" "$GUARD_LAUNCHER" unregister claude "$HOME/.claude/settings.json" "$GUARD_LAUNCHER" ||
+        guard_error "Claude Code hook removal failed"
+    fi
+    if [ -f "$CODEX_ROOT/hooks.json" ]; then
+      act "unregister Codex hook" "$GUARD_LAUNCHER" unregister codex "$CODEX_ROOT/hooks.json" "$GUARD_LAUNCHER" ||
+        guard_error "Codex hook removal failed"
+    fi
+  fi
+  if [ -f "$CODEX_RULES" ] && cmp -s "$SRC/guard/borrowedfire-secrets.rules" "$CODEX_RULES"; then
+    act "remove   $CODEX_RULES" rm -f "$CODEX_RULES"
+  fi
+  if [ -L "$BF_SECRET" ] && [ "$(readlink "$BF_SECRET")" = "$GUARD_LAUNCHER" ]; then
+    act "remove   bf-secret" rm -f "$BF_SECRET"
+  fi
+  for name in $GUARD_FILES; do
+    [ -e "$GUARD_DIR/$name" ] && act "remove   $name" rm -f "$GUARD_DIR/$name"
+  done
+  [ "$DRY" -eq 1 ] || rmdir "$GUARD_DIR" 2>/dev/null || true
+}
+
 # --- main loop ---
 for row in "${HARNESSES[@]}"; do
   label="${row%%|*}"; rest="${row#*|}"
@@ -729,6 +819,12 @@ for row in "${HARNESSES[@]}"; do
     fi
   fi
 done
+
+if [ "$UNINSTALL" -eq 1 ]; then
+  uninstall_guard
+else
+  install_guard
+fi
 
 # The note prints before the fail-closed exit below on purpose: a partly failed uninstall on a
 # messy host is exactly when the owner needs the reminder.

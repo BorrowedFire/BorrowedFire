@@ -466,6 +466,37 @@ class SyncTests(unittest.TestCase):
         with self.assertRaisesRegex(sync.Blocked, 'manifest'):
             sync.verify_agents(repo, installed)
 
+    def test_secret_guard_must_match_source_and_be_registered_once(self):
+        repo = Path(__file__).resolve().parents[1]
+        home = self.root / 'guard-home'
+        harnesses = [{'skills': str(home / '.claude/skills'), 'context': str(home / '.claude/CLAUDE.md')},
+                     {'skills': str(home / '.codex/skills'), 'context': str(home / '.codex/AGENTS.md')}]
+        sync.verify_guard(self.root / 'no-guard', harnesses, home)  # nothing shipped, nothing checked
+        with self.assertRaisesRegex(sync.Blocked, 'differs'):
+            sync.verify_guard(repo, harnesses, home)
+        installed = home / '.local/share/borrowedfire/guard'
+        installed.mkdir(parents=True)
+        for name in sync.GUARD_FILES:
+            shutil.copy2(repo / 'guard' / name, installed / name)
+        (home / '.codex/rules').mkdir(parents=True)
+        shutil.copy2(repo / 'guard/borrowedfire-secrets.rules', home / '.codex/rules/borrowedfire-secrets.rules')
+        launcher = str(installed / 'secret-guard')
+        with patch.dict(os.environ, {'CODEX_HOME': str(home / '.codex')}):
+            with self.assertRaisesRegex(sync.Blocked, 'registered exactly once'):
+                sync.verify_guard(repo, harnesses, home)
+            for kind, path in (('claude', home / '.claude/settings.json'), ('codex', home / '.codex/hooks.json')):
+                self.command(launcher, 'register', kind, str(path), launcher)
+            sync.verify_guard(repo, harnesses, home)
+            settings = json.loads((home / '.claude/settings.json').read_text())
+            settings['hooks']['PreToolUse'].append(settings['hooks']['PreToolUse'][0])
+            (home / '.claude/settings.json').write_text(json.dumps(settings))
+            with self.assertRaisesRegex(sync.Blocked, 'registered exactly once'):
+                sync.verify_guard(repo, harnesses, home)
+            self.command(launcher, 'register', 'claude', str(home / '.claude/settings.json'), launcher)
+            (home / '.codex/rules/borrowedfire-secrets.rules').write_text('# edited\n')
+            with self.assertRaisesRegex(sync.Blocked, 'rules differ'):
+                sync.verify_guard(repo, harnesses, home)
+
     def test_approved_install_then_repeat_checks_actual_files(self):
         # The fixture installer represents the same installer command used on each host.
         (self.seed / 'tools').mkdir()
