@@ -93,6 +93,22 @@ BLOCK = [
     'with-cloud-token env', 'with-cloud-token python3 -c "import os"',
     # Unreadable commands that involve guarded words
     'op item get "unterminated',
+    # Review findings: separators at the end, shell options, inline comments, tracing,
+    # tee destinations, process substitution, flag=value forms
+    'op item get abc;', 'op item get abc &', 'nohup op item get abc &',
+    "bash -o pipefail -c 'op item get abc'", "bash -euo pipefail -c 'op item get abc'",
+    "bash --norc -c 'op item get abc'", "bash --noprofile --norc -c 'op item get abc'",
+    "zsh -f -c 'op item get abc'",
+    "git status # check what's changed\nop item get abc --fields password\n"
+    "gh pr view 31 # see the PR's state",
+    'set -x; TOKEN=$GITHUB_TOKEN', 'set -x; T=$(gh auth token) make deploy',
+    'cat .env | tee /dev/stderr >/dev/null', 'gh auth token | tee /dev/tty | pbcopy',
+    'op read op://v/i/f > >(cat)', 'op read op://v/i/f -o >(cat)',
+    'security find-generic-password -s S -w > >(cat)',
+    'op run --no-masking=true --env-file x.tpl -- npm start', 'op item get abc --reveal=true',
+    'rg -e TOKEN .env', 'grep -- PASSWORD .env.local', 'git log -p -- .env',
+    'ps -axE', 'ps eww -p 1234',
+    '[[ -n "$(op item get abc)" ]] && echo ok',
 ]
 
 ALLOW = [
@@ -141,12 +157,23 @@ ALLOW = [
     '[[ "$a" == "b" && -n "$c" ]] && echo ok', 'x=$(git rev-parse HEAD) && echo "$x"',
     'diff <(ls a) <(ls b)', 'echo "a)b" ; echo "(c"', 'find . -name "*.py" -exec wc -l {} \\;',
     'git log --format="%H %s" -n 3 | cat', 'print -l **/*(.)',
+    # Review findings: trailing separators, comments, ps columns, search patterns, syntax
+    'echo hi;', 'echo hi &', 'npm run dev &', "sh -c 'sleep 1 &'", 'make test & wait',
+    'ls ; ', 'gh pr checks 31  # what\'s failing?',
+    'ps -o pid,etime,command -p 1234', 'ps -p 1234 -o pid,user,etime', 'ps -u steve',
+    'ps -e', "grep '.env' README.md", "rg '.env' README.md", 'rg -g "*.ts" ".env" src',
+    "git log --oneline -- '*.p8'", 'cat src/.env.d.ts',
+    'for ((i=0; i<5; i++)); do gh run view 123; sleep 5; done',
+    '[[ "$branch" =~ ^(main|release)$ ]] && gh pr list',
+    'set +x; echo "$GITHUB_TOKEN" > /dev/null', "bash -o pipefail -c 'make test | tee log'",
+    'op run --no-masking=false -- npm start', 'arr=(\n  a\n  b\n)\necho "${arr[@]}"',
 ]
 
 
 def pre(event):
+    # A hang is a failure: the hook must answer well inside its 15-second timeout.
     proc = subprocess.run([str(LAUNCHER), 'pre'], input=json.dumps(event), capture_output=True,
-                          text=True, timeout=30)
+                          text=True, timeout=12)
     return proc.returncode, proc.stderr
 
 
@@ -211,6 +238,31 @@ class Launcher(unittest.TestCase):
                                   capture_output=True, text=True)
             self.assertEqual(proc.returncode, 2)
             self.assertIn('BLOCKED', proc.stderr)
+
+    def test_killed_check_blocks_without_retrying(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            shutil.copy2(LAUNCHER, Path(tmp) / 'secret-guard')
+            (Path(tmp) / 'secret_guard.py').write_text(
+                'import os, signal\nos.kill(os.getpid(), signal.SIGKILL)\n')
+            proc = subprocess.run([str(Path(tmp) / 'secret-guard'), 'pre'], input='{}',
+                                  capture_output=True, text=True, timeout=12)
+            self.assertEqual(proc.returncode, 2)
+            self.assertEqual(proc.stderr.count('BLOCKED'), 1)
+
+    def test_slow_check_blocks_within_the_time_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            shutil.copy2(LAUNCHER, Path(tmp) / 'secret-guard')
+            source = (GUARD / 'secret_guard.py').read_text().replace(
+                'def check_pre(event):', 'def check_pre(event):\n    while True:\n        pass\n', 1)
+            (Path(tmp) / 'secret_guard.py').write_text(source)
+            proc = subprocess.run([str(Path(tmp) / 'secret-guard'), 'pre'], input='{}',
+                                  capture_output=True, text=True, timeout=14)
+            self.assertEqual(proc.returncode, 2)
+
+    def test_redactor_that_cannot_run_passes_output_through(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            shutil.copy2(LAUNCHER, Path(tmp) / 'secret-guard')
+            (Path(tmp) / 'secret_guard.py').write_text('this is not python\n')
             # The output redactor is a backstop: if it cannot run, output passes unchanged.
             proc = subprocess.run([str(Path(tmp) / 'secret-guard'), 'post'], input='{}',
                                   capture_output=True, text=True)
@@ -367,6 +419,15 @@ class Registration(unittest.TestCase):
         self.assertEqual(self.call('registered', 'codex', str(hooks),
                                    self.launcher).returncode, 0)
         self.assertNotIn('PostToolUse', json.loads(hooks.read_text())['hooks'])
+
+    def test_symlinked_settings_stay_a_symlink(self):
+        target = self.tmp / 'dotfiles-settings.json'
+        target.write_text('{"theme": "dark"}')
+        link = self.tmp / 'settings.json'
+        link.symlink_to(target)
+        self.assertEqual(self.call('register', 'claude', str(link), self.launcher).returncode, 0)
+        self.assertTrue(link.is_symlink())
+        self.assertIn('PreToolUse', json.loads(target.read_text())['hooks'])
 
     def test_malformed_settings_are_not_rewritten(self):
         settings = self.tmp / 'settings.json'

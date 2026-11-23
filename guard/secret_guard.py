@@ -157,7 +157,7 @@ class Parser:
                 continue
             if c in ';&':
                 self.i += 1
-                while self.peek() in ';&':
+                while self.peek() and self.peek() in ';&':
                     self.i += 1
                 if stages:
                     pipelines.append(stages)
@@ -239,27 +239,46 @@ class Parser:
                 break
             if c == '}' and closer == '}' and self.word_ends(self.i + 1) and cmd.words:
                 break
-            if c == '#' and not cmd.words and not cmd.redirs:
-                break
+            if c == '#':
+                break   # a comment: '#' that starts a word; seq() skips to the line end
             if c == '{' and self.word_ends(self.i + 1) and cmd.words and \
                     cmd.words[0].text == 'function':
                 break
             if c == '(':
+                if self.peek(1) == '(':                  # for (( ... )) arithmetic
+                    self.skip_arith(2)
+                    continue
                 if cmd.words and self.peek(1) == ')':   # function definition: name()
                     self.i += 2
                     break
                 if cmd.words and cmd.words[-1].text.endswith('='):
                     # Array assignment a=( ... ): read it as plain words.
                     self.i += 1
-                    while self.peek() not in ('', ')'):
-                        self.skip_blank()
-                        if self.peek() not in ('', ')'):
-                            cmd.words.append(self.word())
-                    self.i += 1
+                    while True:
+                        while self.peek() and self.peek() in ' \t\n':
+                            self.i += 1
+                        if self.peek() in ('', ')'):
+                            break
+                        cmd.words.append(self.word())
+                    self.expect(')')
                     continue
                 if cmd.words:
                     raise ParseError('unexpected (')
                 break
+            if cmd.words and len(cmd.words) == 1 and cmd.words[0].text == '[[' and \
+                    not cmd.words[0].quoted:
+                # A [[ test ]] can hold regex parentheses and '|'; it runs nothing.
+                end = self.s.find(']]', self.i)
+                if end < 0:
+                    raise ParseError('unclosed [[')
+                try:   # keep any $( ) inside the test visible to the analyzer
+                    test = Parser(self.s[self.i:end]).dquote_body()
+                except ParseError:
+                    test = Word()
+                    test.text = self.s[self.i:end]
+                cmd.words.append(test)
+                self.i = end + 2
+                continue
             if c in '<>' or (c == '&' and self.peek(1) == '>'):
                 if c in '<>' and self.peek(1) == '(':
                     cmd.words.append(self.word())
@@ -369,7 +388,7 @@ class Parser:
         w = Word()
         while self.i < len(self.s):
             c = self.s[self.i]
-            if c == '\\' and self.peek(1) in '$`\\':
+            if c == '\\' and self.peek(1) and self.peek(1) in '$`\\':
                 w.text += self.peek(1)
                 self.i += 2
             elif c in '$`':
@@ -469,6 +488,44 @@ PRINTERS = {
 # Search tools that print nothing of the input with these flags.
 QUIET_SEARCH = {'-q', '--quiet', '--silent', '-l', '--files-with-matches', '-L',
                 '--files-without-match', '-c', '--count'}
+SEARCHERS = {'grep', 'egrep', 'fgrep', 'rg', 'ag'}
+SEARCH_VALUE_OPTIONS = {'-A', '-B', '-C', '-m', '-d', '-D', '-g', '-t', '-T', '-M', '-j',
+                        '--glob', '--iglob', '--type', '--type-not', '--max-count', '--context',
+                        '--after-context', '--before-context', '--max-columns', '--threads',
+                        '--include', '--exclude', '--color', '--colors', '--sort', '--sortr'}
+
+
+def search_files(args):
+    """The file operands of grep, rg or ag: everything but options and the search pattern."""
+    operands, pattern_given, i = [], False, 0
+    while i < len(args):
+        a = args[i]
+        if a == '--':
+            operands += args[i + 1:]
+            break
+        if a in ('-e', '--regexp', '-f', '--file'):
+            pattern_given = True
+            i += 2
+            continue
+        if a.startswith(('--regexp=', '--file=')):
+            pattern_given = True
+        elif a.startswith('-') and a != '-':
+            i += 2 if a in SEARCH_VALUE_OPTIONS else 1
+            continue
+        else:
+            operands.append(a)
+        i += 1
+    return operands if pattern_given else operands[1:]
+
+
+def flag_on(flags, name):
+    """True when a boolean flag is set, as --name or --name=<true value>."""
+    for flag in flags:
+        if flag == name:
+            return True
+        if flag.startswith(name + '=') and flag.split('=', 1)[1].lower() not in ('false', '0'):
+            return True
+    return False
 # Commands that print their arguments.
 ARG_PRINTERS = {'echo', 'printf', 'print', 'say'}
 SHELLS = {'sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'csh', 'tcsh'}
@@ -522,7 +579,8 @@ def is_secret_path(path):
     lowered = name.lower()
     if lowered.startswith('.env') and (len(lowered) == 4 or lowered[4] in '.*'):
         return not lowered.endswith(('.example', '.sample', '.template', '.dist', '.defaults',
-                                     '.schema', '.md'))
+                                     '.schema', '.md', '.ts', '.js', '.mjs', '.cjs', '.py',
+                                     '.rb', '.go', '.swift', '.kt', '.java', '.rs'))
     if lowered in {'.netrc', '_netrc', '.npmrc', '.pypirc', '.git-credentials', '.pgpass',
                    '.my.cnf', 'credentials.json', '.credentials.json', 'access-token'}:
         return lowered != 'credentials.json' or '/.' in path or path.startswith('.')
@@ -562,6 +620,8 @@ class Analyzer:
         route = None
         for r in node.redirs:
             target = r.target.text if r.target is not None else ''
+            if '\0' in target:
+                target = '/dev/stdout'   # >(command): treat the command's output as printed
             if r.op in ('&>', '&>>') or (r.op in ('>', '>>', '>|') and r.fd in (None, 1)):
                 route = 'terminal' if target in TERMINAL_TARGETS else 'file'
             elif r.op == '>&' and r.fd in (None, 1):
@@ -625,6 +685,10 @@ class Analyzer:
             if r.target is not None:
                 self.subs_secret(r.target, 'arg')
 
+        # Shell tracing prints every word after expansion, assignments included.
+        if self.xtrace and (any(sub_secret) or any(self.word_secret_refs(w) for w in words)):
+            raise Block('shell tracing (set -x) would print a secret')
+
         # Leading assignments: NAME=value taints NAME when value carries a secret.
         k = 0
         assigned = False
@@ -642,9 +706,6 @@ class Analyzer:
 
         args = [w.text for w in words]
         prog = basename(args[0])
-
-        if self.xtrace and any(self.word_secret_refs(w) for w in words):
-            raise Block('shell tracing (set -x) would print a secret')
 
         # Declarations that assign: export/local/declare/typeset/readonly NAME=value.
         if prog in ('export', 'local', 'declare', 'typeset', 'readonly'):
@@ -733,9 +794,8 @@ class Analyzer:
             return not names or any(self.ref_secret(n, '') for n in names)
         if prog == 'launchctl' and args[1:2] == ['getenv']:
             return any(self.ref_secret(n, '') for n in args[2:])
-        if prog == 'ps' and any((not a.startswith('-') and 'e' in a) or a == '-E'
-                                for a in args[1:]):
-            return True    # BSD ps 'e' prints each process's environment
+        if prog == 'ps' and self.ps_prints_environment(args[1:]):
+            return True
         if prog == 'gh' and args[1:3] == ['auth', 'token']:
             return True
         if prog == 'gh' and args[1:3] == ['auth', 'status'] and (
@@ -751,7 +811,9 @@ class Analyzer:
         if prog == 'aws' and args[1:3] == ['configure', 'get'] and any(
                 re.search(r'secret|session_token', a) for a in args[3:]):
             return True
-        if prog == 'git' and len(args) > 1 and args[1] in ('show', 'cat-file', 'diff', 'log') \
+        if prog == 'git' and len(args) > 1 and (
+                args[1] in ('show', 'cat-file', 'diff') or
+                (args[1] == 'log' and any(a in ('-p', '--patch', '-u') for a in args))) \
                 and any(is_secret_path(a) for a in args[2:]):
             return True
         if prog == 'curl':
@@ -768,16 +830,35 @@ class Analyzer:
             return any(sub_secret[1:]) or any(self.word_secret_refs(w) for w in words[1:])
 
         if prog in PRINTERS:
-            if prog in ('grep', 'egrep', 'fgrep', 'rg', 'ag') and any(
-                    a in QUIET_SEARCH or re.fullmatch(r'-[a-zA-Z]*[qlLc][a-zA-Z]*', a)
-                    for a in args[1:]):
-                return False
-            file_secret = any(is_secret_path(a) for a in args[1:]) or any(
+            operands = args[1:]
+            if prog in SEARCHERS:
+                if any(a in QUIET_SEARCH or re.fullmatch(r'-[a-zA-Z]*[qlLc][a-zA-Z]*', a)
+                       for a in operands):
+                    return False
+                operands = search_files(operands)
+            if prog == 'tee' and stdin and any(a in TERMINAL_TARGETS for a in operands):
+                raise Block('tee would copy a secret to the terminal')
+            file_secret = any(is_secret_path(a) for a in operands) or any(
                 kind == '<(' and self.seq(seq, 'captured') for w in words[1:]
                 for kind, seq in w.subs)
             if prog == 'dd':
                 file_secret = any(a.startswith('if=') and is_secret_path(a[3:]) for a in args)
             return stdin or file_secret
+        return False
+
+    @staticmethod
+    def ps_prints_environment(args):
+        """BSD-style 'e' in the first option word, or -E/-e style clusters with E."""
+        value_options = set('oOpuUgGtMN')
+        for index, a in enumerate(args):
+            if index == 0 and not a.startswith('-') and 'e' in a:
+                return True
+            if a.startswith('-') and not a.startswith('--'):
+                for ch in a[1:]:
+                    if ch == 'E':
+                        return True
+                    if ch in value_options:
+                        break
         return False
 
     def unwrap(self, prog, words, subs):
@@ -816,23 +897,37 @@ class Analyzer:
         if prog == 'eval':
             script = ' '.join(args[1:])
         else:
-            i = 1
+            # Shell options come first: clusters like -euo (each 'o' takes the next word as an
+            # option name), long options like --norc, and +o. With -c, the first operand is
+            # the script; without it, the first operand is a script file we cannot see.
+            i, run_string = 1, False
             while i < len(args):
                 a = args[i]
-                if a.startswith('-') and len(a) > 1 and not a.startswith('--'):
-                    if 'x' in a[1:]:
-                        trace = True
-                    if 'c' in a[1:] and i + 1 < len(args):
-                        script = args[i + 1]
-                        break
+                if a == '--':
                     i += 1
-                    continue
-                if a in ('-o',) and i + 1 < len(args):
-                    trace = trace or args[i + 1] == 'xtrace'
+                    break
+                if a in ('--rcfile', '--init-file'):
                     i += 2
                     continue
+                if a.startswith('--'):
+                    i += 1
+                    continue
+                if len(a) > 1 and a[0] in '-+':
+                    i += 1
+                    for ch in a[1:]:
+                        if ch == 'c':
+                            run_string = True
+                        elif ch == 'x' and a[0] == '-':
+                            trace = True
+                        elif ch == 'o' and i < len(args):
+                            if args[i] == 'xtrace' and a[0] == '-':
+                                trace = True
+                            i += 1
+                    continue
                 break
-            if script is None:
+            if run_string and i < len(args):
+                script = args[i]
+            if script is None and not run_string and i >= len(args):
                 for r in cmd.redirs:
                     if r.op in ('<<', '<<-', '<<<'):
                         script = r.target.text
@@ -878,13 +973,15 @@ class Analyzer:
                                                   '--file', '-i', '--in-file', '--title',
                                                   '--category', '--template'):
                 if a in ('-o', '--out-file'):
-                    out_file = i + 1 < len(rest) and rest[i + 1] not in TERMINAL_TARGETS
+                    out_file = i + 1 < len(rest) and rest[i + 1] not in TERMINAL_TARGETS \
+                        and '\0' not in rest[i + 1]
                 flags.append(a)
                 i += 2
                 continue
             if a.startswith('-'):
                 if a.startswith('--out-file='):
-                    out_file = a.split('=', 1)[1] not in TERMINAL_TARGETS
+                    target = a.split('=', 1)[1]
+                    out_file = target not in TERMINAL_TARGETS and '\0' not in target
                 flags.append(a)
                 i += 1
                 if a == '--':
@@ -895,10 +992,10 @@ class Analyzer:
             i += 1
         key = tuple(words[:2]) if words[:1] not in (['read'], ['inject'], ['run']) \
             else tuple(words[:1])
-        if '--reveal' in flags:
+        if flag_on(flags, '--reveal'):
             raise Block("'--reveal' prints concealed 1Password fields")
         if key == ('run',):
-            if '--no-masking' in flags:
+            if flag_on(flags, '--no-masking'):
                 raise Block("'op run --no-masking' prints secret values")
             j = rest.index('--') + 1 if '--' in rest else len(rest)
             child = rest[j:]
@@ -1160,7 +1257,13 @@ def pump(source, sink, secrets):
             buffer = buffer[cut:]
 
 
+def stop_on_signal(number, frame):
+    raise SystemExit(128 + number)   # unwinds through finally, so temp files are removed
+
+
 def run_wrapper(argv):
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, stop_on_signal)
     envs, files, stdin_ref = [], [], None
     i = 0
     while i < len(argv):
@@ -1304,6 +1407,7 @@ def load_hook_file(path):
 
 
 def write_hook_file(path, data):
+    path = os.path.realpath(path)   # a symlinked settings file stays a symlink
     directory = os.path.dirname(path) or '.'
     os.makedirs(directory, exist_ok=True)
     try:
@@ -1355,8 +1459,18 @@ def registered(kind, path, launcher):
 
 # ---------------------------------------------------------------------------------------------
 
+CHECK_TIME_LIMIT = 10   # seconds; under the hook timeout, so a slow check blocks, never hangs
+
+
+def out_of_time(number, frame):
+    raise TimeoutError('the check took longer than %d seconds' % CHECK_TIME_LIMIT)
+
+
 def main(argv):
     mode = argv[0] if argv else ''
+    if mode in ('pre', 'post'):
+        signal.signal(signal.SIGALRM, out_of_time)
+        signal.alarm(CHECK_TIME_LIMIT)
     if mode == 'pre':
         try:
             event = json.loads(sys.stdin.read() or '{}')
@@ -1373,7 +1487,7 @@ def main(argv):
             event = json.loads(sys.stdin.read() or '{}')
             if isinstance(event, dict):
                 run_post(event)
-        except ValueError:
+        except (ValueError, TimeoutError):
             pass
         return 0
     if mode == 'run':

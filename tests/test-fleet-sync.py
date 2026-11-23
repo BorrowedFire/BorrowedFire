@@ -487,6 +487,10 @@ class SyncTests(unittest.TestCase):
             for kind, path in (('claude', home / '.claude/settings.json'), ('codex', home / '.codex/hooks.json')):
                 self.command(launcher, 'register', kind, str(path), launcher)
             sync.verify_guard(repo, harnesses, home)
+            os.chmod(launcher, 0o644)
+            with self.assertRaisesRegex(sync.Blocked, 'not executable'):
+                sync.verify_guard(repo, harnesses, home)
+            os.chmod(launcher, 0o755)
             settings = json.loads((home / '.claude/settings.json').read_text())
             settings['hooks']['PreToolUse'].append(settings['hooks']['PreToolUse'][0])
             (home / '.claude/settings.json').write_text(json.dumps(settings))

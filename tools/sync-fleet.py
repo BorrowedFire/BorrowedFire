@@ -283,6 +283,8 @@ def verify_guard(repo, harnesses, home):
                 or target.read_bytes() != (source / name).read_bytes()):
             raise Blocked('Installed secret guard differs from reviewed source: ' + name)
     launcher = str(installed / 'secret-guard')
+    if not os.access(launcher, os.X_OK):
+        raise Blocked('Installed secret guard launcher is not executable')
     codex_root = Path(os.environ.get('CODEX_HOME', home / '.codex'))
     for harness in harnesses:
         root = Path(harness['skills']).parent
