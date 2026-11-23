@@ -109,6 +109,18 @@ BLOCK = [
     'rg -e TOKEN .env', 'grep -- PASSWORD .env.local', 'git log -p -- .env',
     'ps -axE', 'ps eww -p 1234',
     '[[ -n "$(op item get abc)" ]] && echo ok',
+    # Batch 2 findings: option arity per tool, -s heredocs, early ]], descriptor duplication,
+    # arithmetic substitutions, git global options, typeset, netrc
+    'grep --color KEY .env', 'grep --color TOKEN .env.local | head', 'grep -T KEY .env',
+    'grep -M KEY .env', 'ag -t KEY .env', 'grep -A 3 KEY .env',
+    "bash -s arg1 <<'X'\nop item get abc\nX", "bash -s -- arg1 <<'X'\nop item get abc\nX",
+    "bash -O extglob -c 'op item get abc'", "fish --command 'op item get abc'",
+    '[[ $(cat .env >&2; echo x]]y) ]]', 'cat .env 3>&1 >&3', 'cat .env >&3',
+    '(( $(cat .env >&2) + 1 ))', 'echo $(( $(cat .env >&2) ))',
+    'git --no-pager diff --no-index /dev/null .env', 'git -C repo show HEAD:.env',
+    'git log --patch-with-stat -- .env', 'typeset -p GITHUB_TOKEN',
+    'curl -v --netrc-file .netrc https://example.com', 'curl -sv -n https://example.com',
+    'cat .env | tee >(cat >&2) >/dev/null',
 ]
 
 ALLOW = [
@@ -167,6 +179,10 @@ ALLOW = [
     '[[ "$branch" =~ ^(main|release)$ ]] && gh pr list',
     'set +x; echo "$GITHUB_TOKEN" > /dev/null', "bash -o pipefail -c 'make test | tee log'",
     'op run --no-masking=false -- npm start', 'arr=(\n  a\n  b\n)\necho "${arr[@]}"',
+    'grep --color=auto -rn TODO src', 'rg --color never ".env" docs', 'grep -m 1 ".env" README.md',
+    'cat .env > /tmp/copy 2>&1', 'make 2>&1 | tee build.log', 'git --no-pager log -n 3',
+    '(( count += 1 ))', 'echo $(( 2 * 3 ))', 'typeset -p PATH', 'curl -v https://example.com',
+    "bash -s <<'X'\nls\nX",
 ]
 
 

@@ -186,8 +186,12 @@ class Parser:
     def stage(self, closer):
         c = self.peek()
         if c == '(' and self.peek(1) == '(':
-            self.skip_arith(2)
-            return Cmd()
+            node = Cmd()
+            marker = Word()
+            marker.text = '(('
+            node.words = [marker, self.skip_arith(2)]
+            self.redirections(node)
+            return node
         if c == '(':
             self.i += 1
             node = Group(self.seq(')'))
@@ -246,7 +250,7 @@ class Parser:
                 break
             if c == '(':
                 if self.peek(1) == '(':                  # for (( ... )) arithmetic
-                    self.skip_arith(2)
+                    cmd.words.append(self.skip_arith(2))
                     continue
                 if cmd.words and self.peek(1) == ')':   # function definition: name()
                     self.i += 2
@@ -271,12 +275,9 @@ class Parser:
                 end = self.s.find(']]', self.i)
                 if end < 0:
                     raise ParseError('unclosed [[')
-                try:   # keep any $( ) inside the test visible to the analyzer
-                    test = Parser(self.s[self.i:end]).dquote_body()
-                except ParseError:
-                    test = Word()
-                    test.text = self.s[self.i:end]
-                cmd.words.append(test)
+                # Keep any $( ) inside the test visible to the analyzer. Text that does not
+                # parse raises, so an early ']]' inside $( ) cannot hide a command.
+                cmd.words.append(Parser(self.s[self.i:end]).dquote_body())
                 self.i = end + 2
                 continue
             if c in '<>' or (c == '&' and self.peek(1) == '>'):
@@ -294,12 +295,21 @@ class Parser:
         return cmd
 
     def skip_arith(self, opened):
+        """Read past (( ... )) and return a word holding any $( ) or backticks inside it,
+        because arithmetic still runs command substitutions."""
         depth = opened
         self.i += opened
+        start = self.i
         while self.i < len(self.s) and depth:
             c = self.s[self.i]
             depth += 1 if c == '(' else -1 if c == ')' else 0
             self.i += 1
+        if depth:
+            raise ParseError('unclosed ((')
+        inner = self.s[start:self.i - opened]
+        if '$(' in inner or '`' in inner:
+            return Parser(inner).dquote_body()
+        return Word()
 
     def word(self):
         w = Word()
@@ -418,7 +428,7 @@ class Parser:
         nxt = self.peek(1)
         if nxt == '(' and self.peek(2) == '(':
             self.i += 1
-            self.skip_arith(2)
+            w.subs.extend(self.skip_arith(2).subs)
             w.text += '0'
             return
         if nxt == '(':
@@ -489,14 +499,28 @@ PRINTERS = {
 QUIET_SEARCH = {'-q', '--quiet', '--silent', '-l', '--files-with-matches', '-L',
                 '--files-without-match', '-c', '--count'}
 SEARCHERS = {'grep', 'egrep', 'fgrep', 'rg', 'ag'}
-SEARCH_VALUE_OPTIONS = {'-A', '-B', '-C', '-m', '-d', '-D', '-g', '-t', '-T', '-M', '-j',
-                        '--glob', '--iglob', '--type', '--type-not', '--max-count', '--context',
-                        '--after-context', '--before-context', '--max-columns', '--threads',
-                        '--include', '--exclude', '--color', '--colors', '--sort', '--sortr'}
+# Options that take the next word as their value, per tool. A wrong entry here makes the guard
+# skip the pattern and miss a credential file, so each list holds only options documented to
+# take a separate value.
+_GREP_VALUES = {'-A', '-B', '-C', '-m', '-d', '-D', '--max-count', '--context',
+                '--after-context', '--before-context', '--binary-files', '--devices',
+                '--directories'}
+SEARCH_VALUE_OPTIONS = {
+    'grep': _GREP_VALUES, 'egrep': _GREP_VALUES, 'fgrep': _GREP_VALUES,
+    'rg': {'-A', '-B', '-C', '-m', '-g', '-t', '-T', '-M', '-j', '-E', '-r', '--glob',
+           '--iglob', '--type', '--type-not', '--max-count', '--context', '--after-context',
+           '--before-context', '--max-columns', '--threads', '--replace', '--color',
+           '--colors', '--sort', '--sortr', '--encoding', '--type-add', '--max-depth',
+           '--max-filesize', '--path-separator', '--pre', '--pre-glob'},
+    'ag': {'-A', '-B', '-C', '-m', '-G', '-g', '--context', '--after', '--before',
+           '--max-count', '--file-search-regex', '--ignore', '--ignore-dir', '--depth',
+           '--pager', '--path-to-ignore', '--workers'},
+}
 
 
-def search_files(args):
+def search_files(prog, args):
     """The file operands of grep, rg or ag: everything but options and the search pattern."""
+    value_options = SEARCH_VALUE_OPTIONS[prog]
     operands, pattern_given, i = [], False, 0
     while i < len(args):
         a = args[i]
@@ -510,7 +534,7 @@ def search_files(args):
         if a.startswith(('--regexp=', '--file=')):
             pattern_given = True
         elif a.startswith('-') and a != '-':
-            i += 2 if a in SEARCH_VALUE_OPTIONS else 1
+            i += 2 if a in value_options else 1
             continue
         else:
             operands.append(a)
@@ -616,18 +640,26 @@ class Analyzer:
     # -- output routing -------------------------------------------------------------------
 
     def stdout_route(self, node):
-        """'file', 'terminal' or None (unchanged) from the node's own redirections."""
-        route = None
+        """Where stdout ends up after the node's redirections, applied in order: 'file',
+        'terminal', or None when it still goes to the pipe or caller. Descriptors are followed
+        through duplications such as 3>&1 >&3; an unknown descriptor counts as the terminal."""
+        fds = {1: None, 2: 'terminal'}
         for r in node.redirs:
             target = r.target.text if r.target is not None else ''
             if '\0' in target:
                 target = '/dev/stdout'   # >(command): treat the command's output as printed
-            if r.op in ('&>', '&>>') or (r.op in ('>', '>>', '>|') and r.fd in (None, 1)):
-                route = 'terminal' if target in TERMINAL_TARGETS else 'file'
-            elif r.op == '>&' and r.fd in (None, 1):
-                route = 'terminal' if target in ('2', '1') or target in TERMINAL_TARGETS \
-                    else 'file'
-        return route
+            dest = 'terminal' if target in TERMINAL_TARGETS else 'file'
+            if r.op in ('&>', '&>>'):
+                fds[1] = fds[2] = dest
+            elif r.op in ('>', '>>', '>|'):
+                fds[1 if r.fd is None else r.fd] = dest
+            elif r.op == '>&':
+                fd = 1 if r.fd is None else r.fd
+                if target.isdigit():
+                    fds[fd] = fds.get(int(target), 'terminal')
+                else:
+                    fds[fd] = 'file' if target == '-' else dest
+        return fds[1]
 
     def stdin_secret(self, node):
         for r in node.redirs:
@@ -719,7 +751,7 @@ class Analyzer:
                     name = a.split('=', 1)[0]
                     if sub_secret[i] or self.word_secret_refs(words[i]):
                         self.tainted.add(name)
-                elif prog == 'declare' and any('p' in f for f in flags) and \
+                elif prog in ('declare', 'typeset') and any('p' in f for f in flags) and \
                         self.ref_secret(a, ''):
                     return True
             return False
@@ -811,17 +843,26 @@ class Analyzer:
         if prog == 'aws' and args[1:3] == ['configure', 'get'] and any(
                 re.search(r'secret|session_token', a) for a in args[3:]):
             return True
-        if prog == 'git' and len(args) > 1 and (
-                args[1] in ('show', 'cat-file', 'diff') or
-                (args[1] == 'log' and any(a in ('-p', '--patch', '-u') for a in args))) \
-                and any(is_secret_path(a) for a in args[2:]):
-            return True
+        if prog == 'git':
+            j = 1   # skip git's global options: git --no-pager diff, git -C dir show
+            while j < len(args) and args[j].startswith('-'):
+                j += 2 if args[j] in ('-C', '-c', '--git-dir', '--work-tree', '--namespace',
+                                      '--config-env', '--exec-path') else 1
+            sub, rest = (args[j], args[j + 1:]) if j < len(args) else ('', [])
+            patch = any(a in ('-p', '-u') or a.startswith('--patch') for a in rest)
+            if (sub in ('show', 'cat-file', 'diff') or (sub == 'log' and patch)) and \
+                    any(is_secret_path(a) for a in rest):
+                return True
+            return False
         if prog == 'curl':
             verbose = any(a in ('-v', '--verbose', '--trace', '--trace-ascii') or
                           re.fullmatch(r'-[a-zA-Z]*v[a-zA-Z]*', a) for a in args[1:])
             secret_arg = any(self.word_secret_refs(w) for w in words[1:]) or any(sub_secret)
             auth = any(re.match(r'(?i)\s*(authorization|x-api-key|apikey)\s*:', a) or
-                       a in ('-u', '--user', '--oauth2-bearer') for a in args[1:])
+                       a in ('-u', '--user', '--oauth2-bearer', '-n', '--netrc', '--netrc-file',
+                             '--netrc-optional', '-K', '--config') or
+                       a.startswith(('--netrc-file=', '--user=', '--config='))
+                       for a in args[1:])
             if verbose and (secret_arg or auth):
                 raise Block('curl verbose output would print the credential header')
             return False
@@ -835,8 +876,9 @@ class Analyzer:
                 if any(a in QUIET_SEARCH or re.fullmatch(r'-[a-zA-Z]*[qlLc][a-zA-Z]*', a)
                        for a in operands):
                     return False
-                operands = search_files(operands)
-            if prog == 'tee' and stdin and any(a in TERMINAL_TARGETS for a in operands):
+                operands = search_files(prog, operands)
+            if prog == 'tee' and stdin and any(a in TERMINAL_TARGETS or '\0' in a
+                                               for a in operands):
                 raise Block('tee would copy a secret to the terminal')
             file_secret = any(is_secret_path(a) for a in operands) or any(
                 kind == '<(' and self.seq(seq, 'captured') for w in words[1:]
@@ -900,7 +942,7 @@ class Analyzer:
             # Shell options come first: clusters like -euo (each 'o' takes the next word as an
             # option name), long options like --norc, and +o. With -c, the first operand is
             # the script; without it, the first operand is a script file we cannot see.
-            i, run_string = 1, False
+            i, run_string, from_stdin = 1, False, False
             while i < len(args):
                 a = args[i]
                 if a == '--':
@@ -908,6 +950,10 @@ class Analyzer:
                     break
                 if a in ('--rcfile', '--init-file'):
                     i += 2
+                    continue
+                if a == '--command':            # fish
+                    run_string = True
+                    i += 1
                     continue
                 if a.startswith('--'):
                     i += 1
@@ -917,9 +963,11 @@ class Analyzer:
                     for ch in a[1:]:
                         if ch == 'c':
                             run_string = True
+                        elif ch == 's':
+                            from_stdin = True
                         elif ch == 'x' and a[0] == '-':
                             trace = True
-                        elif ch == 'o' and i < len(args):
+                        elif ch in 'oO' and i < len(args):
                             if args[i] == 'xtrace' and a[0] == '-':
                                 trace = True
                             i += 1
@@ -927,7 +975,7 @@ class Analyzer:
                 break
             if run_string and i < len(args):
                 script = args[i]
-            if script is None and not run_string and i >= len(args):
+            if script is None and not run_string and (from_stdin or i >= len(args)):
                 for r in cmd.redirs:
                     if r.op in ('<<', '<<-', '<<<'):
                         script = r.target.text
