@@ -107,6 +107,36 @@ The manifest records the hash of each copy. An agent file you edit keeps your ed
 skips it until you rerun with `--adopt`, which backs it up first. Until then, the fleet update check reports
 the edited agent and stops installing new releases, as it does for an edited skill copy.
 
+### Secret guard
+
+Tool output is the transcript. Whatever a command prints, the model reads and the session keeps.
+`install.sh` installs [`guard/`](guard/) to keep secret values out of it:
+
+- **A pre-tool hook** in Claude Code (Bash, Read, Grep, MCP tools) and Codex (shell and MCP
+  tools) blocks calls that would print a secret: 1Password item reads, `op read` or keychain
+  reads to the terminal, printing credential files, environment dumps, and printing variables
+  named like tokens. It parses the shell command, so prose that only mentions a command passes.
+  It fails closed: if it cannot run, the call is blocked.
+- **An output redactor** in Claude Code replaces known credential formats (provider tokens, JWTs,
+  private keys, passwords in URLs) in tool output before the model reads it.
+- **`bf-secret`** hands a secret to one command without printing it:
+
+  ```sh
+  bf-secret --env SUPABASE_ACCESS_TOKEN=op://Vault/Item/credential -- supabase db push
+  bf-secret --stdin keychain:registry-token -- docker login -u me --password-stdin
+  bf-secret --file KEY_PATH=op://Vault/Signing/key.p8 -- ./upload.sh
+  ```
+
+  It refuses shells, interpreters, and commands that print their input, and replaces the secret
+  with `[REDACTED]` in the command's output. Name your 1Password command in
+  `~/.config/borrowedfire/secret-reader` when plain `op` cannot sign in unattended.
+- **Codex rules** (`~/.codex/rules/borrowedfire-secrets.rules`) forbid the plain secret-reading
+  commands. They apply without the hook-trust step Codex requires for user hooks; run `/hooks` in
+  Codex once to trust the guard hook itself.
+
+The guard cannot see through scripts, interpreters, or names built at run time. The redactor and
+the doctrine rule cover what it cannot parse.
+
 The shared rules every agent follows — brain sync protocol, capture triggers, safety rails, tier
 routing — live in [`doctrine/DOCTRINE.md`](doctrine/DOCTRINE.md), installed into every harness's
 context file. The high-risk denylist (always owner-gated) is defined once in
@@ -140,6 +170,7 @@ live check. The nightly job remains silent on routine success or a no-op. See
 skills/            21 SKILL.md skills (+ agents/openai.yaml metadata, references/)
 agents/            Claude Code agent definitions install.sh copies to ~/.claude/agents
 doctrine/          the managed context block install.sh distributes
+guard/             secret guard hooks and bf-secret, installed to ~/.local/share/borrowedfire/guard
 prometheus-template/  starting tree for your private brain repo
 install.sh         manifest-owned cross-harness installer
 tools/skill-lint.sh   lint (also install.sh's local preflight)

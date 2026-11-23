@@ -920,6 +920,60 @@ else
 fi
 check "agents: aborted install wrote nothing" test ! -e "$BAD_HOME/.claude/skills"
 
+# --- secret guard: one copy, registered once in Claude Code and Codex, owner hooks kept ---
+GUARD_HOME="$SB/guard-home"
+GUARD="$GUARD_HOME/.local/share/borrowedfire/guard/secret-guard"
+guard_install() { env -u CODEX_HOME HOME="$GUARD_HOME" XDG_CONFIG_HOME="$GUARD_HOME/.config" "$SRC/install.sh" "$@" 2>&1; }
+guard_count() { # guard_count <json-file> <event>: our entries for that event
+  python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(sum(sys.argv[3] in h.get("command","") for g in d.get("hooks",{}).get(sys.argv[2],[]) for h in g.get("hooks",[])))' "$1" "$2" "$GUARD"
+}
+mkdir -p "$GUARD_HOME/.claude" "$GUARD_HOME/.codex"
+cat > "$GUARD_HOME/.claude/settings.json" <<'JSON'
+{
+  "theme": "dark",
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "Bash", "hooks": [{"type": "command", "command": "~/.claude/hooks/require-tests-for-pr.sh", "timeout": 300}]}
+    ]
+  }
+}
+JSON
+guard_install >/dev/null
+check "guard: launcher installed and executable" test -x "$GUARD"
+check "guard: module matches source"     cmp -s "$SRC/guard/secret_guard.py" "$GUARD_HOME/.local/share/borrowedfire/guard/secret_guard.py"
+check "guard: bf-secret links to launcher" test "$(readlink "$GUARD_HOME/.local/bin/bf-secret")" = "$GUARD"
+check "guard: Claude pre hook once"      test "$(guard_count "$GUARD_HOME/.claude/settings.json" PreToolUse)" -eq 1
+check "guard: Claude post hook once"     test "$(guard_count "$GUARD_HOME/.claude/settings.json" PostToolUse)" -eq 1
+check "guard: project hook kept"         grep -q 'require-tests-for-pr.sh' "$GUARD_HOME/.claude/settings.json"
+check "guard: other settings kept"       grep -q '"theme": "dark"' "$GUARD_HOME/.claude/settings.json"
+check "guard: Codex hook once"           test "$(guard_count "$GUARD_HOME/.codex/hooks.json" PreToolUse)" -eq 1
+check "guard: Codex rules installed"     cmp -s "$SRC/guard/borrowedfire-secrets.rules" "$GUARD_HOME/.codex/rules/borrowedfire-secrets.rules"
+cp "$GUARD_HOME/.claude/settings.json" "$SB/guard-settings-before"
+guard_install >/dev/null
+check "guard: re-run leaves settings byte-identical" cmp -s "$SB/guard-settings-before" "$GUARD_HOME/.claude/settings.json"
+check "guard: re-run keeps one Codex hook" test "$(guard_count "$GUARD_HOME/.codex/hooks.json" PreToolUse)" -eq 1
+printf '#!/bin/sh\necho edited\n' > "$GUARD"
+guard_install >/dev/null
+check "guard: edited launcher restored"  cmp -s "$SRC/guard/secret-guard" "$GUARD"
+check "guard: installed hook blocks an item read" bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"o''p item get x\"}}' | '$GUARD' pre; test \$? -eq 2"
+rm "$GUARD_HOME/.local/bin/bf-secret"; printf 'mine\n' > "$GUARD_HOME/.local/bin/bf-secret"
+OUT="$(guard_install)"
+check "guard: foreign bf-secret skipped" grep -q 'SKIP.*bf-secret' <<<"$OUT"
+check "guard: foreign bf-secret kept"    grep -qx mine "$GUARD_HOME/.local/bin/bf-secret"
+rm "$GUARD_HOME/.local/bin/bf-secret"
+printf '{"hooks": [' > "$GUARD_HOME/.codex/hooks.json"
+if guard_install >/dev/null; then fail "guard: malformed Codex hooks fail the install"; else ok "guard: malformed Codex hooks fail the install"; fi
+check "guard: malformed Codex hooks left as is" grep -qx '{"hooks": \[' "$GUARD_HOME/.codex/hooks.json"
+rm "$GUARD_HOME/.codex/hooks.json"
+guard_install >/dev/null
+guard_install --uninstall >/dev/null
+check "guard: uninstall removes Claude hooks" test "$(guard_count "$GUARD_HOME/.claude/settings.json" PreToolUse)" -eq 0
+check "guard: uninstall keeps project hook" grep -q 'require-tests-for-pr.sh' "$GUARD_HOME/.claude/settings.json"
+check "guard: uninstall removes Codex hook" test "$(guard_count "$GUARD_HOME/.codex/hooks.json" PreToolUse)" -eq 0
+check "guard: uninstall removes rules"   test ! -e "$GUARD_HOME/.codex/rules/borrowedfire-secrets.rules"
+check "guard: uninstall removes bf-secret" test ! -e "$GUARD_HOME/.local/bin/bf-secret"
+check "guard: uninstall removes files"   test ! -e "$GUARD"
+
 echo "----"
 echo "PASS=$PASS FAIL=$FAIL"
 rm -rf "$SB"

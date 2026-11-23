@@ -265,6 +265,45 @@ def verify_install(repo, harnesses, contexts=None):
                 raise Blocked('Installed skill entries differ from reviewed source: ' + source.name)
         if Path(harness['skills']).parent.name == '.claude':
             verify_agents(repo, Path(harness['skills']).parent / 'agents')
+    verify_guard(repo, harnesses, Path.home())
+
+
+GUARD_FILES = ('secret-guard', 'secret_guard.py')
+
+
+def verify_guard(repo, harnesses, home):
+    """The secret guard is a plain copy plus exactly one registration in each hook file."""
+    source = repo / 'guard'
+    if not source.is_dir():
+        return
+    installed = home / '.local/share/borrowedfire/guard'
+    for name in GUARD_FILES:
+        target = installed / name
+        if (target.is_symlink() or not target.is_file()
+                or target.read_bytes() != (source / name).read_bytes()):
+            raise Blocked('Installed secret guard differs from reviewed source: ' + name)
+    launcher = str(installed / 'secret-guard')
+    if not os.access(launcher, os.X_OK):
+        raise Blocked('Installed secret guard launcher is not executable')
+    codex_root = Path(os.environ.get('CODEX_HOME', home / '.codex'))
+    for harness in harnesses:
+        root = Path(harness['skills']).parent
+        if root.name == '.claude':
+            kind, hook_file = 'claude', root / 'settings.json'
+        elif root == codex_root:
+            kind, hook_file = 'codex', root / 'hooks.json'
+            rules = root / 'rules/borrowedfire-secrets.rules'
+            if (rules.is_symlink() or not rules.is_file() or rules.read_bytes()
+                    != (source / 'borrowedfire-secrets.rules').read_bytes()):
+                raise Blocked('Installed Codex secret rules differ from reviewed source')
+        else:
+            continue
+        check = subprocess.run(
+            [sys.executable, '-I', '-S', '-B', str(installed / 'secret_guard.py'), 'registered',
+             kind, str(hook_file), launcher],
+            stdin=subprocess.DEVNULL, capture_output=True, timeout=60)
+        if check.returncode != 0:
+            raise Blocked('Secret guard hook is not registered exactly once: ' + str(hook_file))
 
 
 def verify_agents(repo, agents):

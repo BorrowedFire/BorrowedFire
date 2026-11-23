@@ -15,9 +15,9 @@ jobs:
       - name: Lint the brain template
         run: bash tools/brain-lint.sh --template prometheus-template
       - name: Syntax-check shell scripts
-        run: bash -n install.sh && bash -n tools/skill-lint.sh && bash -n tools/brain-lint.sh && bash -n tools/install-prometheus-cycle.sh && bash -n evals/run.sh
+        run: bash -n install.sh && bash -n tools/skill-lint.sh && bash -n tools/brain-lint.sh && bash -n tools/install-prometheus-cycle.sh && bash -n evals/run.sh && sh -n guard/secret-guard
       - name: shellcheck
-        run: shellcheck install.sh tools/skill-lint.sh tools/brain-lint.sh tools/install-prometheus-cycle.sh evals/run.sh tests/test-install.sh tests/test-brain.sh tests/test-prometheus-cycle.sh tests/test-evals.sh tests/fixtures/fake-openclaw.sh
+        run: shellcheck install.sh tools/skill-lint.sh tools/brain-lint.sh tools/install-prometheus-cycle.sh evals/run.sh tests/test-install.sh tests/test-brain.sh tests/test-prometheus-cycle.sh tests/test-evals.sh tests/fixtures/fake-openclaw.sh guard/secret-guard
       - name: Installer test matrix (sandbox HOME)
         run: bash tests/test-install.sh
       - name: Brain protocol live proof (two clones, bare remote)
@@ -34,3 +34,5 @@ jobs:
         run: python3 -B tests/test-git-identity.py
       - name: CI lint rules and sync hook (local fixtures, fake gh)
         run: python3 -B tests/test-ci-lint.py
+      - name: Secret guard hooks, redactor and bf-secret (fake secret reader)
+        run: python3 -B tests/test-secret-guard.py
