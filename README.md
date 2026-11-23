@@ -212,8 +212,9 @@ its result under `ci_lint`. The linter reads the committed default-branch workfl
 private repository under `~/Developer/BorrowedFire` (`Apps/*`, `Website/*`, `BorrowedFire`;
 override with `ci_lint_root` in the updater config). It flags pull-request workflows without the
 PR-only cancelling `concurrency` block and jobs whose `runs-on` is not `[self-hosted, studio]`.
-Public repositories are exempt. It is advisory: findings and errors never block or fail the
-update. Run it directly with `python3 tools/ci-lint.py` (add `--json` for the full report); it
+Public repositories are exempt. It never fetches; when a local default branch differs from
+GitHub, it lists that repository under `stale` so old results are visible. It is advisory:
+findings and errors never block or fail the update. Run it directly with `python3 tools/ci-lint.py` (add `--json` for the full report); it
 exits 0 when clean, 1 with findings, and 2 when only errors occurred.
 
 Prometheus updates use fast-forward only. Dirty, busy, divergent, or unpushed memory checkouts

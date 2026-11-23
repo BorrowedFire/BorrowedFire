@@ -494,6 +494,7 @@ def lint_ci(config, state):
         errors = [' '.join(str(e[k]) for k in ('repository', 'file') if e.get(k)) + ': ' + e['problem']
                   for e in report['errors']]
         checked = [c['repository'] + '@' + c['revision'][:12] for c in report.get('checked', [])]
+        stale = [e['repository'] + ': ' + e['problem'] for e in report.get('stale', [])]
     except Exception as exc:  # Advisory: any failure becomes a status entry, never a blocked sync.
         return {'status': 'error', 'reason': type(exc).__name__ + ': ' + str(exc)[:200]}
     result = {'status': 'findings' if findings else 'error' if errors else 'clean', 'checked': checked}
@@ -501,6 +502,8 @@ def lint_ci(config, state):
         result['findings'] = findings
     if errors:
         result['errors'] = errors
+    if stale:
+        result['stale'] = stale
     return result
 
 def main():
